@@ -6,7 +6,13 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed — docs
+
+- README now states plainly what was only implicit before: the track count is
+  **parametric (1–16)** rather than a fixed layout, audio in/out are likewise
+  1–16 channels, and the UI is built for touch (48 px floor, pointer events,
+  long-press guards, `--kiosk` for a bare panel), on any screen from 1024×600
+  to 4K.
 
 ## [0.1.0] — 2025-11-06
 

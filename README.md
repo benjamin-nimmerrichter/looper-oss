@@ -8,6 +8,24 @@ recording with autosave. Runs fully offline on Linux and Windows.
 Nothing in this repo implements audio DSP. Audio is stock SuperCollider UGens;
 the UI is a browser page; the only Python translates OSC to JSON.
 
+## What you get
+
+- **A parametric track count, not a fixed layout.** 1 to 16 tracks, chosen in
+  setup → tracks or in `ui/config.json`; the grid divides the width it has, so
+  2 tracks on a small panel and 16 on a 4K screen are the same code. Each track
+  carries 1–4 layers (that count is your undo depth). Audio in and out are
+  separately parametric too, 1–16 channels each.
+- **Built for a finger, not a mouse.** Every target is at least 48 px in both
+  axes (`--tap`), driven by pointer events with `touch-action: none`, no
+  hover-only affordances, and a 0.8 s long-press guard before anything
+  destructive happens. `--browser` gives an app window, `--kiosk` gives a bare
+  fullscreen panel; press `d` to outline every target and count any below the
+  floor.
+- **Any panel or monitor**, 1024×600 up to 4K, portrait or landscape, rescaled
+  by one slider (0.75–1.75) that persists.
+- **No build step, no framework, no network at runtime.** Offline by
+  construction.
+
 ```text
 ui/            browser UI (HTML/CSS/JS, no build step, scales to any screen)
 bridge/        bridge.py — OSC <-> WebSocket JSON, + config writer
