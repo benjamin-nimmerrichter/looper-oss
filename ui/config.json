@@ -1,0 +1,69 @@
+{
+  "version": 2,
+  "tracks": 5,
+  "maxLayers": 4,
+  "bpm": 120,
+  "bars": 4,
+  "beatsPerBar": 4,
+  "audio": {
+    "blockSize": 64,
+    "hardwareBufferSize": 256,
+    "in": 2,
+    "out": 2,
+    "device": null,
+    "driver": "auto",
+    "sampleRate": null,
+    "quantum": 128
+  },
+  "loop": {
+    "maxSeconds": 16,
+    "crossfadeMs": 2.0,
+    "recordOffset": 0,
+    "autoClose": 1,
+    "dubDecay": 0.0,
+    "revMix": 0.6,
+    "room": 0.8,
+    "quantizeStart": 0,
+    "monitor": 0.0,
+    "autoDub": 0,
+    "autosave": 1
+  },
+  "clock": {
+    "clickVol": 0.3,
+    "countInBars": 1,
+    "accentHz": 1580,
+    "clickHz": 1050
+  },
+  "midi": {
+    "device": null,
+    "map": []
+  },
+  "osc": {
+    "enginePort": 9000,
+    "statePort": 9001
+  },
+  "ui": {
+    "port": 8181,
+    "wsPort": 8182,
+    "scale": 1,
+    "holdMs": 800,
+    "fullscreen": false,
+    "showMaster": true
+  },
+  "colours": [
+    "#e05a4f",
+    "#e8a33d",
+    "#57b65f",
+    "#4a9de0",
+    "#a868d8",
+    "#d86fb4",
+    "#8fd14f",
+    "#e6e6e6"
+  ],
+  "vst": {
+    "dirs": null
+  },
+  "session": {
+    "slot": 1
+  }
+}

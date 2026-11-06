@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Looper OSS</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="transport"></header>
+      <main id="tracks"></main>
+      <footer id="master"></footer>
+    </div>
+
+    <aside id="fx" class="drawer" aria-hidden="true">
+      <header>
+        <h2>track</h2>
+        <button id="fx-close" class="btn" type="button">close</button>
+      </header>
+      <div class="body"></div>
+    </aside>
+
+    <aside id="settings" class="drawer" aria-hidden="true">
+      <header>
+        <h2>setup</h2>
+        <div class="tabs"></div>
+        <button id="settings-close" class="btn" type="button">close</button>
+      </header>
+      <div class="body"></div>
+    </aside>
+
+    <div id="devoverlay"></div>
+    <div id="devbadge"></div>
+    <div id="keypad" class="keypad" aria-hidden="true">
+      <div class="keypad-inner">
+        <div class="keypad-title">tempo</div>
+        <div class="keypad-value">120</div>
+        <div class="keypad-grid"></div>
+        <div class="keypad-hint"></div>
+      </div>
+    </div>
+
+    <div id="boot" class="boot">
+      <div class="boot-inner">
+        <div class="spinner"></div>
+        <div class="boot-msg">engine starting…</div>
+        <div class="boot-hint">
+          SuperCollider is opening the audio device and loading the track graph
+        </div>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

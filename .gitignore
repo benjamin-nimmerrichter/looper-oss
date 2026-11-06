@@ -1,0 +1,47 @@
+# ---- runtime state: never committed, never shipped ------------------------
+# recordings, autosaves, exports -- these are the user's audio, not source
+sessions/
+# rotated logs (5 MB cut in run.sh)
+logs/
+
+# ---- generated from ui/config.json, rewritten on every start --------------
+engine/_config.scd
+
+# ---- python ---------------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# ---- build / release artifacts -------------------------------------------
+dist/
+build/
+*.tar.gz
+*.zip
+SHA256SUMS
+SHA256SUMS.txt
+
+# ---- local edits and backups ---------------------------------------------
+ui/config.json.bak
+ui/config.json.*.bak
+*.orig
+*.rej
+*.swp
+*~
+
+# ---- editors / OS ---------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- test scratch ---------------------------------------------------------
+# uicheck writes screenshots to /tmp, but keep local runs out of the tree
+screenshots/
+*.wav
+!tests/fixtures/*.wav

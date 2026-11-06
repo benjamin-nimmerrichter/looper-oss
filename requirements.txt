@@ -1,0 +1,12 @@
+# Looper OSS -- runtime dependencies of the Python bridge only.
+#
+# The audio engine is SuperCollider (installed by the OS package manager, not
+# pip). Nothing here touches audio; these two packages translate between OSC
+# and WebSocket JSON, and are the whole Python surface of the project.
+#
+# Pinned exactly: the bridge and smoke test are tested against these versions.
+#   websockets  -- BSD-3-Clause   -- async WebSocket server on :8182
+#   python-osc  -- Unlicense      -- OSC over UDP, engine :9000 / state :9001
+#
+websockets==17.4
+python-osc==1.10.2

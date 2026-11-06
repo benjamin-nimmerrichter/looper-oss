@@ -1,0 +1,22 @@
+# Normalise line endings on checkout so a Windows clone and a Linux clone
+# produce identical bytes for everything except what the platform needs.
+* text=auto eol=lf
+
+# launchers must keep their own endings: bash breaks on CRLF, PowerShell
+# tolerates LF but native tooling expects CRLF
+*.sh             text eol=lf
+*.py             text eol=lf
+*.scd            text eol=lf
+*.mjs            text eol=lf
+*.js             text eol=lf
+*.json           text eol=lf
+*.ps1            text eol=crlf
+
+# audio and images are binary, never diffed, never line-ending converted
+*.wav            binary
+*.png            binary
+*.jpg            binary
+*.ico            binary
+
+# git reports the language mix of this repo from these
+*.scd            linguist-language=SuperCollider
