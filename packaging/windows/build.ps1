@@ -33,6 +33,13 @@ if (Test-Path dist\LooperOSS\LooperOSS.exe) {
     throw "PyInstaller did not produce dist\LooperOSS\LooperOSS.exe"
 }
 
+# content-based build stamp: a rebuilt exe with the same VERSION must still
+# refresh the payload the launcher stages into %LOCALAPPDATA%
+$hash = (Get-FileHash dist\LooperOSS\LooperOSS.exe -Algorithm SHA256).Hash.Substring(0, 16).ToLower()
+$stamp = "$version-$hash"
+Set-Content -Path dist\LooperOSS\BUILD -Value $stamp -NoNewline -Encoding ascii
+Write-Host "   build stamp $stamp"
+
 $iscc = Get-Command iscc.exe -ErrorAction SilentlyContinue
 if ($iscc) {
     Write-Host "== installer (Inno Setup)"

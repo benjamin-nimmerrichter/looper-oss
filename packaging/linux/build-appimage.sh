@@ -35,6 +35,14 @@ tar -cf - \
   --exclude='./engine/_config.scd' \
   . | tar -xf - -C "$APPDIR/looper-oss"
 
+echo "== build stamp"
+# A rebuilt AppImage keeps the same VERSION, so the launcher needs something
+# content-based to notice that the payload changed; otherwise it happily reuses
+# the staged copy from the previous build. Sorted sha256 of the payload = stable.
+STAMP="$VERSION-$(cd "$APPDIR/looper-oss" && find . -type f | sort | xargs sha256sum | sha256sum | cut -c1-16)"
+printf '%s\n' "$STAMP" > "$APPDIR/looper-oss/BUILD"
+echo "   $STAMP"
+
 echo "== bundled python $PY_VER"
 cp -L "$(command -v python3)" "$APPDIR/usr/bin/python3"
 # python3 is dynamically linked here: carrying libpython is the difference

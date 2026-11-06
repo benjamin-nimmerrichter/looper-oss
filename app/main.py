@@ -60,19 +60,42 @@ def user_home() -> pathlib.Path:
     return base / APP_SLUG
 
 
+def read_text(path: pathlib.Path, default: str = "") -> str:
+    """Read a small marker file, tolerating its absence."""
+    try:
+        return path.read_text().strip()
+    except OSError as exc:
+        if path.exists():  # present but unreadable is worth saying out loud
+            print(f"warning: cannot read {path} ({exc})", file=sys.stderr)
+        return default
+
+
+def build_stamp(root: pathlib.Path) -> str:
+    """Identify this build: a rebuilt AppImage must not keep running the old
+    staged payload just because the version number did not change."""
+    stamp = read_text(root / "BUILD")
+    if stamp:
+        return stamp
+    # source tree, or a build without BUILD: fall back to the payload's own size
+    try:
+        size = sum(p.stat().st_size for p in (root / "ui").glob("*"))
+        return f"src-{size}"
+    except OSError as exc:
+        print(f"warning: cannot size the ui payload ({exc})", file=sys.stderr)
+        return "src-0"
+
+
 def resolve_home(bundled: bool) -> pathlib.Path:
     """The directory the app runs from: the source tree, or a staged copy."""
     root = bundled_root()
     if not bundled:
         return root
-    try:
-        version = (root / "VERSION").read_text().strip()
-    except OSError:
-        version = "0"
+    version = read_text(root / "VERSION", "0") or "0"
+    stamp = build_stamp(root)
     target = user_home() / "app" / version
     runnable = ((target / "engine" / "looper.scd").is_file()
                 and (target / "ui" / "app.js").is_file())
-    if not runnable:
+    if not runnable or read_text(target / "BUILD") != stamp:
         stage(root, target)
     return target
 
@@ -92,7 +115,7 @@ def stage(src: pathlib.Path, dst: pathlib.Path) -> None:
             ignore=shutil.ignore_patterns(".venv", "logs", "sessions", "dist", "build",
                                           "__pycache__", ".git", ".ruff_cache", "*.pyc"),
         )
-    except OSError as exc:
+    except (shutil.Error, OSError) as exc:
         fatal(f"cannot prepare the application directory\n{exc}\n\ntarget: {tmp}")
     if keep.is_dir():  # never lose the user's music
         with contextlib.suppress(OSError):
@@ -134,6 +157,21 @@ def log_dir(home: pathlib.Path) -> pathlib.Path:
     d = home / "logs"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def capture_output(home: pathlib.Path) -> None:
+    """A windowed app has no console, so anything that goes wrong before a
+    window exists would vanish. Keep the launcher's own output in app.log;
+    an unhandled traceback then lands there too, because stderr points at it."""
+    try:
+        logs = log_dir(home)
+        handle = (logs / "app.log").open("a", buffering=1, encoding="utf-8",
+                                         errors="replace")
+    except OSError as exc:
+        print(f"warning: cannot open logs/app.log ({exc})", file=sys.stderr)
+        return
+    sys.stdout = handle
+    sys.stderr = handle
 
 
 def rotate(path: pathlib.Path, limit: int = 5_000_000) -> None:
@@ -231,6 +269,8 @@ def start_bridge(home: pathlib.Path, logfile: pathlib.Path) -> None:
     bridge_dir = str(home / "bridge")
     if bridge_dir not in sys.path:
         sys.path.insert(0, bridge_dir)
+    # tells bridge.py not to os._exit() the process out from under the window
+    os.environ["LOOPER_OSS_IN_PROCESS"] = "1"
     try:
         bridge = load_module("looper_bridge", home / "bridge" / "bridge.py")
     except SystemExit:  # bridge.py reports a missing dependency this way
@@ -353,6 +393,9 @@ def main(argv: list[str] | None = None) -> int:
     bundled = getattr(sys, "frozen", False) or bool(os.environ.get("APPDIR"))
     home = resolve_home(bundled)
     os.chdir(home)
+    # from here on, everything leaves a trace in logs/app.log
+    capture_output(home)
+    print(f"--- {APP_NAME} {APP_SLUG} starting: home={home}")
 
     try:
         version = (home / "VERSION").read_text().strip()

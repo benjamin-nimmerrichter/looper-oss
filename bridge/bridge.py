@@ -487,6 +487,18 @@ def apply_config(dotted: str, value: Any) -> None:
     )
 
 
+def leave(code: int = 0) -> None:
+    """End the bridge.
+
+    Standalone, that means the process. Inside the desktop app the bridge is a
+    thread, and `os._exit` there would take the window down with it — the user
+    closes a window, they do not expect the app to vanish mid-session.
+    """
+    if os.environ.get("LOOPER_OSS_IN_PROCESS") == "1":
+        raise SystemExit(code)
+    os._exit(code)
+
+
 def schedule_quit(delay: float = 4.0) -> None:
     """No UI for `delay` seconds -> stop the engine and leave.
 
@@ -510,7 +522,7 @@ def schedule_quit(delay: float = 4.0) -> None:
         engine.send_message("/ld/act", ["shutdown", 0])
         await asyncio.sleep(0.4)
         log("bridge exiting")
-        os._exit(0)
+        leave(0)
 
     quit_task = asyncio.ensure_future(_quit())
 
