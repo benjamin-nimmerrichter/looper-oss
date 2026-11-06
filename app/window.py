@@ -15,6 +15,7 @@ in the window rather than on stdout, because a musician may never see stdout.
 """
 from __future__ import annotations
 
+import contextlib
 import importlib
 import os
 import shutil
@@ -61,10 +62,15 @@ def _native(url: str, kiosk: bool, error: str | None) -> bool:
     except (ImportError, ValueError):
         return False
 
+    # Building the window may fail on a host without a usable WebKit -- that is
+    # the only thing worth falling back for. Once the window exists and the loop
+    # is running, a later exception must NOT silently hand off to a browser that
+    # probably is not installed, leaving the app hidden and holding the ports.
     try:
         win = Gtk.Window(title="Looper OSS")
         win.set_default_size(1280, 800)
-        win.set_wmclass("looper-oss", "LooperOSS")
+        with contextlib.suppress(Exception):  # deprecated in GTK3, fine to miss
+            win.set_wmclass("looper-oss", "LooperOSS")
         if kiosk:
             win.fullscreen()
         view = WebKit2.WebView()
@@ -82,10 +88,12 @@ def _native(url: str, kiosk: bool, error: str | None) -> bool:
         win.connect("destroy", Gtk.main_quit)
         view.connect("close", lambda *_: Gtk.main_quit())
         win.show_all()
-        Gtk.main()
-        return True
-    except Exception:  # noqa: BLE001 - any GTK failure falls through to the next mode
+    except Exception as exc:  # noqa: BLE001 - no window toolkit, try the next mode
+        print(f"native window failed: {exc}", file=sys.stderr)
         return False
+
+    Gtk.main()  # blocks until the window is closed; exceptions here are real
+    return True
 
 
 def _browser_exe() -> str | None:
@@ -127,8 +135,18 @@ def _app_window(url: str, kiosk: bool) -> bool:
 
 def _browser_tab(url: str) -> None:
     import webbrowser  # noqa: PLC0415
-    webbrowser.open(url)
-    print(f"Looper OSS is running at {url}  (close this window to quit)", flush=True)
+
+    opened = False
+    try:
+        opened = bool(webbrowser.open(url))
+    except Exception as exc:  # noqa: BLE001 - no browser configured is normal on a pedal
+        print(f"cannot open a browser: {exc}", file=sys.stderr)
+    if not opened:
+        # Returning here lets the launcher shut the engine down cleanly instead
+        # of sitting in a hidden process nobody can see or close.
+        print("no window and no browser available; stopping.", file=sys.stderr)
+        return
+    print(f"Looper OSS is running at {url}  (close it to quit)", flush=True)
     try:
         while True:
             time.sleep(1.0)
