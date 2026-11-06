@@ -126,7 +126,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | HW BUFFER | stepper | 32–4096, step 32, default 256 | Hardware buffer / latency. **Restart required.** | `cfg audio.hardwareBufferSize` | `s.options.hardwareBufferSize` |
 | INPUTS / OUTPUTS | stepper | 1–16, default 2 | Channel counts on that one duplex device. **Restart required.** | `cfg audio.in` / `audio.out` | `s.options.numInput/OutputBusChannels` |
 | engine stats line | read-out | — | cpu, sample rate, block, hw buffer, computed latency, VST count. | — | `svc stats` |
-| **restart** | button | — | Restarts the engine so audio settings apply (`run.sh` restarts `sclang`). | `{op:"restart"}` | `s.quit` + exit 42 |
+| **restart** | button | — | Restarts the engine so audio settings apply (the launcher restarts `sclang`). | `{op:"restart"}` | `s.quit` + exit 42 |
 | **measure** | button | — | Re-requests the stats above. | `svc stats` | `~sendStats` |
 | CONNECTIONS in ← / out → | read-out | — | Where PipeWire has the engine's ports wired right now, read from `pw-link`. | — | bridge `list_audio_devices` |
 | **refresh** | button | — | Re-reads devices and connections (use after patching in `qpwgraph`). | `{op:"devices"}` | — |

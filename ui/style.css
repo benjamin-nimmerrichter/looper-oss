@@ -436,7 +436,16 @@ body.no-master #master { display: none; }
   font-size: 0.85rem;
 }
 .cfgrow:last-child { border-bottom: 0; }
-.cfgrow > .lbl {
+/* label + hint stack in one left cell, so the right cell is always the
+   control and nothing else */
+.cfgrow > .lblcol {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.05rem;
+  min-width: 0;
+}
+.cfgrow .lbl {
   color: var(--dim);
   letter-spacing: 0.04em;
   min-width: 0;
@@ -444,10 +453,14 @@ body.no-master #master { display: none; }
   text-overflow: ellipsis;
 }
 /* the control keeps priority over the label when the row gets tight.
-   Descendant, not child: a caller may hand in its own .ctl wrapper. */
+   Descendant, not child: a caller may hand in its own .ctl wrapper.
+   justify-content: flex-end is what makes every number line up: the .ctl box
+   spans the leftover width, so hugging its right edge puts the readout at a
+   fixed distance from the row's right edge no matter how long the label is. */
 .cfgrow .ctl {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.35rem;
   flex: 1 1 9rem;
   min-width: 9rem;
@@ -470,7 +483,27 @@ body.no-master #master { display: none; }
   font-size: 0.82rem;
   padding: 0 0.4rem;
 }
-.cfgrow .hint { font-size: 0.72rem; color: var(--accent); }
+.cfgrow .hint {
+  font-size: 0.72rem;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* read-only reference tables (the RC-505 map): two real columns, so the right
+   side lines up whatever the sentence length is */
+.cfgrow.map {
+  display: grid;
+  grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: baseline;
+}
+.cfgrow .desc {
+  color: var(--text);
+  font-size: 0.8rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
 
 .slots { display: flex; flex-direction: column; gap: 0.3rem; }
 .slot {

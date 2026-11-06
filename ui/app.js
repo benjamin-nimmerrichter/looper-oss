@@ -631,11 +631,15 @@ function openSettings() {
 
 function settingsRow(label, ctl, hint) {
   const r = el("div", "cfgrow");
-  r.append(el("span", "lbl", label));
+  // The hint belongs to the *label*, not to the control: if it trails the
+  // control every row with a hint pushes its number left by the hint's width,
+  // and the numbers stop forming a column.
+  const left = el("div", "lblcol");
+  left.append(el("span", "lbl", label));
+  if (hint) left.append(el("span", "hint", hint));
   const wrap = el("div", "ctl");
   wrap.append(ctl);
-  if (hint) wrap.append(el("span", "hint", hint));
-  r.append(wrap);
+  r.append(left, wrap);
   return r;
 }
 
@@ -809,10 +813,12 @@ function renderSettings() {
       rowStepper("record offset", "loop.recordOffset", {
         min: -4096, max: 4096, step: 8, format: (v) => `${v} smp`,
       }),
+      // the readout must stay narrow enough for the value column, so the
+      // explanation lives in the hint rather than in the number
       rowStepper("input monitor", "loop.monitor", {
         min: 0, max: 1.5, step: 0.1,
-        format: (v) => (v === 0 ? "off (loop only)" : `${Math.round(v * 100)}%`),
-        hint: "dry input while recording",
+        format: (v) => (v === 0 ? "off" : `${Math.round(v * 100)}%`),
+        hint: "0 = hear the loop only, never the dry input",
       }),
       rowToggle("auto-close 1st layer", "loop.autoClose"),
       rowToggle("continue into overdub", "loop.autoDub"),
@@ -946,9 +952,11 @@ function renderSettings() {
       ["LOOP SYNC off (per-track length)", "fx → loop → 1 / 1/2 / 1/4"],
     ];
     const c = card(body, "RC-505 → Looper OSS");
+    // a reference table, not a settings row: two fixed columns so every
+    // description starts at the same x, instead of a ragged right-aligned blob
     MAP.forEach(([a, b]) => {
-      const row = el("div", "cfgrow");
-      row.append(el("span", "lbl", a), el("span", "num", b));
+      const row = el("div", "cfgrow map");
+      row.append(el("span", "lbl", a), el("span", "desc", b));
       c.append(row);
     });
     const d = card(body, "deliberate differences");

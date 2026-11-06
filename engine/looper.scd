@@ -669,7 +669,7 @@ if (~hasVST) {
 			},
 			"reboot", {
 				// the device must be free before the next scsynth starts, so quit,
-				// let the process die, and only then ask run.sh to restart us
+				// let the process die, and only then ask the launcher to restart us
 				"reboot requested".postln;
 				fork { s.quit; 2.5.wait; 42.exit };
 			},

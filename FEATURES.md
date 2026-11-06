@@ -108,7 +108,7 @@ multiply, reverse, rate, undo/redo), **LoopMix** (5 ms seam crossfade),
 | long-press guard on destructive actions | ✅ |
 | websocket reconnect without reload | ✅ |
 | logging + graceful failure messages | ✅ rotated logs, sweep |
-| Windows launcher | ✅ run.ps1 (WASAPI boot unverified) |
+| Windows build | ✅ PyInstaller + Inno Setup recipe (WASAPI boot **unverified**) |
 | kiosk autostart (systemd user unit / .desktop) | ⬜ |
 | theming / colour-blind safe palette | ⬜ |
 | localisation (CZ/EN) | ⬜ |

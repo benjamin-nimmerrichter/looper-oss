@@ -6,6 +6,19 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ## [Unreleased]
 
+### Added
+
+- **The application.** `app/main.py` + `app/window.py`: one process that owns the
+  UI server, the OSC bridge, the SuperCollider engine and the window. Second
+  launch raises the running window; closing it stops everything and releases the
+  audio device; SIGTERM follows the same cleanup path, so no orphaned `scsynth`.
+- **Linux AppImage** and **Windows portable + installer** (`packaging/`), with
+  `looper_oss.py` as the single entry point for both.
+- `install.sh` for source check-outs: prompts for the right package command when
+  sclang is missing instead of failing with an import error.
+- `docs/img/` — real screenshots of the main screen, the fx drawer and all seven
+  setup tabs.
+
 ### Changed — docs
 
 - README now states plainly what was only implicit before: the track count is
@@ -13,6 +26,27 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
   1–16 channels, and the UI is built for touch (48 px floor, pointer events,
   long-press guards, `--kiosk` for a bare panel), on any screen from 1024×600
   to 4K.
+- README documents **every setting** in plain language — what it does, when to
+  touch it, and a sane starting value — once per setup tab.
+
+### Fixed
+
+- **Settings numbers no longer scatter across four columns.** The readout sat at
+  `labelWidth + gap` because `.ctl` grew from wherever the label ended and its
+  content was left-aligned; rows carrying a hint were shifted again by the
+  hint's width. The control now hugs the right edge of a growing cell and the
+  hint lives under the label, so every readout in a card shares one x position
+  (verified across all seven tabs at 1280×800, 1024×600, 800×1280, 1920×1080).
+- The `input monitor` readout said `off (loop only)`, which is wider than the
+  readout column and pushed that one row out of line; the explanation moved to
+  the hint and the value is `off`.
+- The RC-505 tab reused the numeric readout class for whole sentences; it is now
+  a two-column reference table.
+
+### Removed
+
+- `run.sh` and `run.ps1`. There is no shell launcher to remember: the app is the
+  entry point, and `install.sh` replaces `--setup`.
 
 ## [0.1.0] — 2025-11-06
 
@@ -71,10 +105,19 @@ First release. A working touchscreen loop station: record, overdub, undo, save.
 
 ### Added — packaging
 
+- **A desktop application, not a script.** `app/main.py` owns the static UI
+  server, the bridge thread, the engine process and the window; `app/window.py`
+  opens it with GTK+WebKit2, falls back to an Edge/Chromium `--app` window, then
+  to the default browser. Closing the window stops the engine and releases the
+  audio device; a second launch raises the running window instead of fighting
+  over ports.
+- **Linux: AppImage** (`packaging/linux/build-appimage.sh`) carrying its own
+  CPython, stdlib and the two pinned packages — 12 MB, no install step.
+- **Windows: portable build + installer** (`packaging/windows/`), PyInstaller for
+  the executable and Inno Setup for a per-user install with no admin prompt.
 - `requirements.txt` with exact pins (`websockets==17.4`, `python-osc==1.10.2`);
-  `run.sh --setup` / `run.ps1 -Setup` install from it and check Python ≥ 3.9.
-- `run.sh` / `run.ps1`: config render → leftovers sweep → UI server → bridge →
-  engine, with log rotation at 5 MB and a restart loop.
+  `install.sh` installs from it, checks Python ≥ 3.9 and sclang, and refuses to
+  fake an engine.
 - `scripts/release.py` builds `dist/looper-oss-<version>.tar.gz` and `.zip` plus
   `SHA256SUMS`, excluding `sessions/`, `logs/`, `.venv/` and caches.
 - `docs/LICENSING.md` (third-party audit) and `ACKNOWLEDGEMENTS.md`.

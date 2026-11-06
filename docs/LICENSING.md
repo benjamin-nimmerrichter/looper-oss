@@ -21,7 +21,7 @@ The distinction matters more than the licence names.
 | relation | how | consequence |
 | --- | --- | --- |
 | **imported** | `bridge/bridge.py` does `import websockets`, `from pythonosc…` | a derivative work ships with the bridge; both licences are permissive, so GPL-3.0 is compatible and nothing extra is required |
-| **launched as a separate process** | `run.sh` runs `sclang engine/looper.scd`; sclang boots `scsynth` | GPL-3.0↔GPL-3.0 either way; OSC over UDP is not linking, so there is no conflict to resolve |
+| **launched as a separate process** | the launcher runs `sclang engine/looper.scd`; sclang boots `scsynth` | GPL-3.0↔GPL-3.0 either way; OSC over UDP is not linking, so there is no conflict to resolve |
 | **loaded into scsynth** | sc3-plugins `.so` files, `VSTPlugin` UGen, your own VST3/VST2 plugins | these are scsynth's plugin ABI, not Looper OSS code; we neither ship nor sublicense them |
 | **opened as a web page** | `--browser`/`--kiosk` launch chromium/firefox | plain HTTP on `127.0.0.1`; the browser is a separate program, not a bundled dependency |
 
@@ -36,7 +36,7 @@ The distinction matters more than the licence names.
 
 `sc3-plugins` is GPL-**2**-or-later while Looper OSS is GPL-3.0. This is not a
 conflict: `or-later` means those plugins may be used under GPLv3, and in any case
-Looper OSS does not distribute them — `run.sh` refuses to start without them and
+Looper OSS does not distribute them — the launcher refuses to start without them and
 points at your package manager.
 
 ## 3. Optional dependencies

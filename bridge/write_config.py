@@ -2,7 +2,7 @@
 """Render ui/config.json into engine/_config.scd (a SuperCollider literal).
 
 One implementation used by both the bridge (when the UI saves a setting) and
-run.sh (at startup), so the generated file can never drift from the JSON.
+the app launcher (at startup), so the generated file can never drift from the JSON.
 """
 import json
 import sys

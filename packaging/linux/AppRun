@@ -1,0 +1,13 @@
+#!/bin/sh
+# AppRun -- what the AppImage executes. The payload sits next to this script in
+# looper-oss/, the bundled interpreter and site-packages under usr/.
+set -eu
+HERE="${APPDIR:-$(cd "$(dirname "$0")" && pwd)}"
+
+# -s: ignore the user's site-packages (a broken ~/.local must not break the app).
+# No -E: we *want* PYTHONPATH honoured, that is how the payload is found.
+export PYTHONPATH="$HERE/looper-oss:$HERE/usr/lib/looper-oss/lib${PYTHONPATH:+:$PYTHONPATH}"
+export LOOPER_OSS_PACKAGED=1
+export GDK_BACKEND="${GDK_BACKEND:-}"
+
+exec "$HERE/usr/bin/python3" -s -m app.main "$@"

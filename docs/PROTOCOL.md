@@ -162,7 +162,7 @@ Everything else (audio device, block size, `tracks`, `maxLayers`,
 
 Single source of truth. `bridge/write_config.py` renders it into a
 SuperCollider literal (`engine/_config.scd`) for sclang; the bridge does the same
-whenever the UI saves a setting, and `run.sh` does it at startup.
+whenever the UI saves a setting, and the app launcher does it at startup.
 
 ```jsonc
 {

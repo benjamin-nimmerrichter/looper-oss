@@ -10,7 +10,7 @@ touches:
 
   * no runtime state ships -- sessions/ (the user's audio), logs/, .venv/,
     __pycache__/, engine/_config.scd (generated), editor cruft
-  * run.sh and the scripts keep their executable bit, in the .zip too
+  * install.sh and the scripts keep their executable bit, in the .zip too
     (the zip format drops Unix modes unless you set them by hand)
   * every file the launcher actually needs is present in the archive, checked
     by opening the archive again and looking for it
@@ -50,17 +50,21 @@ SKIP_SUFFIXES = {".pyc", ".pyo", ".orig", ".rej", ".swp", ".log", ".wav"}
 # the launcher dies without these; a release missing one is worse than no release
 REQUIRED = [
     "README.md", "LICENSE", "VERSION", "CHANGELOG.md", "ACKNOWLEDGEMENTS.md",
-    "requirements.txt", "run.sh", "run.ps1",
+    "requirements.txt", "install.sh", "looper_oss.py",
+    "app/main.py", "app/window.py",
     "ui/index.html", "ui/app.js", "ui/controls.js", "ui/style.css", "ui/config.json",
     "bridge/bridge.py", "bridge/write_config.py",
     "engine/looper.scd", "engine/vst.scd",
     "docs/PROTOCOL.md", "docs/CONTROLS.md", "docs/AUDIO.md", "docs/LICENSING.md",
+    "packaging/linux/build-appimage.sh", "packaging/linux/AppRun",
+    "packaging/windows/looper_oss.spec", "packaging/windows/build.ps1",
     "scripts/smoke.py", "scripts/uicheck.mjs", "scripts/sweep.py", "scripts/wavcheck.py",
 ]
 
 # checked out by git or by the user's unzip, then run directly
-EXECUTABLE = {"run.sh", "scripts/smoke.py", "scripts/sweep.py", "scripts/wavcheck.py",
-              "scripts/release.py", "bridge/bridge.py"}
+EXECUTABLE = {"install.sh", "looper_oss.py", "scripts/smoke.py", "scripts/sweep.py",
+              "scripts/wavcheck.py", "scripts/release.py", "bridge/bridge.py",
+              "packaging/linux/build-appimage.sh", "packaging/linux/AppRun"}
 
 
 def version() -> str:
@@ -225,7 +229,7 @@ def main() -> int:
         print(f"  {p.relative_to(ROOT)}  {p.stat().st_size / 1024:.0f} KiB  {sha256(p)[:16]}…")
     print(f"  {sums.relative_to(ROOT)}")
     print()
-    print("  unpack, then:  ./run.sh --setup && ./run.sh --browser")
+    print("  unpack, then:  ./install.sh && python3 looper_oss.py")
     return 0
 
 

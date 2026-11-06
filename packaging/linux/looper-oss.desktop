@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Looper OSS
+GenericName=Loop Station
+Comment=Touchscreen loop station built on SuperCollider
+Exec=AppRun
+Icon=looper-oss
+Terminal=false
+Categories=AudioVideo;Audio;Music;X-Synthesis;
+Keywords=looper;loop station;RC-505;sampler;live;
+StartupNotify=true
+StartupWMClass=looper-oss

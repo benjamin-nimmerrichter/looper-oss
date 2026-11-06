@@ -6,7 +6,7 @@ given), drives the real protocol over the websocket, and asserts the state
 machine, settings, session save/load and export.
 
     ./scripts/smoke.py            # spawn everything, run, tear down
-    ./scripts/smoke.py --attach   # use an already running ./run.sh
+    ./scripts/smoke.py --attach   # use an already running stack
     ./scripts/smoke.py -v         # show every state frame
 """
 from __future__ import annotations
@@ -40,7 +40,7 @@ try:
     import websockets  # pyright: ignore[reportMissingImports]
 except ImportError as exc:  # pragma: no cover - startup dependency check
     # The shebang picks whatever `python3` is on PATH, which usually has no
-    # packages. The venv `run.sh --setup` made does, and both runtime deps are
+    # packages. The venv ./install.sh made does, and both runtime deps are
     # pure Python, so lending them to this interpreter is enough -- no need to
     # make the user activate anything first.
     for site in _venv_site_packages():
@@ -50,7 +50,7 @@ except ImportError as exc:  # pragma: no cover - startup dependency check
         import websockets  # pyright: ignore[reportMissingImports]  # noqa: F811
     except ImportError:
         raise SystemExit(
-            "smoke: missing python package (websockets)\n  install: ./run.sh --setup"
+            "smoke: missing python package (websockets)\n  install: ./install.sh"
         ) from exc
 
 try:
@@ -113,8 +113,11 @@ class Stack:
         # autosave recovery would otherwise restore layers from a previous run and
         # every layer count below would be off by one
         for stale in ("sessions/autosave", "sessions/slot7", "sessions/exports"):
-            with contextlib.suppress(OSError):
+            try:
                 shutil.rmtree(ROOT / stale)
+            except OSError as exc:
+                if (ROOT / stale).exists():
+                    print(f"smoke: cannot clear {stale} ({exc})")
         subprocess.run(["pkill", "-x", "scsynth"], check=False)
         subprocess.run(["pkill", "-x", "sclang"], check=False)
         kill_stale_bridges()
@@ -404,7 +407,7 @@ async def run_tests(c: Client) -> None:
 def main() -> int:
     global verbose
     ap = argparse.ArgumentParser()
-    ap.add_argument("--attach", action="store_true", help="use a running ./run.sh")
+    ap.add_argument("--attach", action="store_true", help="use an already running stack")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
     verbose = args.verbose

@@ -27,16 +27,19 @@ the UI is a browser page; the only Python translates OSC to JSON.
   construction.
 
 ```text
+app/            the desktop application: window, launcher, shutdown
 ui/            browser UI (HTML/CSS/JS, no build step, scales to any screen)
 bridge/        bridge.py — OSC <-> WebSocket JSON, + config writer
 engine/        looper.scd — UGen wiring and the per-track state machine
                vst.scd   — VSTPlugin slots, loaded only if the extension exists
+packaging/     linux/ (AppImage) and windows/ (PyInstaller + Inno Setup)
 scripts/       smoke.py (e2e test), uicheck.mjs (UI test), sweep.py, release.py
-docs/          PROTOCOL.md (message contract), AUDIO.md (graph + gain staging)
+docs/          PROTOCOL.md, CONTROLS.md, AUDIO.md, LICENSING.md, img/ (screenshots)
 ui/config.json the only config file
+install.sh     one-time setup for a source check-out
+VERSION        the release number, read by scripts/release.py
 goal.md        what was built, in phases, with acceptance criteria
 FEATURES.md    feature inventory: shipped / planned / backlog
-VERSION        the release number, read by scripts/release.py
 ```
 
 ## Requirements
@@ -78,22 +81,49 @@ generated `engine/_config.scd`, and it rebuilds byte-identically.
 
 ## Install
 
-Linux (CachyOS, Arch):
+**Linux — AppImage.** Download `looper-oss-<version>-x86_64.AppImage`, make it
+executable, run it:
 
 ```bash
-sudo pacman -S supercollider sc3-plugins pipewire-jack
-./run.sh --setup          # creates .venv, installs requirements.txt, renders config
+chmod +x looper-oss-0.1.0-x86_64.AppImage
+./looper-oss-0.1.0-x86_64.AppImage
 ```
 
-Debian/Ubuntu: `sudo apt install supercollider sc3-plugins pipewire-jack`.
-Fedora: `sudo dnf install supercollider sc3-plugins pipewire-jack`.
+That is the whole installation. In a file manager, right-click → *Properties* →
+allow executing, then double-click; if you have AppImageLauncher it will offer
+**Integrate and run**, which adds Looper OSS to your application menu (it then
+moves the file into `~/Applications`, so look there if it seems to disappear).
+
+The AppImage carries its own Python and its dependencies. It does **not** carry
+SuperCollider — that is a system install, like your audio driver:
+
+```bash
+sudo pacman -S supercollider sc3-plugins pipewire-jack     # Arch / CachyOS
+sudo apt install supercollider sc3-plugins pipewire-jack   # Debian / Ubuntu
+sudo dnf install supercollider sc3-plugins pipewire-jack   # Fedora
+```
 
 `pipewire-jack` puts scsynth on the PipeWire graph like any other client. If you
-keep `jack` (jack2) instead, set `"audio": { "device": "default" }` in
-`ui/config.json` so scsynth uses ALSA through `pipewire-alsa`.
+keep `jack` (jack2) instead, choose driver **alsa** in setup → audio and pick your
+interface there.
 
-Windows: install [SuperCollider](https://supercollider.github.io/) and Python 3,
-then `.\run.ps1 -Setup`.
+**Windows.** Run `looper-oss-<version>-setup.exe` — a per-user install, so no
+administrator password — or unzip the portable build and double-click
+`LooperOSS.exe`. Install [SuperCollider for Windows](https://supercollider.github.io/)
+once; without it the app opens a window that says exactly that, instead of
+dying quietly.
+
+**From source** (development):
+
+```bash
+git clone git@github.com:benjamin-nimmerrichter/looper-oss.git
+cd looper-oss
+./install.sh              # .venv, pinned requirements, engine config
+python3 looper_oss.py     # and you are playing
+```
+
+`./install.sh` checks for `sclang` first and prints the exact package command
+for your distribution if it is missing.
 
 Optional, VST3 inserts: the `VSTPlugin` extension (AUR `sc3-vstplugin`, or the
 prebuilt release zip from `github.com/Spacechild1/vstplugin` unpacked into
@@ -102,16 +132,19 @@ shows `VST yes` in the log; without it the slots are simply absent.
 
 ## Run
 
-```bash
-./run.sh                 # then open http://127.0.0.1:8181/
-./run.sh --browser       # opens a chromium/chrome app window
-./run.sh --kiosk         # fullscreen, for the 8" panel
-```
+There is no script to remember and no terminal to keep open. Start the app and
+you get a window:
 
-`Ctrl-C` stops everything (engine, bridge, UI server, scsynth). Restarting is
-always safe: `run.sh` sweeps leftovers from a crashed run first.
+| you want | do this |
+| --- | --- |
+| start it | click **Looper OSS** in the application menu, or double-click the AppImage / `LooperOSS.exe` |
+| a pedal, not a window | set it fullscreen in setup → UI, or start once with `--kiosk` |
+| quit | close the window — engine, bridge and interface server stop with it |
+| start it twice | the second click raises the running window instead of fighting over ports |
+| see what went wrong | `logs/` beside the app; packaged builds keep them in `~/.local/share/looper-oss/app/<version>/logs/` |
 
-Windows: `.\run.ps1`, `.\run.ps1 -Browser`, `.\run.ps1 -Kiosk`.
+Closing the window stops the audio engine on purpose: a looper that keeps a
+`scsynth` alive after you quit is a looper that steals your audio device.
 
 ## Playing it
 
@@ -155,6 +188,131 @@ change a free varispeed instead of a re-record. Details and gain staging in
   costs at most one layer.
 - **export** bounces 30 s of the master bus to `sessions/exports/`.
 
+## The setup screen, explained
+
+![the main screen](docs/img/ui-main.png)
+
+The **setup** button (bottom left) opens a drawer with seven tabs. Nothing here
+needs saving: every change is written to `ui/config.json` as you touch it and is
+there next time you start. Where a row says **restart**, close the window and
+open the app again — that setting is read once, while the engine boots.
+
+If you only ever change one thing, make it **setup → audio → quantum**: it is the
+difference between "this feels tight" and "this feels laggy", and it is not the
+looper's fault.
+
+### audio — where the sound goes, and how fast
+
+![audio settings](docs/img/setup-audio.png)
+
+| control | what it does | sane value |
+| --- | --- | --- |
+| **driver** | how the engine reaches your interface. *auto* uses JACK/PipeWire if it exists, otherwise ALSA. *jack / pipewire* forces the shared graph, where other apps coexist with you. *alsa* takes the device directly and **nothing else can use it** while you play. | auto, unless you are on a pedal with a dedicated card |
+| **quantum** | PipeWire's buffer. Lower = less delay between your hands and your ears, higher = the machine stops crackling. This is *the* latency control. | 256 (≈5 ms per period) on a decent machine, 128 for the pedal, 1024 if audio breaks up |
+| **sample rate** | 44.1k or 48k, or *default* to follow the system | default |
+| **block size** | SuperCollider's own computation block. Ignored under JACK/PipeWire, where the graph decides | leave at 64 |
+| **hw buffer** | hardware buffer for the ALSA path only | leave alone unless you hear dropouts |
+| **inputs / outputs** | how many channels the engine opens, 1–16 each | 2 in, 2 out |
+| **connections (pw-link)** | what is actually patched into and out of the engine, read live from the graph. If meters move and you hear nothing, this is the row that tells you why | reroute in `qpwgraph`, then press **refresh** |
+| **engine → restart** | rebuilds the engine without quitting the app, after an audio change | — |
+
+### loop — the behaviour of the looper itself
+
+![loop settings](docs/img/setup-loop.png)
+
+| control | what it does | sane value |
+| --- | --- | --- |
+| **tracks** | how many columns, 1–16. Each track is an independent looper with its own input, effects and layers. Fewer tracks = bigger pads = easier with gloves. | 5, like an RC-505 |
+| **layers / track** | how many overdubs stack up, 1–4. It is also your undo depth: 4 layers = undo 3 times. | 4 |
+| **max loop** | the length reserved for each layer, 4–120 s. Memory is tracks × layers × this, so 16 tracks × 4 layers × 120 s is a lot. | 16 s unless you play long phrases |
+| **crossfade** | a tiny fade where the loop wraps. Turn it up if you hear a click at the seam; 2 ms is inaudible on most material. | 2 ms |
+| **record offset** | nudges when recording starts, in samples, if your takes consistently land early or late. Calibrate by ear against the metronome; ±8 ms is the usual range. | 0 until you hear a problem |
+| **input monitor** | lets the dry input through while you record, so you hear yourself in headphones. *off* means you only hear the loop. | off, unless you record with headphones |
+| **auto-close 1st layer** | the first take closes itself at the end of the bar instead of waiting for a second tap | on |
+| **continue into overdub** | after closing the first layer it drops straight into overdubbing, RC-505 style. Off = it starts playing and waits for you | on |
+| **quantize start** | snaps the beginning of a recording to the bar grid | off if you want free timing |
+| **dub decay** | each overdub pass fades the previous layer a little — "sound on sound" fade-out. 0 % keeps everything forever. | 0 %, raise it for ambient layering |
+| **master chain: high pass / low pass** | a filter across the whole mix, for taming rumble or hiss | 0 Hz / 1000 Hz+ is off |
+| **master chain: reverb mix / room size** | one shared reverb; each track has its own send in the fx drawer | 60 % mix, 80 % room |
+
+### clock — what you play to
+
+![clock settings](docs/img/setup-clock.png)
+
+| control | what it does | sane value |
+| --- | --- | --- |
+| **click level** | metronome loudness, on its own bus so it never lands in your loop | 30 % in headphones, 0 % live |
+| **count-in bars** | how many bars the **count-in** button waits before recording starts, 0–8 | 1 |
+| **accent / click** | pitch of the first beat and of the other beats. Higher cuts through a loud room | 1580 Hz / 1050 Hz |
+
+Tempo itself lives on the main screen: drag the tempo bar, type a number, or tap
+**TAP** in time. Bars per loop is the **1 2 4 8** row next to it — that is the
+loop length, so 4 bars at 120 BPM is 8 seconds.
+
+### ui — how big everything is
+
+![ui settings](docs/img/setup-ui.png)
+
+| control | what it does | sane value |
+| --- | --- | --- |
+| **scale** | enlarges or shrinks the whole interface, 75–175 %. For a pedal at arm's length, bigger; on a laptop, smaller | 100 %, around 125 % on a small panel |
+| **show master bar** | the master volume/meter strip at the bottom | on |
+| **fullscreen** | the browser's fullscreen mode, for a pedal | — |
+| **check 48px** | outlines every interactive target and counts the ones below 48 px — the minimum for a finger. Keyboard `d` does the same | press it once on the real screen |
+
+### midi — a footswitch or a controller
+
+![midi settings](docs/img/setup-midi.png)
+
+| control | what it does |
+| --- | --- |
+| **device** | which MIDI source to listen to, or *all sources* |
+| **map → default layout** | one press lays out the usual footswitch: notes 20–27 press a track, 30–37 undo, 40–47 stop, 50–57 clear, 60 tap tempo |
+| **learn** (per row) | press *learn* next to an action, then move the knob or press the pedal you want to use. The row renames itself to what it learned |
+| **map → clear all** | forget every learned control |
+
+Targets you can learn: per track `press`, `stop`, `undo`, `clear`, plus the
+global `tap`, `stopAll` and `metro`. Anything with a CC works too — a slider can
+be the master volume.
+
+### session — keeping what you played
+
+![session settings](docs/img/setup-session.png)
+
+| control | what it does |
+| --- | --- |
+| **slot** (1–8) | which phrase memory the next save or load uses |
+| **save slot** | writes that slot: one WAV per layer, `session.json` with the whole state, and your VST plugin settings |
+| **load slot** | restores it, layers and plugins, and starts playing |
+| **bounce 30 s** | records 30 seconds of the master output to `sessions/exports/` — the quickest way to get an idea onto disk |
+| **autosave** | when on, the current layers are written whenever the structure changes and nothing is recording, so a crash costs at most one overdub |
+| **clear autosave** | throws that recovery copy away. Clearing a track does it for you |
+
+A session lives in `sessions/slotN/` beside the app (packaged builds:
+`~/.local/share/looper-oss/app/<version>/sessions/`). Copy that folder to back
+something up; it is self-contained.
+
+### 505 — the translation table
+
+![RC-505 map](docs/img/setup-505.png)
+
+Read-only, and worth one look if you know an RC-505: it maps every Boss control
+to what you do here — REC/DUB/PLAY/STOP/CLEAR/UNDO, MEASURE, TEMPO, RHYTHM
+level, INPUT FX/TRACK FX/MASTER FX, SPEED CHANGE, MEMORY, and LOOP SYNC off. It
+also lists the four places where this deliberately differs from the hardware
+(loop length from bars and tempo, four layers instead of one loop plus Mark
+Back, no drum patterns yet, and your own VSTs instead of the Boss algorithms).
+
+## The fx drawer
+
+![the fx drawer](docs/img/ui-fx.png)
+
+**FX** under a track opens its channel strip: **input** (which hardware channel,
+trim, hot indicator), **noise gate** (threshold and smoothing), **filter**
+(high/low pass), **loop** (reverse, fade in/out, per-track length — 1, ½, ¼),
+**delay** (tempo-synced), **reverb send**, and **plugin slots** for VST3/VST2.
+Everything there is per track, and it all saves with the session.
+
 ## Scaling
 
 `ui/config.json` → `tracks` (1–16) and `maxLayers` (1–4). The track grid is
@@ -173,10 +331,12 @@ have the UI outline each target and count any that fall below that floor.
 ## Tests
 
 ```bash
-./scripts/smoke.py            # starts its own engine: 35 end-to-end checks
-./scripts/smoke.py --attach    # run against a stack you started with ./run.sh
+./install.sh                          # .venv + pinned requirements
+./scripts/smoke.py                    # starts its own engine: 35 end-to-end checks
+./scripts/smoke.py --attach            # run against a stack you already started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules ./scripts/uicheck.mjs
-./scripts/release.py --check   # is the tree shippable? builds nothing
+./scripts/release.py --check           # is the tree shippable? builds nothing
+./packaging/linux/build-appimage.sh    # dist/looper-oss-<ver>-<arch>.AppImage
 ```
 
 `smoke.py` needs the venv's packages only; it finds `.venv` itself, so you never
@@ -203,15 +363,18 @@ works and persists, and writes screenshots to `/tmp/looper-oss-ui/`.
 
 | symptom | cause |
 | --- | --- |
-| `missing: sclang` | SuperCollider not installed (see above) |
-| `the UI server did not start on port 8181` | something else holds the port; `python3 scripts/sweep.py 8181` |
-| UI says *engine offline* | check `logs/bridge.log` and `logs/engine.log` |
+| a window that says *SuperCollider was not found* | install SuperCollider (see [Install](#install)); the app will not fake an engine |
+| *something else is using that port* | another Looper OSS is already running — use its window; or change `ui` → `port` in `ui/config.json` |
+| UI says *engine offline* | check `logs/bridge.log` and `logs/engine.log` (packaged: `~/.local/share/looper-oss/app/<version>/logs/`) |
+| the app closes by itself a few seconds after starting | no interface stayed connected — that is the intended shutdown; start it from the menu rather than the raw port |
 | silence but meters move | output routed to the wrong sink — patch `SuperCollider:out_1/2` in `qpwgraph` |
 | click at the loop point | raise `loop.crossfadeMs` (setup → loop) |
 | loops land late | calibrate `loop.recordOffset` (setup → loop) |
 | high latency | PipeWire quantum; `pw-metadata -n settings 0 clock.force-quantum 256` |
 
-Logs are in `logs/`, rotated at 5 MB.
+Logs are in `logs/`, rotated at 5 MB. Closing the window stops the engine,
+the bridge and the interface server together — if a crash ever leaves an
+`scsynth` behind, the next start clears it.
 
 ## Credits
 

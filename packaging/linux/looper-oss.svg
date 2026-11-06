@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="96" fill="#0b0f14"/>
+  <!-- the loop: one arrowhead going round, closed -->
+  <circle cx="256" cy="256" r="132" fill="none" stroke="#4a9de0" stroke-width="34"
+          stroke-linecap="round" stroke-dasharray="700 130" transform="rotate(-58 256 256)"/>
+  <path d="M256 96 l58 34 -58 34 z" fill="#4a9de0"/>
+  <!-- record dot -->
+  <circle cx="256" cy="256" r="52" fill="#e05a4f"/>
+  <!-- track ticks -->
+  <g stroke="#9fb0c0" stroke-width="14" stroke-linecap="round">
+    <line x1="150" y1="418" x2="196" y2="418"/>
+    <line x1="212" y1="404" x2="300" y2="404"/>
+    <line x1="316" y1="418" x2="362" y2="418"/>
+  </g>
+</svg>

@@ -24,7 +24,7 @@ try:
 except ImportError as exc:  # pragma: no cover - startup dependency check
     raise SystemExit(
         f"bridge: missing python package ({exc})\n"
-        f"  install: ./run.sh --setup"
+        f"  reinstall Looper OSS, or run ./install.sh once from a source check-out"
     ) from exc
 
 from write_config import write_from  # noqa: E402  (same directory)
@@ -492,8 +492,13 @@ def schedule_quit(delay: float = 4.0) -> None:
 
     Closing the app window must stop the console too; a reload reconnects well
     inside the grace period and cancels this.
+
+    `LOOPER_OSS_KEEP_ALIVE=1` disables it: a headless run (tests, a plugin host,
+    a pedal with its own front end) has no UI client by design and must survive.
     """
     global quit_task
+    if os.environ.get("LOOPER_OSS_KEEP_ALIVE") == "1":
+        return
     if quit_task is not None and not quit_task.done():
         return
 
@@ -501,7 +506,7 @@ def schedule_quit(delay: float = 4.0) -> None:
         await asyncio.sleep(delay)
         if clients:
             return
-        log("no UI for %ss — stopping the engine" % delay)
+        log(f"no UI for {delay}s — stopping the engine")
         engine.send_message("/ld/act", ["shutdown", 0])
         await asyncio.sleep(0.4)
         log("bridge exiting")

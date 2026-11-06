@@ -35,7 +35,7 @@ No DSP is hand-written; that constraint holds for everything below.
 
 - Library-first. Audio = stock SC/sc3-plugins UGens only. If a feature needs DSP,
   find the UGen (`RecordBuf`, `LoopBuf`, `CombN`, `FreeVerb2`, `Compander`, `PitchShift`) or drop it from scope.
-- One config file (`ui/config.json`) stays the single source of truth; `run.sh`
+- One config file (`ui/config.json`) stays the single source of truth; the launcher
   generates `engine/_config.scd` from it. Settings must write back to that file.
 - No UI build step. No runtime network access. Must run on CachyOS **and** Windows.
 - Touch-first: every interactive target ≥ 48 × 48 CSS px after scaling.

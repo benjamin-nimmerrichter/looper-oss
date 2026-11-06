@@ -25,7 +25,7 @@ browser (ui/)  ⇄ ws JSON ⇄  bridge (bridge/bridge.py)  ⇄ OSC ⇄  sclang (
 | `engine/looper.scd` | SynthDefs, per-track state machine, session save/load, OSC API, metering, tempo | audio behaviour, state transitions, protocol fields |
 | `engine/vst.scd` | VSTPlugin slots only. Loaded **only if** the extension exists | plugin chain, plugin persistence |
 | `bridge/bridge.py` | OSC ⇄ JSON, settings persistence, audio-device enumeration, `/b_getn` fan-in | protocol, settings write-back, device lists |
-| `bridge/write_config.py` | renders `config.json` → `engine/_config.scd` (used by both bridge and `run.sh`) | config schema changes |
+| `bridge/write_config.py` | renders `config.json` → `engine/_config.scd` (used by both bridge and the launcher) | config schema changes |
 | `ui/app.js` | every control, drawers, boot screen, playhead, keypad | UI behaviour |
 | `ui/controls.js` | the touch primitives: Fader, Knob, Pad, Button, Segmented, Stepper, Select, Meter, `auditTapTargets` | gesture/size rules |
 | `ui/style.css` | layout, `--scale`, `--tap` (48 px floor), grid | anything visual |
@@ -33,7 +33,11 @@ browser (ui/)  ⇄ ws JSON ⇄  bridge (bridge/bridge.py)  ⇄ OSC ⇄  sclang (
 | `scripts/uicheck.mjs` | 16 UI checks + screenshots (needs playwright) | UI layout changes |
 | `scripts/sweep.py` | kills leftover `scsynth`/`sclang`/bridge/UI-server by scanning `/proc` | — |
 | `scripts/release.py` | builds `dist/looper-oss-<ver>.tar.gz` + `.zip` + `SHA256SUMS`, reproducible; refuses to ship runtime state | what a release contains, versioning |
-| `run.sh` / `run.ps1` | launcher, log rotation, restart loop (exit 42) | startup, packaging |
+| `app/main.py` | **the application**: owns the UI server, the bridge thread, the engine process, the window, shutdown, single-instance | startup, lifecycle, packaging |
+| `app/window.py` | GTK+WebKit2 window → Edge/Chromium `--app` → browser, in that order; also the "SuperCollider is missing" page | window behaviour |
+| `install.sh` | one-time setup for a source check-out (venv, requirements, engine config, sclang check) | dependencies |
+| `packaging/linux/` | AppImage recipe: bundles CPython + pinned deps, AppRun, `.desktop`, icon | what the Linux download contains |
+| `packaging/windows/` | PyInstaller spec + Inno Setup script (per-user install, no admin) | what the Windows download contains |
 | `requirements.txt` | **pinned** python deps of the bridge (`websockets`, `python-osc`) | dependency bumps |
 | `VERSION` | the only version number; `release.py` reads it | any release |
 | `LICENSE`, `docs/LICENSING.md`, `ACKNOWLEDGEMENTS.md` | GPL-3.0, the third-party audit, the credits | adding a dependency or copying a snippet |
@@ -57,9 +61,10 @@ aspirational.
 ## 4. Commands
 
 ```bash
-./run.sh --setup                  # venv + pinned requirements + generated engine config
-./run.sh --browser                # everything, opens an app window
-./run.sh --kiosk                  # fullscreen for the pedal
+./install.sh                      # venv + pinned requirements + generated engine config
+python3 looper_oss.py             # the app: window, engine, everything
+python3 looper_oss.py --kiosk     # fullscreen for the pedal (one-shot)
+python3 -m app.main --window none # headless stack, for tests and probes
 
 python3 scripts/sweep.py          # kill leftovers (do this after any test run)
 ./scripts/smoke.py                # 35 checks, spawns its own stack
@@ -136,7 +141,7 @@ SuperCollider and its corners, in the order they bit us. Read before editing
 17. **Clearing a track deletes its autosave** — but a *load* must not, or it
     deletes the files it is reading (`~loading` guards this).
 18. **A restart must release the audio device first.** `s.quit` → wait 2.5 s →
-    `42.exit`; `run.sh` then waits for the process to disappear. Otherwise the new
+    `42.exit`; the launcher then waits for the process to disappear. Otherwise the new
     `scsynth` dies with `could not initialize audio` and the engine half-boots.
 19. **A click at the loop point is a *discontinuity*, so its size equals the
     signal's amplitude at the cut.** It scales with the input and disappears on
@@ -201,7 +206,7 @@ Before you call a change done:
 - **No time-stretch**: a tempo change re-pitches (varispeed), like SPEED CHANGE.
 - VST editor is the plugin's own window, or VSTPlugin's generic parameter UI when
   the plugin ships none.
-- **Windows is unverified** (`run.ps1` ships; no Windows host was available to boot
+- **Windows is unverified** (the PyInstaller + Inno Setup recipe ships; no Windows host was available to boot
   WASAPI). Everything else is verified on CachyOS + PipeWire.
 - Meters/latency: PipeWire quantum governs round-trip (~21 ms at 1024, ~6.7 ms at
   256); `loop.recordOffset` compensates the grid alignment.

@@ -3,7 +3,7 @@
 
 A crashed run can leave the bridge holding its ports, or an orphaned scsynth
 answering on :57110 with a completely different SynthDef set. Both make the next
-start fail in confusing ways, so run.sh sweeps first.
+start fail in confusing ways, so the launcher sweeps first.
 
 Deliberately not `pkill -f pattern`: that pattern text also appears in the
 calling shell's own command line, so pkill ends up killing the caller.
