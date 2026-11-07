@@ -1,0 +1,70 @@
+name: release
+
+# A tag is the release. Pushing one builds the artefacts and attaches them to a
+# GitHub Release, so "it is in releases" never depends on someone remembering to
+# upload four files by hand.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libfuse2 squashfs-tools zsync
+          python -m pip install -r requirements.txt
+
+      - name: source archives + checksums
+        run: ./scripts/release.py
+
+      - name: AppImage
+        run: ./packaging/linux/build-appimage.sh
+
+      - name: checksums cover the AppImage too
+        run: |
+          cd dist
+          sha256sum looper-oss-*-x86_64.AppImage \
+            > "looper-oss-$(cat ../VERSION)-x86_64.AppImage.sha256"
+          sha256sum looper-oss-*.tar.gz looper-oss-*.zip \
+            looper-oss-*-x86_64.AppImage > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          # notes come from CHANGELOG.md when the version has a section there,
+          # otherwise GitHub's generated notes
+          notes=()
+          if grep -q "^## \[${tag#v}\]" CHANGELOG.md; then
+            awk -v pat="^## \\[${tag#v}\\]" '
+              $0 ~ pat {found=1; next}
+              found && /^## \[/ {exit}
+              found {print}
+            ' CHANGELOG.md > /tmp/notes.md
+            notes=(--notes-file /tmp/notes.md)
+          else
+            notes=(--generate-notes)
+          fi
+          gh release create "$tag" \
+            dist/looper-oss-*.tar.gz \
+            dist/looper-oss-*.zip \
+            dist/looper-oss-*-x86_64.AppImage \
+            dist/SHA256SUMS \
+            --title "Looper OSS ${tag#v}" \
+            "${notes[@]}"
