@@ -37,9 +37,7 @@
   },
   "midi": {
     "device": null,
-    "map": [
-      "note|60|t2.press|hold"
-    ]
+    "map": []
   },
   "osc": {
     "enginePort": 9000,
@@ -68,5 +66,10 @@
   },
   "session": {
     "slot": 1
+  },
+  "rhythm": {
+    "on": 0,
+    "kit": 0,
+    "pattern": 0
   }
 }

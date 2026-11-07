@@ -93,6 +93,10 @@ s.latency = 0.02;
 	autoDub: (~cfg[\loop][\autoDub] ? 1).asInteger,
 	// 0 = a new take adds itself on top; 1 = it replaces what it covered
 	overdubMode: (~cfg[\loop][\overdubMode] ? 0).asInteger,
+	// rhythm engine: 16 synthesised kits, 200 patterns generated from rows
+	rhythmOn: (~cfg[\rhythm][\on] ? 0).asInteger,
+	rhythmKit: (~cfg[\rhythm][\kit] ? 0).asInteger,
+	rhythmPattern: (~cfg[\rhythm][\pattern] ? 0).asInteger,
 	// 0 = hear only the loop: most interfaces monitor directly, and mixing our
 	// delayed copy on top of that is comb filtering
 	monitor: (~cfg[\loop][\monitor] ? 0).asFloat,
@@ -108,7 +112,11 @@ s.latency = 0.02;
 ~loopFrames  = { (~loopSeconds.value * s.sampleRate).round.asInteger.max(2) };
 ~phaseRate   = { 1 / (~loopSeconds.value * s.sampleRate) };
 // rate is applied through here so a parked clock survives tempo changes
-~applyRate   = { ~transport.set(\rate, if ((~state[\gridOn] ? 1) == 1, { ~phaseRate.value }, { 0 })) };
+~applyRate   = {
+~transport.set(\rate, if ((~state[\gridOn] ? 1) == 1, { ~phaseRate.value }, { 0 }));
+// the rhythm clock follows bpm, so it has to hear about a tempo change
+if (~rhythmSynth.notNil) { ~rhythmSynth.set(\bpm, ~state[\bpm]) };
+};
 ~trackFrames = { |ratio| (~loopFrames.value / ratio.asFloat.max(1)).round.asInteger.max(2) };
 ~xfadeFrames = { (~state[\xfadeMs] * 0.001 * s.sampleRate).round.asInteger.clip(1, 8192) };
 
@@ -329,12 +337,14 @@ if (~hasVST) {
 	}).add;
 
 	// ---- master: mix + reverb + click, master FX, limiter ------------------
-	SynthDef(\ld_master, { |mixBase, revBus, clickBus, masterBus, vol = 0.8,
-			revMix = 0.6, room = 0.8, damp = 0.3, clickVol = 0.3,
+	SynthDef(\ld_master, { |mixBase, revBus, clickBus, masterBus, rhythmBus = 0,
+			vol = 0.8, revMix = 0.6, room = 0.8, damp = 0.3, clickVol = 0.3,
 			masterHp = 0, masterLp = 18000|
 		var rv, dry, wet, click, full, sig, mfx;
 		rv    = In.ar(revBus, 2);
-		dry   = In.ar(mixBase, 32).clump(2).sum;
+		// the rhythm engine has its own bus, so it survives a track clear and is
+		// summed after the limiter chain like any other source
+		dry   = In.ar(mixBase, 32).clump(2).sum + In.ar(rhythmBus, 2);
 		wet   = FreeVerb2.ar(rv[0], rv[1], 1, room, damp);
 		click = In.ar(clickBus, 2) * clickVol;
 		full  = dry + (wet * revMix) + click;
@@ -347,6 +357,29 @@ if (~hasVST) {
 		sig = Compander.ar(full, full, 0.9, 1, 0.1, 0.001, 0.1).clip2(0.98);
 		Out.ar(masterBus, sig * vol);
 		Out.ar(0, sig * vol);
+	}).add;
+
+	// ---- rhythm engine ------------------------------------------------------
+	// Four synthesised voices stepped by a 16th-note clock derived from bpm: kick,
+	// snare, hat, perc. No samples -- a shipped drum kit would drag a licence
+	// along, and every voice here is a stock UGen. The pattern lives in a
+	// 64-frame buffer (4 voices x 16 steps), so changing it is one buffer write.
+	SynthDef(\ld_rhythm, { |outBus = 0, patBuf = 0, amp = 0.0, bpm = 120,
+			kickHz = 55, kickDecay = 0.22, snareHz = 180, hatDecay = 0.05, drive = 0|
+		var stepRate = (bpm / 60) * 4;
+		var imp  = Impulse.kr(stepRate);
+		var step = Stepper.kr(imp, 0, 0, 15);
+		var hit  = { |voice| imp * BufRd.kr(1, patBuf, step + (voice * 16), 0, 0) };
+		var kick = SinOsc.ar(kickHz.clip(30, 120))
+			* EnvGen.kr(Env.perc(0.001, kickDecay.clip(0.05, 1.2)), hit.value(0));
+		var snare = ((WhiteNoise.ar * 0.7) + (SinOsc.ar(snareHz.clip(90, 400)) * 0.3))
+			* EnvGen.kr(Env.perc(0.001, 0.12), hit.value(1));
+		var hat = BHiPass.ar(WhiteNoise.ar, 7000, 0.7)
+			* EnvGen.kr(Env.perc(0.001, hatDecay.clip(0.01, 0.3)), hit.value(2));
+		var perc = SinOsc.ar(420) * EnvGen.kr(Env.perc(0.001, 0.07), hit.value(3));
+		var sig = (kick * 0.9) + (snare * 0.6) + (hat * 0.32) + (perc * 0.4);
+		sig = (sig * (1 + drive)).tanh;
+		Out.ar(outBus, sig * amp);
 	}).add;
 
 	// ---- session capture ---------------------------------------------------
@@ -403,6 +436,53 @@ if (~hasVST) {
 		t[\synth].set(\playing, t[\playing], \recOn, 0);
 	};
 
+	// ---- rhythm engine: kits and patterns ----------------------------------
+	// 16 kits are parameter sets, not samples. 200 patterns are 5 kick x 5 snare
+	// x 4 hat x 2 perc rows combined by index, so the whole library is data.
+	~rhythmKits = {
+		Array.fill(16, { |k| (
+			kickHz: 45 + (k * 4),
+			kickDecay: 0.16 + ((k % 4) * 0.07),
+			snareHz: 150 + (k * 9),
+			hatDecay: 0.03 + ((k % 5) * 0.02),
+			drive: (k % 3) * 0.15) });
+	};
+
+	~rhythmRows = (
+		kick: [[0, 4, 8, 12], [0, 4, 6, 8, 12], [0, 3, 8, 11], [0, 8, 10], [0, 2, 6, 8, 12]],
+		snare: [[4, 12], [4, 7, 12], [4, 12, 14], [2, 6, 10, 14], [4, 11, 12]],
+		hat: [[0, 2, 4, 6, 8, 10, 12, 14],
+			[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+			[0, 2, 3, 4, 6, 8, 10, 12, 14], [2, 6, 10, 14]],
+		perc: [[7, 15], [3, 11]]
+	);
+
+	~rhythmRow = { |hits| Array.fill(16, { |i| if (hits.includes(i), { 1 }, { 0 }) }) };
+
+	~rhythmWrite = { |p|
+		var rows = ~rhythmRows;
+		var steps = ~rhythmRow.value(rows[\kick][p % 5])
+			++ ~rhythmRow.value(rows[\snare][(p / 5).floor % 5])
+			++ ~rhythmRow.value(rows[\hat][(p / 25).floor % 4])
+			++ ~rhythmRow.value(rows[\perc][(p / 100).floor % 2]);
+		~patternBuf.setn(0, steps);
+	};
+
+	~rhythmSet = { |on, kit, pat|
+		var k;
+		~state[\rhythmOn] = on.asInteger.clip(0, 1);
+		~state[\rhythmKit] = kit.asInteger.clip(0, 15);
+		~state[\rhythmPattern] = pat.asInteger.clip(0, 199);
+		~rhythmWrite.value(~state[\rhythmPattern]);
+		if (~rhythmSynth.notNil) {
+			k = ~rhythmKits.value[~state[\rhythmKit]];
+			~rhythmSynth.set(\kickHz, k[\kickHz], \kickDecay, k[\kickDecay],
+				\snareHz, k[\snareHz], \hatDecay, k[\hatDecay], \drive, k[\drive],
+				\bpm, ~state[\bpm],
+				\amp, if (~state[\rhythmOn] == 1, { 0.5 }, { 0 }));
+		};
+	};
+
 	~boot = {
 		~addDefs.value;
 		s.sync;
@@ -412,10 +492,12 @@ if (~hasVST) {
 	~revBus    = Bus.audio(s, 2);
 	~clickBus  = Bus.audio(s, 2);
 	~testBus   = Bus.audio(s, 1);      // diagnostics only
+	~rhythmBus = Bus.audio(s, 2);
 	~masterBus = Bus.audio(s, 2);
 	~maxFrames = (~maxSeconds * s.sampleRate).round.asInteger;
 	~scratch   = Buffer.alloc(s, ~maxFrames, 1);
 	~meterBuf  = Buffer.alloc(s, 64, 1);
+	~patternBuf = Buffer.alloc(s, 64, 1);   // 4 voices x 16 steps
 	// explicit order: clock -> tracks -> master. Synth() defaults to \addToHead,
 	// so a group target alone would run the master BEFORE the tracks it sums.
 	~grpClock  = Group.new;
@@ -430,8 +512,15 @@ if (~hasVST) {
 		\accentHz, ~cfg[\clock][\accentHz], \clickHz, ~cfg[\clock][\clickHz]
 	], ~grpClock, \addToTail);
 
+	~rhythmSynth = Synth(\ld_rhythm, [
+		\outBus, ~rhythmBus, \patBuf, ~patternBuf.bufnum,
+		\amp, 0, \bpm, ~state[\bpm]
+	], ~grpTracks, \addToTail);
+	~rhythmSet.value(~state[\rhythmOn], ~state[\rhythmKit], ~state[\rhythmPattern]);
+
 	~master = Synth(\ld_master, [
 		\mixBase, ~mixBus, \revBus, ~revBus, \clickBus, ~clickBus,
+		\rhythmBus, ~rhythmBus,
 		\masterBus, ~masterBus, \vol, ~state[\masterVol],
 		\revMix, ~state[\revMix], \room, ~state[\room],
 		\clickVol, ~state[\clickVol],
@@ -754,6 +843,9 @@ if (~hasVST) {
 			},
 			"quantizeStart", { ~state[\quantizeStart] = v.asInteger },
 			"overdubMode", { ~state[\overdubMode] = v.asInteger.clip(0, 1) },
+			"rhythmOn",      { ~rhythmSet.value(v, ~state[\rhythmKit], ~state[\rhythmPattern]) },
+			"rhythmKit",      { ~rhythmSet.value(~state[\rhythmOn], v, ~state[\rhythmPattern]) },
+			"rhythmPattern",  { ~rhythmSet.value(~state[\rhythmOn], ~state[\rhythmKit], v) },
 			"sel",         { ~state[\sel] = v.asInteger }
 		);
 	};
@@ -1086,8 +1178,7 @@ if (~hasVST) {
 
 	~initMIDI = {
 		if (~cfg[\midi].notNil) {
-			var m = ~cfg[\midi][\map];
-			~midiMap = if (m.isKindOf(Array)) { m } { [] };
+			~midiMap = ~parseMIDIMap.value(~cfg[\midi][\map]);
 			~midiDevice = ~cfg[\midi][\device] ? -1;
 		};
 		MIDIClient.init;
@@ -1184,6 +1275,32 @@ if (~hasVST) {
 		});
 	};
 
+	// The bridge persists the learned map as "type|num|target|gesture" strings
+	// (that is what /ldmidimap carries), so accept both that and real events --
+	// loading the strings verbatim used to leave strings in ~midiMap and every
+	// lookup then failed with "Index not an Integer".
+	~parseMIDIMap = { |raw|
+		var out = [];
+		if (raw.isKindOf(Array)) {
+			raw.do { |e|
+				if (e.isKindOf(String)) {
+					var parts = e.split($|);
+					if (parts.size >= 3) {
+						var g = if (parts.size > 3) { parts[3].asString } { "-" };
+						out = out.add((
+							type: parts[0].asString,
+							num: parts[1].asInteger,
+							target: parts[2].asString,
+							gesture: if (g == "-", { nil }, { g })));
+					};
+				} {
+					out = out.add(e);
+				};
+			};
+		};
+		out
+	};
+
 	~sendMIDIMap = {
 		var csv = (~midiMap ? []).collect { |m|
 			"%|%|%|%".format(m[\type], m[\num], m[\target], m[\gesture] ? "-")
@@ -1245,6 +1362,8 @@ if (~hasVST) {
 			"stats",     { ~sendStats.value },
 			"probe",     { ~probeTrack.value((msg[2] ? 0).asInteger) },
 			"midiAdd",   { ~midiAdd.value(msg[2], msg[3], msg[4], msg[5]) },
+			"rhythm",    { ~bridge.sendMsg('/ldrhythm', ~state[\rhythmOn],
+				~state[\rhythmKit], ~state[\rhythmPattern]) },
 			"midiSim",   { ~midiSim.value(msg[2], msg[3]) },
 			"clearAutosave", { ~clearAutosave.value }
 		);

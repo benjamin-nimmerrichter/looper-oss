@@ -389,7 +389,28 @@ function buildTransport() {
   });
   g4.append(masterFader);
 
-  root.append(g0, g1, g2, gpos, g3, g4);
+  // Rhythm engine: 16 synthesised kits, 200 patterns. Driven through the config
+  // so it survives a restart, like every other setting.
+  const gr = el("div", "group");
+  gr.append(el("div", "caption", "rhythm"));
+  const rOn = Button({ label: "drums", toggle: true, cls: "tiny" });
+  if (Number(CFG.rhythm?.on)) rOn.classList.add("on");
+  rOn.addEventListener("pointerup", () => {
+    cfgSet("rhythm.on", rOn.classList.contains("on") ? 1 : 0);
+  });
+  const rKit = Stepper({
+    min: 1, max: 16, step: 1, value: Number(CFG.rhythm?.kit ?? 0) + 1,
+    format: (v) => `kit ${v}`,
+    onInput: (v) => cfgSet("rhythm.kit", v - 1),
+  });
+  const rPat = Stepper({
+    min: 1, max: 200, step: 1, value: Number(CFG.rhythm?.pattern ?? 0) + 1,
+    format: (v) => `pat ${v}`,
+    onInput: (v) => cfgSet("rhythm.pattern", v - 1),
+  });
+  gr.append(rOn, rKit, rPat);
+
+  root.append(g0, g1, g2, gpos, g3, gr, g4);
   ui.transport = { bpmVal, bpmFader, bars, metro, countIn, masterFader, posVal };
 }
 

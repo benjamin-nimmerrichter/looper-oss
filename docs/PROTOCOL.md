@@ -107,7 +107,8 @@ Generic setters, so a new knob needs no new OSC path:
 
 Global paths for `/ld/set`: `g.bpm g.bars g.beatsPerBar g.metro g.countIn
 g.masterVol g.clickVol g.revMix g.room g.masterHp g.masterLp g.xfadeMs
-g.recordOffset g.dubDecay g.autoClose g.quantizeStart g.overdubMode g.sel`.
+g.recordOffset g.dubDecay g.autoClose g.quantizeStart g.overdubMode
+g.rhythmOn g.rhythmKit g.rhythmPattern g.sel`.
 
 Per track paths: `t<N>.<field>` for every per-track state field above.
 
@@ -127,6 +128,7 @@ Per track paths: `t<N>.<field>` for every per-track state field above.
 | `export` | seconds |
 | `tap` | — |
 | `probe` | track (diagnostic) |
+| `rhythm` | — ; replies `/ldrhythm on, kit, pattern` |
 | `midiAdd` | type, num, target, gesture (test hook) |
 | `midiSim` | num, gesture (test hook) |
 

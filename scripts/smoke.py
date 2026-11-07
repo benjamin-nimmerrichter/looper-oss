@@ -560,6 +560,23 @@ async def run_tests(c: Client) -> None:
           st is not None and after_press == before_state,
           f"before={before_state} after-press={after_press}")
 
+    # Rhythm engine: 16 synthesised kits, 200 generated patterns, cfg-driven.
+    await c.cfg("rhythm.kit", 5)
+    await c.cfg("rhythm.pattern", 42)
+    await c.cfg("rhythm.on", 1)
+    await asyncio.sleep(0.8)
+    await c.svc("rhythm", [])
+    st = await c.wait(lambda m: m.get("t") == "rhythm", 8)
+    check("rhythm engine takes kit / pattern / on",
+          st is not None and st["kit"] == 5 and st["pattern"] == 42
+          and st["on"] == 1, f"{st}")
+    # leave the repo config as we found it: the map and the rhythm settings are
+    # configuration and the bridge persists them
+    await c.cfg("rhythm.on", 0)
+    await c.cfg("rhythm.kit", 0)
+    await c.cfg("rhythm.pattern", 0)
+    await c.svc("midiClear", [])
+
 
 def main() -> int:
     global verbose

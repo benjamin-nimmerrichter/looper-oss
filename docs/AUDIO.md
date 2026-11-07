@@ -35,6 +35,26 @@ pos  = tph × (contentLen - 1)          -- read position, per-sample
 Because the phase comes from one source, tracks cannot drift, and a track with
 `loopRatio = 2` stays locked to the others.
 
+## Rhythm engine
+
+`\ld_rhythm` is a fourth source, on its own bus, summed by `\ld_master` after the
+track mix:
+
+```text
+Impulse(16th) ─▶ Stepper(0..15) ─▶ BufRd(patternBuf, step + voice*16)
+   kick  : Sine(kickHz) x perc-env
+   snare : noise + Sine(snareHz) x perc-env
+   hat   : HPF(noise, 7 kHz) x perc-env
+   perc  : Sine(420) x perc-env
+```
+
+The pattern is 64 frames (4 voices × 16 steps) written with one `setn`, so
+changing a pattern is one buffer write and no recompilation. Kits are parameter
+sets — 16 rows of pitch/decay/drive — not samples: a shipped kit would drag a
+licence along, and every voice here is a stock UGen. The step clock is
+`bpm / 60 * 4`, so it follows a tempo change through `~applyRate`, and it keeps
+running when every track is cleared.
+
 ## Speed (varispeed)
 
 `tph` — the track's read position — is normally `(masterPhase × loopRatio) % 1`,
