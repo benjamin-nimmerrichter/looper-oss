@@ -94,9 +94,10 @@ s.latency = 0.02;
 	// 0 = a new take adds itself on top; 1 = it replaces what it covered
 	overdubMode: (~cfg[\loop][\overdubMode] ? 0).asInteger,
 	// rhythm engine: 16 synthesised kits, 200 patterns generated from rows
-	rhythmOn: (~cfg[\rhythm][\on] ? 0).asInteger,
-	rhythmKit: (~cfg[\rhythm][\kit] ? 0).asInteger,
-	rhythmPattern: (~cfg[\rhythm][\pattern] ? 0).asInteger,
+	// a stale generated _config.scd may not have this section at all
+	rhythmOn: ((~cfg[\rhythm] ? ())[\on] ? 0).asInteger,
+	rhythmKit: ((~cfg[\rhythm] ? ())[\kit] ? 0).asInteger,
+	rhythmPattern: ((~cfg[\rhythm] ? ())[\pattern] ? 0).asInteger,
 	// 0 = hear only the loop: most interfaces monitor directly, and mixing our
 	// delayed copy on top of that is comb filtering
 	monitor: (~cfg[\loop][\monitor] ? 0).asFloat,
@@ -1053,6 +1054,37 @@ if (~hasVST) {
 		};
 	};
 
+	// WAV import: drop a file in sessions/import/ and load it into a track as a
+	// single layer. Channel 0 only -- a loop track is one channel wide.
+	// readChannel's channel argument is an Integer: passing [0] compiles and then
+	// silently never calls the action back (cost an afternoon).
+	~importWAV = { |idx, name|
+		var t = ~tracks[idx];
+		var path = ~sessionRoot +/+ "import" +/+ name.asString;
+		if (t.isNil) {
+			~bridge.sendMsg('/ldimport', idx, name.asString, -1);
+		} {
+			Buffer.readChannel(s, path, 0, 0, -1, { |src|
+				var n = 0;
+				if (src.notNil && (src.numFrames > 0)) {
+					n = src.numFrames.min(t[\contentLen]).asInteger;
+					~maxLayers.do { |li|
+						t[\synth].set(("w" ++ li).asSymbol, 0, ~gainKeys[li], 0);
+						t[\gains][li] = 0;
+					};
+					t[\bufs][0].zero;
+					src.copyData(t[\bufs][0], 0, 0, n);
+					t[\gains][0] = 1;
+					t[\layerCount] = 1; t[\undone] = 0;
+					t[\recOn] = 0; t[\playing] = 1; t[\state] = 2;
+					t[\synth].set(~gainKeys[0], 1, \playing, 1, \recOn, 0);
+				};
+				if (src.notNil) { src.free };
+				~bridge.sendMsg('/ldimport', idx, name.asString, n);
+			});
+		};
+	};
+
 	~loadSession = { |slot|
 		~loadSessionDir.value(~sessionRoot +/+ ("slot" ++ slot), slot.asInteger);
 	};
@@ -1364,6 +1396,7 @@ if (~hasVST) {
 			"midiAdd",   { ~midiAdd.value(msg[2], msg[3], msg[4], msg[5]) },
 			"rhythm",    { ~bridge.sendMsg('/ldrhythm', ~state[\rhythmOn],
 				~state[\rhythmKit], ~state[\rhythmPattern]) },
+			"import",    { ~importWAV.value(msg[2].asInteger, msg[3]) },
 			"midiSim",   { ~midiSim.value(msg[2], msg[3]) },
 			"clearAutosave", { ~clearAutosave.value }
 		);

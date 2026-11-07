@@ -58,6 +58,7 @@ let MIDIMAP = [];
 let MIDIDEVS = [];
 let selected = 0;
 let phase = { value: 0, at: performance.now() };
+let IMPORTS = [];   // *.wav sitting in sessions/import/
 // The bar eases toward the engine's loop points and stops when they stop moving.
 // (It used to add elapsed time itself, so it kept moving even with the engine off.)
 let playPos = 0;
@@ -173,6 +174,20 @@ function handle(m) {
       break;
     case "exported":
       toast(`exported ${m.path.split("/").pop()}`);
+      break;
+    case "imports": {
+      // renderSettings() asks for the list again, so only re-render when it
+      // actually changed -- otherwise the drawer rebuilds forever
+      const next = (m.csv || "").split(";").filter(Boolean);
+      if (next.join("|") !== IMPORTS.join("|")) {
+        IMPORTS = next;
+        if (settingsTab === "session") renderSettings();
+      }
+      break;
+    }
+    case "imported":
+      toast(m.frames > 0 ? `imported ${m.name} (${m.frames} frames)`
+        : `import failed: ${m.name}`);
       break;
     case "backup":
       toast(m.ok ? `backup → ${String(m.path).split("/").pop()}`
@@ -1114,6 +1129,27 @@ function renderSettings() {
         toast("autosave cleared");
       }, "after clearing tracks this is automatic"),
     );
+
+    // WAV import: the browser cannot pick a server path, so files are dropped
+    // into sessions/import/ and listed here.
+    const imp = card(body, "import a wav");
+    const impSel = Select({
+      options: (IMPORTS.length ? IMPORTS : ["(none)"]).map((n) => ({ label: n, value: n })),
+      value: IMPORTS[0] ?? "(none)",
+      onPick: () => {},
+    });
+    const impBtn = Button({ label: "import", cls: "tiny" });
+    impBtn.addEventListener("pointerup", () => {
+      const name = impSel.value;
+      if (name && name !== "(none)") {
+        svc("import", [selected, name]);
+        toast(`importing ${name} into track ${selected + 1}`);
+      }
+    });
+    const impRow = el("div", "row2");
+    impRow.append(impSel, impBtn);
+    imp.append(impRow, el("div", "caption", "drop files in sessions/import/"));
+    send({ op: "importList" });
 
     const info = card(body, "files");
     info.append(el("div", "caption", "saves to sessions/slotN (WAV per layer + session.json)"));

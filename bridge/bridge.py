@@ -373,6 +373,13 @@ def on_probe(_addr: str, *args: Any) -> None:
     })
 
 
+def on_import(_addr: str, *args: Any) -> None:
+    push({"t": "imported",
+          "track": inum(args[0]) if args else 0,
+          "name": str(args[1]) if len(args) > 1 else "",
+          "frames": inum(args[2]) if len(args) > 2 else 0})
+
+
 def on_rhythm(_addr: str, *args: Any) -> None:
     push({"t": "rhythm",
           "on": inum(args[0]) if args else 0,
@@ -467,6 +474,10 @@ def handle_command(raw: str) -> None:
         engine.send_message("/ld/svc", args)
     elif op == "cfg":
         apply_config(str(cmd["path"]), cmd.get("v"))
+    elif op == "importList":
+        folder = ROOT / "sessions" / "import"
+        names = sorted(p.name for p in folder.glob("*.wav")) if folder.is_dir() else []
+        push({"t": "imports", "csv": ";".join(names)})
     elif op == "backup":
         try:
             path = session_backup()
@@ -643,7 +654,7 @@ async def main() -> None:
         ("/ldwrap", on_wrap), ("/ldmeter", on_meter), ("/ldmaster", on_master),
         ("/ldin", on_input), ("/ldstats", on_stats), ("/ldvst", on_vst),
         ("/ldvstcatalog", on_vst_catalog), ("/ldmidimap", on_midi_map),
-        ("/ldmidi", on_midi_event), ("/ldrhythm", on_rhythm), ("/ldmididevs", on_midi_devices),
+        ("/ldmidi", on_midi_event), ("/ldrhythm", on_rhythm), ("/ldimport", on_import), ("/ldmididevs", on_midi_devices),
         ("/ldauto", on_auto), ("/ldready", on_ready), ("/ldbootfail", on_boot_fail), ("/ldprobe", on_probe), ("/ldtap", on_tap),
         ("/ldsaved", on_saved), ("/ldloaded", on_loaded), ("/ldloaderr", on_loaderr),
         ("/ldcapturing", on_capturing), ("/ldexported", on_exported),

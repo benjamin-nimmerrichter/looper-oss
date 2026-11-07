@@ -206,6 +206,7 @@ The learned map persists in `ui/config.json` under `midi.map`.
 | **bounce 30 s** | button | — | Renders 30 s of the master bus to `sessions/exports/mixdown_*.wav`. | `svc export` | `~exportMix` |
 | autosave | toggle | on | Snapshot of committed layers after every layer change. On the next start the layers come back **stopped and silent** — press a pad to play them. Turn it off for a session you do not want back. | `cfg loop.autosave` | `autosave`, `~autosaveTick` |
 | **clear autosave** | button | — | Deletes the autosave snapshot now. (Clearing all tracks does this automatically.) | `svc clearAutosave` | `~clearAutosave` |
+| **IMPORT WAV** | select + button | files in `sessions/import/` | Loads a WAV into the selected track as a single layer (channel 0, truncated to the loop length). Drop files in `sessions/import/`; the browser cannot pick a server path, so the list is the picker. | `svc import` | `~importWAV` |
 | **backup** | button | — | Zips the whole `sessions/` tree (every memory, the autosave, exports) into `sessions/backups/looper-<stamp>.zip` — one file to carry to another machine. Written by the bridge, not the engine. | `op backup` | — |
 | **restore** | button | — | Extracts the newest backup back over `sessions/`. Members that would land outside `sessions/` are refused, so a hostile zip cannot write anywhere else. | `op restore` | — |
 

@@ -109,7 +109,7 @@ Press/hold/double-click per control, expression pedals, 16 assignable targets,
 save/recall of the map. The MIDI learn path exists; this is the mapping model and
 the UI to edit it.
 
-### D7 — memories, import/export, backup — **partly done** (99 memories + backup; WAV import open)
+### D7 — memories, import/export, backup — **done**
 99 memories that store the whole session (tracks + FX + playback + control map +
 rhythm), WAV import, backup/restore as one archive. `sessions/slotN` is the seed;
 `session.json` already serialises the UI state.

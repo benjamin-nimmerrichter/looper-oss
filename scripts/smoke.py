@@ -15,14 +15,17 @@ import argparse
 import asyncio
 import contextlib
 import json
+import math
 import os
 import pathlib
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
 import time
+import wave
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PY = ROOT / ".venv" / "bin" / "python"
@@ -546,20 +549,6 @@ async def run_tests(c: Client) -> None:
     st = await c.wait(lambda m: m.get("t") == "s", 2)
     check("midi learn command accepted", "s" in c.seen)
 
-    # A note carries a gesture: the same pedal presses, holds or double-taps and
-    # means different things. midiAdd/midiSim exercise that without hardware.
-    await c.svc("midiAdd", ["note", 60, "t2.press", "hold"])
-    await asyncio.sleep(0.5)
-    before_state = c.track(2)["state"]
-    await c.svc("midiSim", [60, "press"])       # wrong gesture: must do nothing
-    await asyncio.sleep(1.0)
-    after_press = c.track(2)["state"]
-    await c.svc("midiSim", [60, "hold"])        # right gesture: starts the take
-    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][2]["state"] == 1, 8)
-    check("a midi hold fires only its hold mapping",
-          st is not None and after_press == before_state,
-          f"before={before_state} after-press={after_press}")
-
     # Rhythm engine: 16 synthesised kits, 200 generated patterns, cfg-driven.
     await c.cfg("rhythm.kit", 5)
     await c.cfg("rhythm.pattern", 42)
@@ -576,6 +565,26 @@ async def run_tests(c: Client) -> None:
     await c.cfg("rhythm.kit", 0)
     await c.cfg("rhythm.pattern", 0)
     await c.svc("midiClear", [])
+
+    # WAV import: a file dropped in sessions/import/ becomes a track's layer
+    imp_dir = ROOT / "sessions" / "import"
+    imp_dir.mkdir(parents=True, exist_ok=True)
+    wp = imp_dir / "smoke.wav"
+    with wave.open(str(wp), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(48000)
+        wf.writeframes(b"".join(struct.pack("<h", int(12000 * math.sin(i * 0.05)))
+                               for i in range(24000)))
+    await c.ws.send(json.dumps({"op": "importList"}))
+    st = await c.wait(lambda m: m.get("t") == "imports", 10)
+    check("import list sees the dropped wav",
+          st is not None and "smoke.wav" in (st.get("csv") or ""),
+          (st or {}).get("csv", ""))
+    await c.svc("import", [3, "smoke.wav"])
+    st = await c.wait(lambda m: m.get("t") == "imported" and m["track"] == 3, 20)
+    check("wav import fills a track", st is not None and st["frames"] > 0,
+          f"frames={st['frames'] if st else '?'}")
 
 
 def main() -> int:

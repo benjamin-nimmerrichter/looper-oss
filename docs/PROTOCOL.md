@@ -129,6 +129,7 @@ Per track paths: `t<N>.<field>` for every per-track state field above.
 | `tap` | — |
 | `probe` | track (diagnostic) |
 | `rhythm` | — ; replies `/ldrhythm on, kit, pattern` |
+| `import` | track, file name in `sessions/import/` ; replies `/ldimport track, name, frames` |
 | `midiAdd` | type, num, target, gesture (test hook) |
 | `midiSim` | num, gesture (test hook) |
 
@@ -139,6 +140,7 @@ Browser-only ops (the bridge does the work, no engine traffic):
 | `backup` | zips `sessions/` → `sessions/backups/looper-<stamp>.zip`, replies `{"t":"backup","ok":1,"path":…}` |
 | `restore` | extracts the newest backup (or `name`) over `sessions/`, refusing members outside it; replies `{"t":"restored","ok":1,"name":…}` |
 | `backups` | replies `{"t":"backups","csv":"a.zip;b.zip"}` |
+| `importList` | replies `{"t":"imports","csv":"a.wav;b.wav"}` from `sessions/import/` |
 
 ## browser ↔ bridge (WebSocket JSON)
 
