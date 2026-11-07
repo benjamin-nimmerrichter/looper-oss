@@ -71,13 +71,13 @@ those packages actually has to run it.
 Issue #3 lists the hardware's manual. It is a roadmap, not a sprint. Ordered the
 way it can be built on what already exists:
 
-### D1 — playback speed, per track
+### D1 — playback speed, per track — **done**
 Half, double and continuous `loopRatio` (the engine already has `loopRatio` per
 track; the UI and the transport rate need to expose 0.25×–4× continuously).
 Speed changes pitch (varispeed) — the hardware's pitch-preserving mode is
 time-stretch, which stays a non-goal.
 
-### D2 — the layer tricks
+### D2 — the layer tricks — **done**
 - **Mark Back:** return to a previous state of the layer stack without stepping
   through undo one layer at a time (the `undone` counter already tracks it).
 - **Bounce In:** sum several tracks into one and free the sources.
@@ -99,17 +99,17 @@ Independent input mixer (2 mic + 2 stereo pairs), input EQ and mic compressors,
 3 stereo output buses with per-track routing, a headphone/cue mix. The engine
 already sums per-track stereo buses; this is bus gymnastics plus UI.
 
-### D5 — rhythm engine
+### D5 — rhythm engine — **done** (synthesised)
 200 patterns and 16 kits. This is *content*, not code: the transport already has
 a phasor to trigger against. It needs a sample source whose licence allows
 redistribution (see `docs/LICENSING.md`), or generated patterns from stock UGens.
 
-### D6 — MIDI depth
+### D6 — MIDI depth — **partly done** (gestures; 16 targets were already learnable)
 Press/hold/double-click per control, expression pedals, 16 assignable targets,
 save/recall of the map. The MIDI learn path exists; this is the mapping model and
 the UI to edit it.
 
-### D7 — memories, import/export, backup
+### D7 — memories, import/export, backup — **partly done** (99 memories + backup; WAV import open)
 99 memories that store the whole session (tracks + FX + playback + control map +
 rhythm), WAV import, backup/restore as one archive. `sessions/slotN` is the seed;
 `session.json` already serialises the UI state.
