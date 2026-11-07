@@ -336,7 +336,7 @@ have the UI outline each target and count any that fall below that floor.
 
 ```bash
 ./install.sh                          # .venv + pinned requirements
-./scripts/smoke.py                    # starts its own engine: 35 end-to-end checks
+./scripts/smoke.py                    # starts its own engine: 37 end-to-end checks
 ./scripts/smoke.py --attach            # run against a stack you already started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules ./scripts/uicheck.mjs
 ./scripts/release.py --check           # is the tree shippable? builds nothing
@@ -375,6 +375,7 @@ works and persists, and writes screenshots to `/tmp/looper-oss-ui/`.
 | click at the loop point | raise `loop.crossfadeMs` (setup → loop) |
 | loops land late | calibrate `loop.recordOffset` (setup → loop) |
 | high latency | PipeWire quantum; `pw-metadata -n settings 0 clock.force-quantum 256` |
+| no output after the laptop wakes from sleep | handled: the app notices the resume and restarts the engine, because the audio device is torn down and rebuilt while `scsynth` keeps running silent. The session comes back stopped — press a pad. `logs/app.log` says `resume detected` when it fired. |
 
 Logs are in `logs/`, rotated at 5 MB. Closing the window stops the engine,
 the bridge and the interface server together — if a crash ever leaves an

@@ -224,6 +224,18 @@ async def run_tests(c: Client) -> None:
     check("playhead phase advances", len(phases) > 4, f"{len(phases)} distinct")
     check("state carries meters", all("meter" in t for t in st["tracks"]))
 
+    # sleep/resume detector (issue #1): a normal tick must read ~0 s, a 600 s
+    # suspend must read 600 s. That gap is what tells the watchdog to restart
+    # the engine, because audio never survives a suspend on its own.
+    try:
+        sys.path.insert(0, str(ROOT))
+        from app.main import resume_drift
+        ok = (abs(resume_drift(1000.0, 500.0, 1000.5, 500.5)) < 1e-9
+              and abs(resume_drift(1000.0, 500.0, 1601.0, 501.0) - 600.0) < 1e-9)
+        check("sleep/resume signal detected", ok)
+    except Exception as exc:                       # noqa: BLE001 - report, don't crash
+        check("sleep/resume signal detected", False, repr(exc))
+
     # SILENCE FIRST: every check below reads the state, not the speakers. Muting
     # the master keeps the run inaudible while internal buses still carry signal.
     await c.set("g.masterVol", 0)
@@ -237,21 +249,28 @@ async def run_tests(c: Client) -> None:
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 1, 6)
     check("press starts recording", st is not None)
 
-    # Hardware semantics: the track button plays/stops, DUB starts an overdub.
+    # RC-505 semantics: at the bar the first take closes and keeps recording
+    # as an overdub (autoDub), so state stays 1 until the player presses.
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["layers"] >= 1, 20)
     base = st["tracks"][0]["layers"] if st is not None else 0
-    check("first take closes to playback",
-          st is not None and st["tracks"][0]["state"] == 2 and base >= 1,
+    check("first take closes into an overdub",
+          st is not None and st["tracks"][0]["state"] == 1 and base >= 1,
           f"layers={base} state={st['tracks'][0]['state'] if st else '?'}")
+
+    await c.act("press", 0)                        # press commits the overdub
+    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 2, 8)
+    check("press commits the overdub and plays",
+          st is not None and st["tracks"][0]["layers"] >= base)
 
     await c.act("press", 0)                        # tapping a playing track stops it
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 3, 8)
-    check("press on a playing track stops it (not overdub)",
-          st is not None and st["tracks"][0]["layers"] == base)
+    check("press on a playing track stops it",
+          st is not None and st["tracks"][0]["layers"] >= base)
 
     await c.act("press", 0)                        # ... and resumes
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 2, 8)
-    check("press again resumes playback", st is not None)
+    check("press resumes playback", st is not None)
+    base = st["tracks"][0]["layers"] if st is not None else base   # the committed take
 
     await c.act("dub", 0)                          # explicit overdub
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 1, 8)

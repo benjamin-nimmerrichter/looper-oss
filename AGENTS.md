@@ -29,7 +29,7 @@ browser (ui/)  ⇄ ws JSON ⇄  bridge (bridge/bridge.py)  ⇄ OSC ⇄  sclang (
 | `ui/app.js` | every control, drawers, boot screen, playhead, keypad | UI behaviour |
 | `ui/controls.js` | the touch primitives: Fader, Knob, Pad, Button, Segmented, Stepper, Select, Meter, `auditTapTargets` | gesture/size rules |
 | `ui/style.css` | layout, `--scale`, `--tap` (48 px floor), grid | anything visual |
-| `scripts/smoke.py` | 35 end-to-end checks, spawns its own engine | behaviour changes (update expectations!) |
+| `scripts/smoke.py` | 37 end-to-end checks, spawns its own engine | behaviour changes (update expectations!) |
 | `scripts/uicheck.mjs` | 16 UI checks + screenshots (needs playwright) | UI layout changes |
 | `scripts/sweep.py` | kills leftover `scsynth`/`sclang`/bridge/UI-server by scanning `/proc` | — |
 | `scripts/release.py` | builds `dist/looper-oss-<ver>.tar.gz` + `.zip` + `SHA256SUMS`, reproducible; refuses to ship runtime state | what a release contains, versioning |
@@ -65,9 +65,12 @@ aspirational.
 python3 looper_oss.py             # the app: window, engine, everything
 python3 looper_oss.py --kiosk     # fullscreen for the pedal (one-shot)
 python3 -m app.main --window none # headless stack, for tests and probes
+LOOPER_OSS_RESUME_SIM=600 python3 -m app.main --window none
+                                  # pretend the machine slept 10 min: the log must
+                                  # say `resume detected` and `engine ready` again
 
 python3 scripts/sweep.py          # kill leftovers (do this after any test run)
-./scripts/smoke.py                # 35 checks, spawns its own stack
+./scripts/smoke.py                # 37 checks, spawns its own stack
 ./scripts/smoke.py --attach       # ...against a stack you started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules node scripts/uicheck.mjs
 sclang /tmp/probe.scd             # boots the engine alone (write your own probes)
@@ -160,13 +163,19 @@ SuperCollider and its corners, in the order they bit us. Read before editing
 21. **A half-booted engine must not throw on every command.** Command handlers are
     no-ops until `~tracks` exists; the boot watchdog retries twice, then reports
     `could not open the audio device` to the UI.
+22. **Suspend kills the audio, not the process.** After a sleep the device is
+    torn down and rebuilt, but `scsynth` keeps running against the dead node: no
+    exit code, meters still moving, no sound. An exit-code watchdog cannot see
+    it. `app/main.py` compares `CLOCK_REALTIME` drift against `CLOCK_MONOTONIC`
+    (monotonic stops during suspend) and restarts the engine on >5 s. The session
+    comes back **stopped** from autosave — that is intended, not a bug.
 
 ## 7. Change checklist
 
 Before you call a change done:
 
 - [ ] `sclang /tmp/probe.scd` → `0 ERROR`, and the log has no `streamToFloatArray`
-- [ ] `./scripts/smoke.py` → 35/35 (update the expectations if the behaviour changed
+- [ ] `./scripts/smoke.py` → 37/37 (update the expectations if the behaviour changed
       *on purpose* — see §8)
 - [ ] `node scripts/uicheck.mjs` → `UI OK` if you touched the UI
 - [ ] `python3 scripts/sweep.py` → no processes left, user hears nothing

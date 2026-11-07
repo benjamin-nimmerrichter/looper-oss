@@ -53,7 +53,24 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
   unspecified -- so the config was contradicting both the engine and
   `docs/CONTROLS.md`, which documents the default as on. Default is now 1: tap to
   start a take, it closes at the bar and keeps recording as an overdub until you
-  tap again.
+  tap again. The end-to-end suite follows the same behaviour: `press` starts a
+  take, the bar closes it into an overdub (state stays *recording*), and `press`
+  again commits it to playback; the old `state == 2` assertion was checking the
+  bug. 36/36.
+
+### Fixed — audio after sleep (issue #1)
+
+- **Coming back from suspend left the app silent.** `scsynth` survives a sleep
+  but the audio device does not: PipeWire tears the node down and rebuilds it,
+  and the running server keeps its dead connection, so every meter moves and no
+  sound comes out. The process never exits, so the exit-code watchdog never
+  fired. The launcher now watches the one signal a resume gives for free —
+  `CLOCK_MONOTONIC` stops during suspend while `CLOCK_REALTIME` keeps running,
+  so the difference between the two clocks *is* the sleep duration. On more than
+  5 s it restarts the engine (after giving PipeWire 4 s to rebuild the graph).
+  `logs/app.log` records `resume detected (…s asleep)`. No D-Bus client, no new
+  dependency; Windows' QPC behaves the same way. The session is restored from
+  autosave **stopped**, so nothing blasts when the lid opens.
 
 ### Fixed — AppImage window
 

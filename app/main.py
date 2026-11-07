@@ -306,6 +306,18 @@ def start_bridge(home: pathlib.Path, logfile: pathlib.Path) -> None:
 
 
 # ------------------------------------------------------------------- engine --
+def resume_drift(last_wall: float, last_mono: float,
+                 wall: float, mono: float) -> float:
+    """Seconds the machine spent asleep between two samples.
+
+    CLOCK_MONOTONIC stops during suspend, CLOCK_REALTIME keeps running, so
+    subtracting one elapsed time from the other leaves exactly the sleep
+    duration and ~0 for an ordinary tick. Windows' QPC behaves like
+    CLOCK_MONOTONIC, so the same test works there.
+    """
+    return (wall - last_wall) - (mono - last_mono)
+
+
 class Engine:
     """SuperCollider, supervised: exit code 42 means 'restart me'."""
 
@@ -326,10 +338,11 @@ class Engine:
     def poll(self) -> int | None:
         return None if self.proc is None else self.proc.poll()
 
-    def restart(self) -> None:
-        self.restarts += 1
+    def restart(self, delay: float = 2.0, count: bool = True) -> None:
+        if count:
+            self.restarts += 1
         self.stop(force=True)
-        time.sleep(2.0)  # let PipeWire/WASAPI release the device first
+        time.sleep(delay)  # let PipeWire/WASAPI release the device first
         self.start()
 
     def stop(self, force: bool = False) -> None:
@@ -459,10 +472,43 @@ def main(argv: list[str] | None = None) -> int:
             signal.signal(sig, _signal_quit)
 
     def watchdog() -> None:
+        last_wall, last_mono = time.time(), time.monotonic()
+        # Test hook: pretend the machine has just slept N seconds, so the resume
+        # path can be exercised without actually suspending. Shifting the wall
+        # baseline backwards makes the first tick report a drift of N. Never set
+        # in normal use; AGENTS.md documents the manual probe.
+        try:
+            sim = float(os.environ.get("LOOPER_OSS_RESUME_SIM", "0") or 0)
+        except ValueError:                     # a bad value must not kill the watcher
+            sim = 0.0
+        if sim > 0:
+            last_wall -= sim
         while not stop.is_set():
             time.sleep(0.5)
             if engine is None:
                 continue
+
+            # A suspend freezes CLOCK_MONOTONIC but not CLOCK_REALTIME, so the
+            # two clocks drift apart by exactly the time the machine slept. It
+            # is the resume signal we get for free -- no D-Bus client, no new
+            # dependency, and Windows' QPC behaves the same way.
+            #
+            # Audio does not survive it: the device is torn down and rebuilt,
+            # and scsynth keeps running with no output. The process is alive,
+            # so the exit-code watchdog below never fires; without this the
+            # app looks fine and simply goes silent after a lid close.
+            wall, mono = time.time(), time.monotonic()
+            drift = resume_drift(last_wall, last_mono, wall, mono)
+            last_wall, last_mono = wall, mono
+            if drift > 5.0 and engine.poll() is None:
+                # 5 s: a real sleep, not an NTP step (those are slewed). Give
+                # PipeWire a moment to rebuild its graph before scsynth asks
+                # for the device again.
+                print(f"--- resume detected ({drift:.0f}s asleep): restarting the engine")
+                engine.restart(delay=4.0, count=False)
+                last_wall, last_mono = time.time(), time.monotonic()
+                continue
+
             code = engine.poll()
             if code is None:
                 continue
