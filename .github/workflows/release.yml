@@ -7,6 +7,10 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish, e.g. v0.1.0"
+        required: true
 
 permissions:
   contents: write
@@ -46,8 +50,15 @@ jobs:
       - name: publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # through env, never interpolated into the shell: a tag or an input is
+          # an attacker-controlled string, and `run:` would execute it.
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="$RELEASE_TAG"
+          case "$tag" in
+            v[0-9]*) ;;
+            *) echo "refusing to publish '$tag': not a v* tag" >&2; exit 1 ;;
+          esac
           # notes come from CHANGELOG.md when the version has a section there,
           # otherwise GitHub's generated notes
           notes=()
