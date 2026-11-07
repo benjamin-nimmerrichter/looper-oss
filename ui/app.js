@@ -174,6 +174,13 @@ function handle(m) {
     case "exported":
       toast(`exported ${m.path.split("/").pop()}`);
       break;
+    case "backup":
+      toast(m.ok ? `backup → ${String(m.path).split("/").pop()}`
+        : `backup failed: ${m.msg}`);
+      break;
+    case "restored":
+      toast(m.ok ? `restored ${m.name}` : `restore failed: ${m.msg}`);
+      break;
     case "error":
       toast(m.msg);
       break;
@@ -1058,7 +1065,7 @@ function renderSettings() {
   if (settingsTab === "session") {
     const c = card(body, "phrase memory");
     const slotStepper = Stepper({
-      min: 1, max: 8, step: 1, value: Number(CFG.session?.slot ?? 1),
+      min: 1, max: 99, step: 1, value: Number(CFG.session?.slot ?? 1),
       onInput: (v) => {
         CFG.session = { ...(CFG.session || {}), slot: v };
         cfgSet("session.slot", v);
@@ -1069,6 +1076,10 @@ function renderSettings() {
       rowButton("save", "save slot", () => svc("save", [Number(CFG.session?.slot ?? 1)])),
       rowButton("load", "load slot", () => svc("load", [Number(CFG.session?.slot ?? 1)])),
       rowButton("export", "bounce 30 s", () => svc("export", [30])),
+      rowButton("backup", "zip sessions", () => send({ op: "backup" }),
+        "one file carries every slot"),
+      rowButton("restore", "restore newest", () => send({ op: "restore" }),
+        "overwrites sessions/ from the newest zip"),
       rowButton("bounce", "sum into track 1", () => {
         act("bounce", 0);
         toast("bouncing every track into track 1…");

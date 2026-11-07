@@ -8,12 +8,14 @@ Also owns ui/config.json: settings changed in the UI are written back here and
 the generated engine config is refreshed, so a restart picks them up.
 """
 import asyncio
+import datetime
 import json
 import os
 import pathlib
 import shutil
 import subprocess
 import sys
+import zipfile
 from typing import Any, cast
 
 try:
@@ -455,12 +457,72 @@ def handle_command(raw: str) -> None:
         engine.send_message("/ld/svc", args)
     elif op == "cfg":
         apply_config(str(cmd["path"]), cmd.get("v"))
+    elif op == "backup":
+        try:
+            path = session_backup()
+            push({"t": "backup", "ok": 1, "path": str(path)})
+            log(f"backup -> {path.name} ({path.stat().st_size // 1024} kB)")
+        except OSError as exc:
+            push({"t": "backup", "ok": 0, "msg": str(exc)})
+    elif op == "restore":
+        try:
+            name = session_restore(str(cmd.get("name", "")))
+            push({"t": "restored", "ok": 1, "name": name})
+            log(f"restored {name}")
+        except (OSError, ValueError) as exc:
+            push({"t": "restored", "ok": 0, "msg": str(exc)})
+    elif op == "backups":
+        push({"t": "backups", "csv": ";".join(b.name for b in session_backups())})
     elif op == "devices":
         asyncio.ensure_future(send_devices())
     elif op == "quit":
         schedule_quit(1.0)
     elif op == "restart":
         engine.send_message("/ld/act", ["reboot", 0])
+
+
+def session_backups() -> list[pathlib.Path]:
+    """Newest first. One zip holds sessions/, session.json and the VST state."""
+    folder = ROOT / "sessions" / "backups"
+    if not folder.is_dir():
+        return []
+    return sorted(folder.glob("looper-*.zip"), key=lambda p: p.name, reverse=True)
+
+
+def session_backup() -> pathlib.Path:
+    """Zip sessions/ so one file carries everything to another machine."""
+    root = ROOT / "sessions"
+    out_dir = root / "backups"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out = out_dir / f"looper-{stamp}.zip"
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(root.rglob("*")):
+            if path.is_file() and out_dir not in path.parents:
+                zf.write(path, path.relative_to(root))
+    return out
+
+
+def session_restore(name: str = "") -> str:
+    """Extract the named backup (or the newest) back over sessions/."""
+    backups = session_backups()
+    if not backups:
+        raise OSError("no backups yet")
+    chosen = backups[0]
+    if name:
+        match = [b for b in backups if b.name == name]
+        if not match:
+            raise OSError(f"no such backup: {name}")
+        chosen = match[0]
+    root = (ROOT / "sessions").resolve()
+    with zipfile.ZipFile(chosen) as zf:
+        for member in zf.namelist():
+            target = (root / member).resolve()
+            # a zip that writes outside sessions/ is not a backup, it is an attack
+            if root not in target.parents and target != root:
+                raise ValueError(f"refusing {member}: outside sessions/")
+        zf.extractall(root)
+    return chosen.name
 
 
 def apply_config(dotted: str, value: Any) -> None:

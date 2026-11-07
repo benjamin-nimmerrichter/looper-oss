@@ -464,6 +464,17 @@ async def run_tests(c: Client) -> None:
           f"{len(wavs)} files")
     check("session.json written", (session_dir / "session.json").exists())
 
+    # ---- memories: 99 slots, and one zip that carries them all ----
+    await c.svc("save", [99])
+    st = await c.wait(lambda m: m.get("t") == "saved" and m["slot"] == 99, 20)
+    check("memory slot 99 saves", st is not None)
+    await c.ws.send(json.dumps({"op": "backup"}))
+    st = await c.wait(lambda m: m.get("t") == "backup", 25)
+    zips = sorted((ROOT / "sessions" / "backups").glob("looper-*.zip"))
+    check("backup writes one zip with the sessions",
+          bool(st and st.get("ok")) and bool(zips) and zips[-1].stat().st_size > 0,
+          zips[-1].name if zips else "no zip")
+
     await c.act("clear", 0)
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["layers"] == 0, 6)
     check("clear empties the track", st is not None)
