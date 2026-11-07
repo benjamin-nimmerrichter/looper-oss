@@ -157,6 +157,9 @@ def _browser_tab(url: str) -> None:
 def open_window(url: str, kiosk: bool = False, mode: str = "auto",
                 error: str | None = None) -> None:
     """Show the UI (or an error page) and block until the window is closed."""
+    # Say which path was taken: a silent fallback from "native" to a browser is
+    # exactly the kind of failure that looks like "I click it and nothing happens".
+    print(f"window: mode={mode} kiosk={kiosk} error={bool(error)}", flush=True)
     if mode == "none":
         if error:
             print(error, file=sys.stderr)
@@ -168,11 +171,17 @@ def open_window(url: str, kiosk: bool = False, mode: str = "auto",
         except KeyboardInterrupt:
             return
 
-    if mode in ("auto", "native") and _native(url, kiosk, error):
-        return
+    if mode in ("auto", "native"):
+        if _native(url, kiosk, error):
+            print("window: native (GTK/WebKit2) closed", flush=True)
+            return
+        print("window: native unavailable (no PyGObject/WebKit for this python)", flush=True)
     if error:  # no window toolkit at all: say it where someone can see it
         print(error, file=sys.stderr)
         return
-    if mode in ("auto", "app") and _app_window(url, kiosk):
-        return
+    if mode in ("auto", "app"):
+        if _app_window(url, kiosk):
+            print("window: chromium/edge --app closed", flush=True)
+            return
+        print("window: no chromium/edge for an app window", flush=True)
     _browser_tab(url)

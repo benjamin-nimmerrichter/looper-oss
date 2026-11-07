@@ -48,7 +48,7 @@ FEATURES.md    feature inventory: shipped / planned / backlog
 | --- | --- | --- |
 | **SuperCollider 3.13+** (`sclang`, `scsynth`; tested on 3.14.1) | the entire audio engine | your OS package manager |
 | **sc3-plugins** | the per-track filter (`BLowPass` / `BHiPass`) | your OS package manager |
-| **Python 3.9+** | the bridge, and the tests | your OS package manager |
+| **Python 3.9+** + PyGObject | the bridge, the tests, and the app window | your OS package manager (already there on any GTK desktop) |
 | an audio server | PipeWire on Linux, WASAPI on Windows | already on your desktop |
 | *optional* **VSTPlugin** | VST3 / VST2 insert slots | see [Install](#install) |
 | *optional* **chromium / firefox** | `--browser` and `--kiosk` app window | already installed |
@@ -94,8 +94,12 @@ allow executing, then double-click; if you have AppImageLauncher it will offer
 **Integrate and run**, which adds Looper OSS to your application menu (it then
 moves the file into `~/Applications`, so look there if it seems to disappear).
 
-The AppImage carries its own Python and its dependencies. It does **not** carry
-SuperCollider — that is a system install, like your audio driver:
+The AppImage carries its dependencies. It does **not** carry SuperCollider —
+that is a system install, like your audio driver. For the window itself it uses
+your desktop's `python3` and PyGObject (`python3-gi`), which every GTK desktop
+already has and which cannot be bundled meaningfully because it is built against
+the host's Python and GTK. A bundled interpreter is included as a fallback for
+machines without one.
 
 ```bash
 sudo pacman -S supercollider sc3-plugins pipewire-jack     # Arch / CachyOS

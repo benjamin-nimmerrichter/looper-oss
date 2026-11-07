@@ -1,13 +1,51 @@
 #!/bin/sh
-# AppRun -- what the AppImage executes. The payload sits next to this script in
-# looper-oss/, the bundled interpreter and site-packages under usr/.
+# AppRun -- what the AppImage executes.
+#
+#   looper-oss/            the application payload
+#   usr/lib/looper-oss/lib the two pure-Python dependencies (pinned, bundled)
+#   usr/bin/python3        a bundled CPython, used only if the host has none
+#
+# Why prefer the host interpreter: the window is PyGObject + WebKit2, which
+# belongs to the desktop and is built against *its* Python. A bundled 3.14
+# cannot import a 3.12-built gi, and bundling GTK ourselves is both huge and
+# fragile. Every Linux desktop has python3; our dependencies are pure Python, so
+# any 3.9+ can run them. The bundled interpreter is the fallback for the rare
+# machine without one -- it can still run headless and open a browser.
 set -eu
 HERE="${APPDIR:-$(cd "$(dirname "$0")" && pwd)}"
 
-# -s: ignore the user's site-packages (a broken ~/.local must not break the app).
-# No -E: we *want* PYTHONPATH honoured, that is how the payload is found.
-export PYTHONPATH="$HERE/looper-oss:$HERE/usr/lib/looper-oss/lib${PYTHONPATH:+:$PYTHONPATH}"
+payload="$HERE/looper-oss"
+deps="$HERE/usr/lib/looper-oss/lib"
+PYTHONPATH="$payload:$deps${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH
 export LOOPER_OSS_PACKAGED=1
-export GDK_BACKEND="${GDK_BACKEND:-}"
 
-exec "$HERE/usr/bin/python3" -s -m app.main "$@"
+# the bundled interpreter needs the host's gi as well: add any site-packages
+# that actually contains PyGObject (harmless if the ABI does not match, the
+# import simply fails and the app falls back)
+for d in /usr/lib/python3/dist-packages /usr/lib/python3.*/site-packages \
+         /usr/local/lib/python3.*/site-packages; do
+  [ -d "$d/gi" ] && PYTHONPATH="$PYTHONPATH:$d"
+done
+export PYTHONPATH
+
+find_python() {
+  for c in "${LOOPER_OSS_PYTHON:-}" python3 python3.14 python3.13 python3.12 \
+           python3.11 python3.10 python3.9 /usr/bin/python3; do
+    [ -n "$c" ] || continue
+    command -v "$c" >/dev/null 2>&1 || continue
+    "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null \
+      && { command -v "$c"; return 0; }
+  done
+  return 1
+}
+
+PY="$(find_python || true)"
+if [ -z "$PY" ]; then
+  PY="$HERE/usr/bin/python3"
+  echo "AppRun: no host python3 found, using the bundled interpreter" >&2
+fi
+
+# -s: ignore the user's site-packages (a broken ~/.local must not break the app).
+# No -E: PYTHONPATH is how the payload and its dependencies are found.
+exec "$PY" -s -m app.main "$@"

@@ -43,6 +43,16 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 - The RC-505 tab reused the numeric readout class for whole sentences; it is now
   a two-column reference table.
 
+### Fixed — AppImage window
+
+- **The packaged app opened no window at all.** `AppRun` pointed `PYTHONPATH` at
+the bundled libraries only, so the bundled CPython could not import the host's
+PyGObject: `import gi` failed, `_native()` returned False, and the launcher fell
+through to a browser without saying so. The AppImage now prefers the host
+`python3` (which has gi) and keeps the bundled interpreter as a fallback, adding
+any host site-packages that actually contain gi. `open_window()` also logs the
+path it chose, so a silent fallback can never happen again.
+
 ### Removed
 
 - `run.sh` and `run.ps1`. There is no shell launcher to remember: the app is the
