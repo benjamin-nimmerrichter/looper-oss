@@ -1112,19 +1112,72 @@ if (~hasVST) {
 			};
 		});
 
+		// A note carries a gesture, so one pedal can press, hold and double-tap
+		// and mean three things. Learning captures whichever you performed, so
+		// choosing the gesture needs no extra UI.
+		~noteAt = IdentityDictionary.new;
+		~noteHold = IdentityDictionary.new;
+
+		~fireGesture = { |num, gesture, val|
+			(~midiMap ? []).do { |m|
+				if ((m[\type] == "note") && (m[\num] == num)
+					&& (((m[\gesture] ? "press") == gesture))) {
+					~fireMIDI.value(m[\target], val);
+				};
+			};
+		};
+
+		~learnGesture = { |num, gesture|
+			var taken = false;
+			if (~learnTarget.notNil && (~learnNum == num)) {
+				var tgt = ~learnTarget;
+				~learnTarget = nil; ~learnNum = nil;
+				~midiMap = (~midiMap ? []).add(
+					(type: "note", num: num, target: tgt, gesture: gesture));
+				~bridge.sendMsg('/ldmidi', "learned", num.asInteger, tgt, gesture);
+				~sendMIDIMap.value;
+				taken = true;
+			};
+			taken
+		};
+
 		MIDIdef.noteOn(\ldNote, { |val, num, chan, src|
 			if (~midiAccepts.value(src)) {
-				if (~learnTarget.notNil) {
-					var tgt = ~learnTarget;
-					~learnTarget = nil;
-					~midiMap = (~midiMap ? []).add((type: "note", num: num, target: tgt));
-					~bridge.sendMsg('/ldmidi', "learned", num.asInteger, tgt);
-					~sendMIDIMap.value;
+				var now = Main.elapsedTime;
+				var downAt = ~noteAt[num];
+				if (~learnTarget.notNil) { ~learnNum = num };
+				if (downAt.notNil && ((now - downAt) < 0.30)) {
+					// second tap within 300 ms: double
+					~noteAt[num] = nil;
+					~noteHold[num] !? { |r| r.stop };
+					~noteHold[num] = nil;
+					if (~learnGesture.value(num, "double").not) {
+						~fireGesture.value(num, "double", 1);
+					};
 				} {
-					(~midiMap ? []).do { |m|
-						if ((m[\type] == "note") && (m[\num] == num)) {
-							~fireMIDI.value(m[\target], 1);
+					~noteAt[num] = now;
+					~noteHold[num] = fork {
+						0.30.wait;
+						if (~noteAt[num] == now) {
+							~noteAt[num] = nil;
+							if (~learnGesture.value(num, "hold").not) {
+								~fireGesture.value(num, "hold", 1);
+							};
 						};
+					};
+				};
+			};
+		});
+
+		MIDIdef.noteOff(\ldNoteOff, { |val, num, chan, src|
+			if (~midiAccepts.value(src)) {
+				var downAt = ~noteAt[num];
+				~noteAt[num] = nil;
+				~noteHold[num] !? { |r| r.stop };
+				~noteHold[num] = nil;
+				if (downAt.notNil && ((Main.elapsedTime - downAt) < 0.30)) {
+					if (~learnGesture.value(num, "press").not) {
+						~fireGesture.value(num, "press", 1);
 					};
 				};
 			};
@@ -1132,9 +1185,24 @@ if (~hasVST) {
 	};
 
 	~sendMIDIMap = {
-		var csv = (~midiMap ? []).collect { |m| "%|%|%".format(m[\type], m[\num], m[\target]) };
+		var csv = (~midiMap ? []).collect { |m|
+			"%|%|%|%".format(m[\type], m[\num], m[\target], m[\gesture] ? "-")
+		};
 		~bridge.sendMsg('/ldmidimap', csv.join(";").asString);
 	};
+
+	// Diagnostics: install a mapping and fire a gesture without hardware. The
+	// suite drives these, and they are the only way to test the gesture timing.
+	~midiAdd = { |type, num, target, gesture|
+		var g = (gesture ? "-").asString;
+		~midiMap = (~midiMap ? []).add((
+			type: type.asString, num: num.asInteger, target: target.asString,
+			gesture: if (g == "-", { nil }, { g })));
+		~sendMIDIMap.value;
+	};
+
+	~midiSim = { |num, gesture| ~fireGesture.value(num.asInteger, gesture.asString, 1) };
+
 );
 
 // -------------------------------------------------------------- osc wiring ---
@@ -1176,6 +1244,8 @@ if (~hasVST) {
 			"tap",       { ~tapTempo.value },
 			"stats",     { ~sendStats.value },
 			"probe",     { ~probeTrack.value((msg[2] ? 0).asInteger) },
+			"midiAdd",   { ~midiAdd.value(msg[2], msg[3], msg[4], msg[5]) },
+			"midiSim",   { ~midiSim.value(msg[2], msg[3]) },
 			"clearAutosave", { ~clearAutosave.value }
 		);
 		};

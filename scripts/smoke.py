@@ -546,6 +546,20 @@ async def run_tests(c: Client) -> None:
     st = await c.wait(lambda m: m.get("t") == "s", 2)
     check("midi learn command accepted", "s" in c.seen)
 
+    # A note carries a gesture: the same pedal presses, holds or double-taps and
+    # means different things. midiAdd/midiSim exercise that without hardware.
+    await c.svc("midiAdd", ["note", 60, "t2.press", "hold"])
+    await asyncio.sleep(0.5)
+    before_state = c.track(2)["state"]
+    await c.svc("midiSim", [60, "press"])       # wrong gesture: must do nothing
+    await asyncio.sleep(1.0)
+    after_press = c.track(2)["state"]
+    await c.svc("midiSim", [60, "hold"])        # right gesture: starts the take
+    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][2]["state"] == 1, 8)
+    check("a midi hold fires only its hold mapping",
+          st is not None and after_press == before_state,
+          f"before={before_state} after-press={after_press}")
+
 
 def main() -> int:
     global verbose

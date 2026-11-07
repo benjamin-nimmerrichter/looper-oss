@@ -127,6 +127,8 @@ Per track paths: `t<N>.<field>` for every per-track state field above.
 | `export` | seconds |
 | `tap` | — |
 | `probe` | track (diagnostic) |
+| `midiAdd` | type, num, target, gesture (test hook) |
+| `midiSim` | num, gesture (test hook) |
 
 Browser-only ops (the bridge does the work, no engine traffic):
 

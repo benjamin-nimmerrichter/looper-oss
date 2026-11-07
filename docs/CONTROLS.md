@@ -187,7 +187,10 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | DEVICE | select | all sources, or one MIDI source | Restricts the mapping to one input. | `svc midiDevice` + `cfg midi.device` | `~midiDevice` |
 | **default layout** | button | — | Loads CC 20–27 press · 30–37 undo · 40–47 stop · 50–57 clear · 60 tap · 61 stop-all · 62 metronome. | `svc midiDefault` | `~midiDefault` |
 | one row per target (`t0.press` … `g.metro`) → **learn** | button | — | Arms learn; the next CC or note maps to that target. Shown as the learned CC afterwards. | `svc midiLearn` | `~learnTarget` |
+| gesture (notes only) | learned, not chosen | press · hold · double | A **note** carries the gesture you performed while learning it: release inside 300 ms → `press`; still down after 300 ms → `hold`; two taps inside 300 ms → `double`. The same pedal can therefore mean three things on three targets, and no extra UI is needed to pick one. CC mappings are continuous, which is what an expression pedal wants. | `svc midiLearn` | `~noteAt`, `~noteHold`, `~fireGesture` |
 | **clear all** | button | — | Empties the map. | `svc midiClear` | `~midiMap = []` |
+
+Diagnostics, used by the suite and handy when a pedal misbehaves: `svc midiAdd type num target gesture` installs a mapping without hardware, `svc midiSim num gesture` fires one. They are the only way to test the gesture timing.
 
 The learned map persists in `ui/config.json` under `midi.map`.
 

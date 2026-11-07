@@ -37,7 +37,9 @@
   },
   "midi": {
     "device": null,
-    "map": []
+    "map": [
+      "note|60|t2.press|hold"
+    ]
   },
   "osc": {
     "enginePort": 9000,
