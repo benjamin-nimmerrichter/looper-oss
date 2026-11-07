@@ -58,6 +58,18 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
   again commits it to playback; the old `state == 2` assertion was checking the
   bug. 36/36.
 
+### Fixed — an update no longer resets the app
+
+- **Installing a new build wiped every setting.** `stage()` copies the payload
+  into `~/.local/share/looper-oss/app/<version>/` and preserved `sessions/` but
+  not `ui/config.json` — so bpm, track count, audio device, MIDI map and every
+  loop setting went back to the shipped defaults on each update. The config is
+  now carried across, together with `sessions/`. Because keeping a *wrong*
+  shipped default forever is the other half of that promise, old configs are
+  migrated by version: a config older than 3 gets `loop.autoDub = 1` (0.1.0
+  shipped it off, which stopped a take at the bar) and is bumped to 3. Your own
+  values are untouched. Covered by `update keeps settings and music`.
+
 ### Fixed — audio after sleep (issue #1)
 
 - **Coming back from suspend left the app silent.** `scsynth` survives a sleep

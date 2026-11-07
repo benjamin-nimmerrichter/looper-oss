@@ -100,9 +100,42 @@ def resolve_home(bundled: bool) -> pathlib.Path:
     return target
 
 
+CONFIG_VERSION = 3   # bump when a shipped default changes meaning
+
+
+def migrate_config(path: pathlib.Path) -> None:
+    """Carry an older user config forward without touching their tuning.
+
+    `stage()` now keeps `ui/config.json` across an update, which is the whole
+    point -- a musician's bpm, track count, audio device and MIDI map must
+    survive installing a new build. The other half of that promise: when a
+    *default* was wrong and shipped, an old config keeps the wrong value
+    forever unless it is deliberately migrated. Configs older than 3 are the
+    ones that shipped `autoDub: 0`, which stopped a take at the bar instead of
+    carrying it into an overdub.
+    """
+    try:
+        cfg = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return
+    try:
+        version = int(cfg.get("version", 0) or 0)
+    except (TypeError, ValueError):
+        version = 0
+    if version >= CONFIG_VERSION:
+        return
+    loop = cfg.get("loop")
+    if isinstance(loop, dict):
+        loop["autoDub"] = 1          # 0.1.0 shipped this off; the RC-505 carries on
+    cfg["version"] = CONFIG_VERSION
+    with contextlib.suppress(OSError):
+        path.write_text(json.dumps(cfg, indent=2) + "\n")
+
+
 def stage(src: pathlib.Path, dst: pathlib.Path) -> None:
     """Copy the payload out of the read-only mount/onefile image, once."""
     keep = dst / "sessions"
+    user_files = [dst / "ui" / "config.json", dst / "ui" / "config.json.bak"]
     tmp = dst.with_name(dst.name + ".staging")
     if tmp.exists():
         try:
@@ -120,6 +153,13 @@ def stage(src: pathlib.Path, dst: pathlib.Path) -> None:
     if keep.is_dir():  # never lose the user's music
         with contextlib.suppress(OSError):
             shutil.copytree(keep, tmp / "sessions", dirs_exist_ok=True)
+    # ... nor their settings. A re-stage is an update, not a reset: bpm, track
+    # count, audio device and MIDI map all live in this file.
+    for path in user_files:
+        if path.is_file():
+            with contextlib.suppress(OSError):
+                shutil.copy2(path, tmp / "ui" / path.name)
+    migrate_config(tmp / "ui" / "config.json")
     if dst.exists():
         try:
             shutil.rmtree(dst)

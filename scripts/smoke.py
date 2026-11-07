@@ -21,6 +21,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -235,6 +236,29 @@ async def run_tests(c: Client) -> None:
         check("sleep/resume signal detected", ok)
     except Exception as exc:                       # noqa: BLE001 - report, don't crash
         check("sleep/resume signal detected", False, repr(exc))
+
+    # Re-staging is an update, not a reset. A musician's bpm/track count/device
+    # live in ui/config.json, and their recordings in sessions/ -- a new build
+    # must keep both, while still migrating the old `autoDub: 0` default.
+    try:
+        from app.main import stage  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as td:
+            dst = pathlib.Path(td) / "0.1.0"
+            (dst / "ui").mkdir(parents=True)
+            (dst / "sessions").mkdir(parents=True)
+            cfg_path = dst / "ui" / "config.json"
+            cfg_path.write_text(json.dumps(
+                {"version": 2, "bpm": 133, "loop": {"autoDub": 0}}))
+            (dst / "sessions" / "keep.wav").write_bytes(b"x")
+            stage(ROOT, dst)
+            cfg = json.loads(cfg_path.read_text())
+            kept = ((dst / "sessions" / "keep.wav").is_file()
+                    and cfg["bpm"] == 133
+                    and cfg["loop"]["autoDub"] == 1
+                    and cfg["version"] == 3)
+        check("update keeps settings and music", kept)
+    except Exception as exc:                       # noqa: BLE001 - report, don't crash
+        check("update keeps settings and music", False, repr(exc))
 
     # SILENCE FIRST: every check below reads the state, not the speakers. Muting
     # the master keeps the run inaudible while internal buses still carry signal.
