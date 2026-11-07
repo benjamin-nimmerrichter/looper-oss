@@ -88,6 +88,13 @@ def _native(url: str, kiosk: bool, error: str | None) -> bool:
         win.connect("destroy", Gtk.main_quit)
         view.connect("close", lambda *_: Gtk.main_quit())
         win.show_all()
+        # show_all() only maps the window: the compositor still decides where it
+        # goes and whether it may take focus, so starting the app while a
+        # maximised browser is in front used to put Looper OSS *behind* it --
+        # running, ui connected, engine ready, and invisible. present() asks to
+        # raise and activate, which is what a freshly launched app owes the
+        # person who just clicked it.
+        win.present()
     except Exception as exc:  # noqa: BLE001 - no window toolkit, try the next mode
         print(f"native window failed: {exc}", file=sys.stderr)
         return False
