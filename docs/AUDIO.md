@@ -35,6 +35,27 @@ pos  = tph × (contentLen - 1)          -- read position, per-sample
 Because the phase comes from one source, tracks cannot drift, and a track with
 `loopRatio = 2` stays locked to the others.
 
+## Speed (varispeed)
+
+`tph` — the track's read position — is normally `(masterPhase × loopRatio) % 1`,
+so every track is locked to one grid and cannot drift. A speed other than 1
+cannot come from that phase: `phase × 0.5 % 1` would replay the first half
+forever rather than play the loop slowly. So the track free-runs its own
+`Phasor` at `speed / contentLen` samples per sample, reset on the rising edge of
+`playing`:
+
+```text
+tph = speed == 1 ? (masterPhase × loopRatio) % 1
+                 : Phasor(playing rising edge, speed / contentLen, 0, 1)
+```
+
+One pass then takes `contentLen / speed` samples, so the material slows down and
+drops in pitch (0.5× is an octave down) — varispeed, exactly the hardware's
+SPEED knob. Anything that keeps the pitch is time-stretch and stays out of
+scope. The seam window is computed from `pos`, so it still zeroes at both ends of
+the buffer and a wrap cannot click. `loopRatio` stays what it was: a grid-locked
+subdivision (½ and ¼ loop) that does not free-run.
+
 ## Input routing
 
 `audio.in` decides how many input channels the server opens

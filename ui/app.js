@@ -36,6 +36,13 @@ function inputTag(v) {
   return `IN ${Number(v) === 1 ? "L" : "R"}`;
 }
 const BARS = [1, 2, 4, 8];
+/** Per-track playback speed presets; the knob below does everything between. */
+const SPEEDS = [
+  { label: "½×", value: 0.5 },
+  { label: "1×", value: 1 },
+  { label: "2×", value: 2 },
+  { label: "4×", value: 4 },
+];
 const RATIOS = [
   { label: "1", value: 1 },
   { label: "1/2", value: 2 },
@@ -568,6 +575,12 @@ function openFx(i) {
       options: RATIOS, value: t ? t.loopRatio : 1,
       onPick: (v) => set(`t${i}.loopRatio`, v),
     }));
+    // Speed is varispeed: 1 is grid-locked, anything else free-runs the track
+    // at its own rate, so it re-pitches like the hardware's SPEED knob.
+    c.append(Segmented({
+      options: SPEEDS, value: t ? t.speed : 1,
+      onPick: (v) => set(`t${i}.speed`, v),
+    }));
     const row = el("div", "row2");
     const rev = Button({ label: "reverse", toggle: true, cls: "tiny" });
     if (t && t.reverse) rev.classList.add("on");
@@ -581,6 +594,11 @@ function openFx(i) {
     row.append(rev, fadeReset);
     c.append(row);
     const k = knobs(c);
+    k.append(Knob({
+      label: "speed", min: 0.25, max: 4, value: t ? t.speed : 1, curve: 2,
+      format: (v) => `${Number(v).toFixed(2)}×`,
+      onInput: (v) => set(`t${i}.speed`, v),
+    }));
     k.append(Knob({
       label: "fade in", min: 0, max: 5, value: t ? t.fadeIn : 0, curve: 2,
       format: (v) => `${v.toFixed(2)} s`, onInput: (v) => set(`t${i}.fadeIn`, v),

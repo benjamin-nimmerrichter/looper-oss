@@ -173,7 +173,7 @@ if (~hasVST) {
 				g0 = 0, g1 = 0, g2 = 0, g3 = 0,
 				testBus = 0, scratch = 0, recOn = 0, playing = 0,
 				w0 = 0, w1 = 0, w2 = 0, w3 = 0,
-				loopLen = 48000, contentLen = 48000, loopRatio = 1,
+				loopLen = 48000, contentLen = 48000, loopRatio = 1, speed = 1,
 				xfade = 64, recordOffset = 0, reverse = 0,
 				vol = 0.8, pan = 0, muted = 0, monitor = 0.8,
 				input = 0, gain = 1.0, recGain = 1.0,
@@ -183,11 +183,20 @@ if (~hasVST) {
 				revSend = 0.0, beatLen = 0.5, loopSec = 8,
 				fadeIn = 0, fadeOut = 0, vB0 = 0, vB1 = 0, vB2 = 0|
 
-			var tph, pos, wpos, raw, gateEnv, gate, sig, sigR, layers, src,
+			var tph, tphFree, pos, wpos, raw, gateEnv, gate, sig, sigR, layers, src,
 			    dl, wet, dst, fades, st, seam, xfd, rpos, playGain;
 
-			// track phase: ratio 2 => this track loops twice per master loop
-			tph  = (In.ar(phaseBus, 1) * loopRatio) % 1;
+			// track phase. At speed 1 the position comes straight from the master
+			// phase, so every track stays locked to the same grid and cannot drift.
+			// Anything else is varispeed: a *slower* loop cannot be derived from a
+			// phase that only goes 0..1 once per master loop (`phase * 0.5 % 1`
+			// plays the first half over and over), so the track free-runs its own
+			// phasor, reset whenever it starts playing. Speed changes pitch, like
+			// the hardware's SPEED knob -- time-stretch stays a non-goal.
+			tphFree = Phasor.ar(playing * Changed.kr(playing),
+				playing * speed / contentLen.max(2), 0, 1, 0);
+			tph  = Select.ar(K2A.ar((speed - 1).abs > 0.001),
+				[(In.ar(phaseBus, 1) * loopRatio) % 1, tphFree]);
 			// pos spans the WHOLE loop, [0, contentLen). Using (contentLen - 1) here
 			// left the final frame unwritten -- it kept the buffer's zero, so every
 			// take ended in a full-amplitude step at the loop point.
@@ -386,7 +395,7 @@ if (~hasVST) {
 			hp: 40, lp: 16000,
 			delayOn: 0, delayBeats: 0.75, delayDecay: 0.4, delayMix: 0.25,
 			revSend: 0.0, reverse: 0, fadeIn: 0, fadeOut: 0,
-			loopRatio: 1, contentLen: 0,
+			loopRatio: 1, speed: 1, contentLen: 0,
 			meterL: 0, meterR: 0, layerPeak: 0, meterPeak: 0, meterSum: 0, cpu: 0,
 			vst: [nil, nil, nil], vstNames: ["", "", ""], vstBypass: [0, 0, 0],
 			vstGui: [nil, nil, nil],
@@ -1204,7 +1213,7 @@ if (~hasVST) {
 				t[\gateOn], t[\gateThr], t[\hp], t[\lp],
 				t[\delayOn], t[\delayBeats], t[\delayDecay], t[\delayMix],
 				t[\revSend], t[\gain], t[\recGain], t[\reverse],
-				t[\fadeIn], t[\fadeOut], t[\loopRatio], t[\meterSum],
+				t[\fadeIn], t[\fadeOut], t[\loopRatio], t[\speed], t[\meterSum],
 				t[\layerCount] + t[\undone]
 			];
 		};

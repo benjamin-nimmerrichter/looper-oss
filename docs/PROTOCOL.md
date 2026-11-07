@@ -75,18 +75,22 @@ inL inR masterL masterR phase
 reset on `/ldwrap`, so it covers the whole loop; the UI dead-reckons between
 20 Hz frames for a smooth playhead.
 
-Per track (24), repeated for every track:
+Per track (25), repeated for every track:
 
 ```text
 state vol pan muted meter input layers
 gateOn gateThr hp lp
 delayOn delayBeats delayDecay delayMix
-revSend gain recGain reverse fadeIn fadeOut loopRatio layerPeak undoDepth
+revSend gain recGain reverse fadeIn fadeOut loopRatio speed layerPeak undoDepth
 ```
 
 `state`: `0` empty · `1` recording · `2` playing · `3` stopped.
-`input`: `0` stereo · `1` ch1 · `2` ch2.
-`loopRatio`: `1` full loop · `2` half · `4` quarter.
+`input`: `0` stereo sum · `1..n` one channel each · `n+1` the internal test bus.
+`loopRatio`: `1` full loop · `2` half · `4` quarter — a grid-locked subdivision.
+`speed`: `0.25..4`, default `1`. Varispeed: at `1` the read position comes from
+the master phase (grid-locked, tracks cannot drift); anything else free-runs the
+track's own phasor and re-pitches, like the hardware's SPEED knob. It is **not**
+time-stretch — pitch moves with speed.
 
 The bridge converts this to JSON with the same names; `ui/app.js` reads those.
 

@@ -71,6 +71,8 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | control | type | range / default | what it does | wire | engine |
 | --- | --- | --- | --- | --- | --- |
 | length | segmented | 1 · ½ · ¼, default 1 | That track loops 1×, 2× or 4× per master loop (`loopRatio`). Stays locked to the same grid. | `set t{i}.loopRatio` | `loopRatio` |
+| length | segmented | 1 · ½ · ¼, default 1 | That track loops 1×, 2× or 4× per master loop (`loopRatio`). Stays locked to the same grid. | `set t{i}.loopRatio` | `loopRatio` |
+| **speed** | segmented + knob | ½ · 1 · 2 · 4 and continuous 0.25–4, default 1 | Varispeed. At `1` the track reads from the master phase and stays grid-locked; anything else free-runs its own phasor, reset when the track starts, so the material plays slower or faster and **re-pitches** (the hardware's SPEED knob). Not time-stretch: pitch moves with speed, by design. | `set t{i}.speed` | `speed`, `Phasor` in `\ld_track` |
 | REVERSE | toggle | off | Reads the layer backwards. | `set t{i}.reverse` | `reverse` |
 | FADES 0 | button | — | Resets both fades to zero. | `set t{i}.fadeIn/out` | `fadeIn`, `fadeOut` |
 | FADE IN | knob | 0–5 s, default 0 | Ramp up at the start of the loop. | `set t{i}.fadeIn` | `fadeIn` |

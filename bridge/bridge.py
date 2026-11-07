@@ -55,7 +55,7 @@ TRACK_FIELDS = [
     "gateOn", "gateThr", "hp", "lp",
     "delayOn", "delayBeats", "delayDecay", "delayMix",
     "revSend", "gain", "recGain", "reverse", "fadeIn", "fadeOut",
-    "loopRatio", "layerPeak", "undoDepth",
+    "loopRatio", "speed", "layerPeak", "undoDepth",
 ]
 
 # config.json keys that the running engine can adopt without a restart

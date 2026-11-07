@@ -207,8 +207,8 @@ async def run_tests(c: Client) -> None:
         return
     globals_ = len(st) - 2
     fields = len(st["tracks"][0])
-    check("state shape (23 globals / 24 track fields)",
-          globals_ == 23 and fields == 24 and len(st["tracks"]) == N,
+    check("state shape (23 globals / 25 track fields)",
+          globals_ == 23 and fields == 25 and len(st["tracks"]) == N,
           f"{globals_}/{fields}/{len(st['tracks'])}")
 
     # meters + playhead live inside the state frame (no separate OSC paths)
@@ -281,6 +281,18 @@ async def run_tests(c: Client) -> None:
     check("record source is per track (stereo / L / R)",
           st is not None and st["tracks"][0]["input"] == 2)
     await c.set("t0.input", 0)
+
+    # Per-track speed is varispeed: continuous, and 1 means grid-locked.
+    await c.set("t0.speed", 0.5)
+    st = await c.wait(lambda m: m.get("t") == "s"
+                      and abs(m["tracks"][0]["speed"] - 0.5) < 0.01, 6)
+    check("track speed is per track (0.5x)", st is not None,
+          f"speed={st['tracks'][0]['speed'] if st else '?'}")
+    await c.set("t0.speed", 2)
+    st = await c.wait(lambda m: m.get("t") == "s"
+                      and abs(m["tracks"][0]["speed"] - 2) < 0.01, 6)
+    check("track speed reaches 2x", st is not None)
+    await c.set("t0.speed", 1)
 
     # ---- record -> auto-close -> overdub -> undo -> redo -> stop -> resume ----
     await c.act("press", 0)
