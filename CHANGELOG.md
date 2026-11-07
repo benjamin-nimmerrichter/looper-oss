@@ -43,6 +43,18 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 - The RC-505 tab reused the numeric readout class for whole sentences; it is now
   a two-column reference table.
 
+### Fixed — first take now carries into overdub
+
+- **A take no longer stops recording at the bar.** The RC-505 behaviour was
+  already in the state machine (`/ldwrap`: commit the first layer, then
+  `~startRec` the next one), but the shipped `ui/config.json` said
+  `"autoDub": 0`, which sent the track to playback at the loop boundary instead
+  of continuing to record. The engine's own fallback was `(? 1)` -- on when
+  unspecified -- so the config was contradicting both the engine and
+  `docs/CONTROLS.md`, which documents the default as on. Default is now 1: tap to
+  start a take, it closes at the bar and keeps recording as an overdub until you
+  tap again.
+
 ### Fixed — AppImage window
 
 - **The packaged app opened no window at all.** `AppRun` pointed `PYTHONPATH` at

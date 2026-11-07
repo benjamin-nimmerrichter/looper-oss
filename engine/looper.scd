@@ -24,6 +24,7 @@
 	audio: (blockSize: 64, hardwareBufferSize: 256, in: 2, out: 2,
 		device: nil, driver: "auto", sampleRate: nil),
 	loop: (maxSeconds: 16, crossfadeMs: 1.3, recordOffset: 0, autoClose: 1,
+		autoDub: 1,
 		dubDecay: 0.0, revMix: 0.6, room: 0.8, quantizeStart: 0),
 	clock: (clickVol: 0.3, countInBars: 1, accentHz: 1580, clickHz: 1050),
 	midi: (device: nil, map: []),
