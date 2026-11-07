@@ -8,7 +8,7 @@ looper behave (seam fade and `contentLen`).
 
 ```text
                        ┌──────────── input FX (before the write head) ───────────┐
-SoundIn 0/1 ──▶ select ──▶ gain ──▶ gate ──▶ highpass ──▶ lowpass ──▶ tanh ──┬──▶
+SoundIn 0..n ─▶ select ──▶ gain ──▶ gate ──▶ highpass ──▶ lowpass ──▶ tanh ──┬──▶
                        └───────────────────────────────────────────────────────┘
                                                                               │
    ┌──────────────── layer stack (BufRd × maxLayers) ────────────────┐        │
@@ -34,6 +34,28 @@ pos  = tph × (contentLen - 1)          -- read position, per-sample
 
 Because the phase comes from one source, tracks cannot drift, and a track with
 `loopRatio = 2` stays locked to the others.
+
+## Input routing
+
+`audio.in` decides how many input channels the server opens
+(`s.options.numInputBusChannels`). From that number the track SynthDef builds its
+record-source list once, when it is compiled:
+
+| `input` | source |
+| --- | --- |
+| `0` | `(ch 0 + ch 1) × 0.7071` — the stereo sum, as one channel |
+| `1..n` | channel `1..n` alone, recorded to both sides |
+| `n + 1` | the internal test bus — used by the tests, never offered in the UI |
+
+A 2-input interface therefore offers `stereo`, `L`, `R`; an 8-input one offers
+`stereo`, `ch 1 … ch 8`. Nothing downstream changes: the chosen signal still
+goes through gain → gate → filter → tanh before the write head. `stereo` is the
+only mode that attenuates (×0.7071), because two channels summed can reach 2.0
+and would clip before the tanh ever sees it.
+
+Mono entries are recorded to **both** sides, so a mono mic or guitar is centred.
+Recording two different instruments to two different tracks from one interface is
+just two tracks with `input` 1 and 2 — the same signal path, no extra routing.
 
 ## contentLen vs loopLen — why a tempo change is free
 

@@ -17,11 +17,12 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | --- | --- | --- | --- | --- | --- |
 | **STOP ALL** | button | — | Stops every track (commits anything recording, `playing` 0, layers kept) **and parks the clock**: the playhead and the metronome stop. Any take resumes the grid. | `act stopAll` | `~stopTrack` × N + `gridOn = 0` |
 | **CLEAR ALL** | button (tap twice) | — | Empties **every** track: all layers, the undo stacks and playback, and it drops the autosave so the wipe cannot come back on the next start. Tap once to arm (`sure?`), tap again within 2.5 s to confirm. | `act clearAll` | `~clearTrack` × N + `gridOn = 0` |
-| **SETUP** | button | — | Opens the setup drawer (six tabs, see §5). | — | — |
+| **SETUP** | button | — | Opens the setup drawer (seven tabs, see §5). | — | — |
 | **tempo value** | button (numeric keypad) | 40–240, default 120 | **Tap the number to type a tempo**: keypad with digits, `clear` and `set`. Sets and persists the BPM. | `set g.bpm` + `cfg bpm` | `\ld_transport` rate, track `beatLen`/`loopSec` |
 | tempo fader | fader | 40–240, default 120 | Sets the tempo. Existing layers **re-pitch** (varispeed), they are not re-recorded. | `set g.bpm` | transport `rate`, every track `beatLen`/`loopSec` |
 | **TAP** | button | — | Tap tempo: tap 2–8 times at the tempo you feel; averages taps inside a 2.2 s window and sets the BPM. It measures your actual spacing, so tapping 3× at 0.40 s gives 150. | `svc tap` | `~tapTempo` → `~setGlobal("bpm")` |
 | **BARS / LOOP** | segmented | 1 · 2 · 4 · 8, default 4 | Loop length in bars. Defines the grid every track records against. Changing it re-times existing material (varispeed). | `set g.bars` | transport `rate`/`bars`, track `loopSec` |
+| **POSITION** | read-out | `bar·beat` | Where you are in the loop: `3·2` is the third bar, second beat. It eases along the same position as the blue playhead, so the number and the line cannot disagree, and it freezes with the clock when everything is stopped. Pure arithmetic in the browser from `phase`, `bars` and `beatsPerBar` — no extra message. | — | state `phase`, `bars`, `beatsPerBar` |
 | **METRONOME** | toggle | off by default | The click. Independent of everything else; count-in clicks even when this is off. | `set g.metro` | transport `metro` |
 | **COUNT-IN** | toggle | off by default | Adds `count-in bars` bars of click before a recording starts, and starts the take exactly on the bar. | `set g.countIn` | state `countIn`, `/ldbeat` handler |
 | master fader | fader | 0–1.2, default 0.8 | Master volume (post-limiter). Silences everything, click included. | `set g.masterVol` | `\ld_master` `vol` |
@@ -46,7 +47,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 
 | control | type | range / default | what it does | wire | engine |
 | --- | --- | --- | --- | --- | --- |
-| INPUT | segmented | STEREO · CH 1 · CH 2, default stereo | Which hardware input feeds this track. Use CH 1 / CH 2 to take two mono sources into two different tracks from one 2-channel interface. | `set t{i}.input` | `\ld_track` `input` |
+| INPUT | segmented (select past 4 sources) | `stereo` · `L` · `R` · `ch 3…n`, default `stereo` | Which hardware input feeds this track. `stereo` sums both channels (×0.7071); `L`/`R` take one channel and record it to both sides, so a mono mic and a mono guitar can be two tracks from one 2-channel interface. The list is built from `audio.in`, so an 8-input box offers 8 sources. The track header shows the choice as `IN ST` / `IN L` / `IN R`. | `set t{i}.input` | `~inputChannels` → `\ld_track` `input` |
 | GAIN | knob | 0–2 (100 %), default 1 | Input gain into the gate and filters. | `set t{i}.gain` | `gain` |
 | REC LEVEL | knob | 0–1.5 (100 %), default 1 | Level written into the buffer, before the `tanh` soft clip. | `set t{i}.recGain` | `recGain` |
 
@@ -119,7 +120,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 
 | control | type | range / default | what it does | wire | engine |
 | --- | --- | --- | --- | --- | --- |
-| DRIVER | select | auto · jack · alsa | `auto` = JACK if available (PipeWire), else ALSA. `jack` never passes a device. `alsa` opens the hardware directly and takes it exclusively. **Restart required.** | `cfg audio.driver` | `s.options.device` logic |
+| DRIVER | select | auto · jack · alsa · asio | `auto` = JACK if available (PipeWire), else ALSA. `jack` never passes a device. `alsa` opens the hardware directly and takes it exclusively. `asio` (Windows) prefixes the device with `ASIO : ` so PortAudio picks the ASIO backend — the low-latency path. **Restart required.** | `cfg audio.driver` | `s.options.device` logic |
 | ALSA DEVICE | select | `hw:N,M` list | Only shown for driver = `alsa`. These are the only names scsynth accepts. **Restart required.** | `cfg audio.device` | `s.options.device` |
 | DEVICE + **clear** | read-out + button | — | Shown when a stale device string is in the config (e.g. a PipeWire node name from an older build, which makes scsynth fail with "couldn't initialize audio"). **clear** removes it. | `cfg audio.device = null` | — |
 | SAMPLE RATE | stepper | 0 = default, or 44.1k…192k | Server sample rate. **Restart required.** | `cfg audio.sampleRate` | `s.options.sampleRate` |

@@ -27,6 +27,19 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
   reports exactly what is missing and installs the lot for your distribution
   (pacman / apt / dnf / zypper) behind a single polkit prompt. `install.sh` uses
   the same code.
+- **Position in bars and beats.** The transport shows `bar·beat` (`3·2`), eased
+  along the same position as the blue playhead so the two cannot disagree, and
+  only touching the DOM when the beat changes. Derived from `phase`, `bars` and
+  `beatsPerBar` — no protocol change.
+- **Every input channel is a record source.** `~inputChannels` builds the list
+  from `audio.in` at SynthDef compile time: `0` is the stereo sum, `1..n` are the
+  mono channels, `n+1` the internal test bus. A 2-in interface offers
+  `stereo / L / R`, so a mic and a guitar are two tracks from one box; an 8-in
+  interface offers eight. The track header shows `IN L` / `IN R` / `IN ST`, so the
+  choice is visible without opening the FX drawer.
+- `scripts/shots.py` — regenerates every documentation screenshot without
+  Playwright, by driving the cached Chromium over the DevTools protocol with the
+  `websockets` client the bridge already has.
 
 ### Changed — docs
 
@@ -111,6 +124,16 @@ path it chose, so a silent fallback can never happen again.
   right-aligned. It is now its own centred cell on the same plate as the
   buttons, at 1.35 rem and 600 weight instead of 0.85 rem — the value reads as
   the thing you are changing, not a stray label.
+
+### Fixed — text that turned to garbage without a GPU
+
+- Two full-screen layers were enough to make **every label render as the wrong
+  glyphs** when Chromium rasterises in software (remote sessions, VMs,
+  `--disable-gpu`): the invisible `.boot` overlay (`opacity: 0`, `inset: 0`) and
+  the drawers (`position: fixed` + `backdrop-filter: blur(6px)` + a slide
+  transform). The overlay is now `visibility: hidden` when done, and the drawer
+  is opaque with no blur — 0.97 alpha bought a barely-visible effect and cost a
+  composited layer over the whole app. Legible beats blurry.
 
 ### Fixed — a source check-out never opened its window
 

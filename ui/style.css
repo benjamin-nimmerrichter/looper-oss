@@ -96,6 +96,16 @@ body.no-master #master { display: none; }
   font-variant-numeric: tabular-nums;
 }
 
+/* loop position as bar·beat, beside the clock */
+.posval {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
 /* ---------------------------------------------------------------- tracks -- */
 #tracks {
   display: grid;
@@ -302,8 +312,11 @@ body.no-master #master { display: none; }
   z-index: 50;
   display: grid;
   grid-template-rows: auto 1fr;
-  background: rgba(9, 11, 14, 0.97);
-  backdrop-filter: blur(6px);
+  /* Opaque, and deliberately no backdrop-filter: 0.97 + blur(6px) bought a
+     barely-visible effect and cost a full-page composited layer, which
+     rasterises text with a broken font atlas whenever there is no GPU (remote
+     sessions, VMs, `--disable-gpu`). Legible beats blurry. */
+  background: #0a0d11;
   transform: translateY(102%);
   transition: transform 0.22s ease;
 }
@@ -620,7 +633,11 @@ select.sel {
   text-align: center;
   transition: opacity 0.25s ease;
 }
-.boot.done { opacity: 0; pointer-events: none; }
+/* visibility, not just opacity: an invisible full-screen layer still forces a
+   composited layer over the whole app, and with software rendering that layer
+   rasterises text with a broken font atlas -- every label turns into garbage.
+   (Cost a whole afternoon chasing a "font bug" that was this element.) */
+.boot.done { opacity: 0; pointer-events: none; visibility: hidden; }
 .boot .boot-inner { display: grid; gap: 0.9rem; justify-items: center; padding: 2rem; }
 .boot .spinner {
   width: 2.8rem;

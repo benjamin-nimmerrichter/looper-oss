@@ -268,6 +268,20 @@ async def run_tests(c: Client) -> None:
     st = await c.wait(lambda m: m.get("t") == "s" and abs(m["tracks"][0]["vol"] - 0.7) < 0.02, 6)
     check("parameter set reaches engine", st is not None)
 
+    # The record source is per track, not per app: stereo sum, then one mono
+    # entry per input channel, so a mic on L and a guitar on R can be two tracks
+    # from one interface. The engine builds that list from audio.in.
+    st = None
+    for ch in (0, 1, 2):
+        await c.set("t0.input", ch)
+        st = await c.wait(lambda m, ch=ch: m.get("t") == "s"
+                          and m["tracks"][0]["input"] == ch, 6)
+        if st is None:
+            break
+    check("record source is per track (stereo / L / R)",
+          st is not None and st["tracks"][0]["input"] == 2)
+    await c.set("t0.input", 0)
+
     # ---- record -> auto-close -> overdub -> undo -> redo -> stop -> resume ----
     await c.act("press", 0)
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 1, 6)

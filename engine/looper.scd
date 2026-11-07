@@ -53,16 +53,26 @@ if (~audio[\sampleRate].notNil) { s.options.sampleRate = ~audio[\sampleRate] };
 // "device" is an ALSA hardware name (scsynth -H). JACK/PipeWire has no device:
 // scsynth is simply a node in the graph. So: jack ignores it, alsa requires it.
 ~driver = (~audio[\driver] ? "auto").asString.toLower;
-if (~driver == "alsa") {
-	s.options.device = if (~audio[\device].notNil && ~audio[\device].asString.contains("hw:"),
-		{ ~audio[\device] }, { "default" });
-} {
-	if (~driver == "jack") {
+switch (~driver,
+	"alsa", {
+		s.options.device = if (~audio[\device].notNil && ~audio[\device].asString.contains("hw:"),
+			{ ~audio[\device] }, { "default" });
+	},
+	"jack", {
 		s.options.device = nil;
-	} {
+	},
+	"asio", {
+		// Windows: PortAudio picks the backend from the device string's prefix.
+		// "ASIO : <name>" is the low-latency path (hardwareBufferSize becomes the
+		// ASIO buffer); MME/WASAPI go through the Windows mixer at 20-40 ms.
+		var d = ~audio[\device];
+		s.options.device = if (d.notNil && d.asString.beginsWith("ASIO"),
+			{ d }, { "ASIO : " ++ (d ? "default") });
+	},
+	{
 		if (~audio[\device].notNil) { s.options.device = ~audio[\device] };
-	};
-};
+	}
+);
 s.options.numWireBufs = 512;
 s.options.memSize     = 8192 * 8;
 s.options.numBuffers  = 2048;
@@ -147,6 +157,17 @@ if (~hasVST) {
 		a + ((c - a) * f)
 	};
 
+	// Every source the track can record from: index 0 is the stereo sum, then
+	// one mono entry per input channel (1 = L, 2 = R on a two-input interface,
+	// 3.. = the rest of an 8-in box). Built from audio.in when the SynthDef is
+	// compiled, so a wider interface is a config change and not a code change.
+	~inputChannels = {
+		var n   = (~audio[\in] ? 2).asInteger.clip(1, 16);
+		var ins = SoundIn.ar((0 .. (n - 1))).asArray;
+		var sum = if (n > 1) { (ins[0] + ins[1]) * 0.7071 } { ins[0] };
+		[sum] ++ ins
+	};
+
 	SynthDef(\ld_track, { |outBus, revBus, phaseBus, idx = 0,
 				b0 = 0, b1 = 0, b2 = 0, b3 = 0,
 				g0 = 0, g1 = 0, g2 = 0, g3 = 0,
@@ -188,12 +209,10 @@ if (~hasVST) {
 			// ---- input FX (before the write head) ----
 			// input 3 is an internal test bus: it lets the record path be verified
 			// with a known signal instead of a microphone. The UI never offers it.
-			raw     = Select.ar(K2A.ar(input), [
-				(SoundIn.ar(0) + SoundIn.ar(1)) * 0.7071,
-				SoundIn.ar(0),
-				SoundIn.ar(1),
-				In.ar(testBus, 1)
-			]) * gain;
+			// index n + 1 is the internal test bus (the record path can be verified
+			// with a known signal instead of a microphone); the UI never offers it
+			raw     = Select.ar(K2A.ar(input),
+				~inputChannels.value ++ [In.ar(testBus, 1)]) * gain;
 			gateEnv = Amplitude.kr(raw, 0.002, 0.05);
 			gate    = Select.kr(gateOn, [1, LagUD.kr((gateEnv > gateThr), 0.003, 0.06)]);
 			sig     = BHiPass.ar(raw, hp.clip(10, 20000), 0.707);
@@ -264,11 +283,7 @@ if (~hasVST) {
 
 	// threshold recorder trigger (its own tiny def, like the meters)
 	SynthDef(\ld_autodetect, { |idx = 0, arm = 0, thresh = 0.02, input = 0, gain = 1|
-		var raw = Select.ar(K2A.ar(input), [
-			(SoundIn.ar(0) + SoundIn.ar(1)) * 0.7071,
-			SoundIn.ar(0),
-			SoundIn.ar(1)
-		]) * gain;
+		var raw = Select.ar(K2A.ar(input), ~inputChannels.value) * gain;
 		var env = Amplitude.kr(raw, 0.002, 0.05);
 		var trig = Trig1.kr((env > thresh) * LagUD.kr(arm, 0.001, 0.001), 0.02);
 		SendReply.kr(trig, '/ldauto', [idx]);

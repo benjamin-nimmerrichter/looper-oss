@@ -10,7 +10,31 @@ const STATE_TEXT = {
   3: ["STOPPED", "tap to play"],
 };
 const STATE_CLASS = { 0: "", 1: "rec", 2: "play", 3: "stopped" };
-const INPUT_LABEL = ["STEREO", "CH 1", "CH 2"];
+/**
+ * The record sources a track can pick from: the stereo sum, then one mono entry
+ * per input channel. On a two-input interface that is L and R -- a mic on one,
+ * a guitar on the other, each on its own track, from the same box. Wider
+ * interfaces simply list more channels; nothing in the engine is fixed to two.
+ */
+function channelLabel(ch, n) {
+  if (n !== 2) return `ch ${ch}`;
+  return ch === 1 ? "L" : "R";
+}
+
+function inputOptions() {
+  const n = Math.max(1, Math.min(16, Number(CFG.audio?.in ?? 2)));
+  const opts = [{ label: n > 1 ? "stereo" : "mono", value: 0 }];
+  for (let ch = 1; ch <= n; ch++) opts.push({ label: channelLabel(ch, n), value: ch });
+  return opts;
+}
+
+/** Compact badge for the track header: which source this track records. */
+function inputTag(v) {
+  const n = Math.max(1, Math.min(16, Number(CFG.audio?.in ?? 2)));
+  if (!Number(v)) return n > 1 ? "IN ST" : "IN 1";
+  if (n !== 2) return `IN ${v}`;
+  return `IN ${Number(v) === 1 ? "L" : "R"}`;
+}
 const BARS = [1, 2, 4, 8];
 const RATIOS = [
   { label: "1", value: 1 },
@@ -323,6 +347,15 @@ function buildTransport() {
   });
   g2.append(bars);
 
+  // Where you are in the loop, in the units you count in. The engine already
+  // ships `phase` (0..1 over the whole loop) plus bars/beatsPerBar, so this is
+  // arithmetic, not protocol. It follows the same eased position as the
+  // playhead, so the number and the blue line can never disagree.
+  const gpos = el("div", "group");
+  gpos.append(el("div", "caption", "position"));
+  const posVal = el("div", "posval", "1·1");
+  gpos.append(posVal);
+
   const g3 = el("div", "group");
   g3.append(el("div", "caption", "clock"));
   // These send the inverse of what the ENGINE has, not of the button's class:
@@ -342,8 +375,8 @@ function buildTransport() {
   });
   g4.append(masterFader);
 
-  root.append(g0, g1, g2, g3, g4);
-  ui.transport = { bpmVal, bpmFader, bars, metro, countIn, masterFader };
+  root.append(g0, g1, g2, gpos, g3, g4);
+  ui.transport = { bpmVal, bpmFader, bars, metro, countIn, masterFader, posVal };
 }
 
 /* ----------------------------------------------------------------- tracks -- */
@@ -364,7 +397,9 @@ function buildTracks(n) {
     const name = el("div", "tname");
     name.append(el("b", null, `${i + 1}`));
     const layers = el("span", "layers", "0 layers");
-    name.append(layers);
+    // which input this track records, visible without opening anything
+    const insrc = el("span", "insrc", inputTag(0));
+    name.append(layers, insrc);
 
     const pad = Pad({
       label: "EMPTY",
@@ -404,7 +439,7 @@ function buildTracks(n) {
     const meter = Meter();
     col.append(name, pad, rowA, vol, rowB, meter);
     root.append(col);
-    ui.tracks.push({ col, pad, vol, meter, layers, clear, stateKey: -1 });
+    ui.tracks.push({ col, pad, vol, meter, layers, insrc, clear, stateKey: -1 });
   }
   ui.playheadFill = playheadFill;
 }
@@ -480,11 +515,11 @@ function openFx(i) {
     if (Number(CFG.loop?.monitor ?? 0) === 0) {
       c.append(el("div", "caption", "software monitor off — you hear your interface directly"));
     }
-    c.append(Segmented({
-      options: INPUT_LABEL.map((label, v) => ({ label, value: v })),
-      value: t ? t.input : 0,
-      onPick: (v) => set(`t${i}.input`, v),
-    }));
+    const sources = inputOptions();
+    const pickSource = (v) => set(`t${i}.input`, v);
+    c.append(sources.length <= 4
+      ? Segmented({ options: sources, value: t ? t.input : 0, onPick: pickSource })
+      : Select({ options: sources, value: t ? t.input : 0, onPick: pickSource }));
     const k = knobs(c);
     k.append(Knob({
       label: "gain", min: 0, max: 2, value: t ? t.gain : 1,
@@ -1092,6 +1127,8 @@ function onState(s) {
     // layer peak: tells you a HOT layer even while the track is stopped
     const hot = t.layerPeak > 0.6 ? " · HOT" : "";
     u.layers.textContent = `${t.layers}L${marks}${hot}`;
+    const tag = inputTag(t.input);
+    if (u.insrc.textContent !== tag) u.insrc.textContent = tag;
     if (!u.vol.classList.contains("active")) u.vol.setValue(t.vol);
     u.meter.set(t.meter);
     u.col.classList.toggle("selected", i === selected);
@@ -1106,6 +1143,14 @@ function tick() {
     d = ((d + 0.5) % 1) - 0.5;
     playPos = d > -0.0005 && d < 0.0005 ? phase.value : ((playPos + d * 0.14) % 1 + 1) % 1;
     ui.playheadFill.style.width = `${(playPos * 100).toFixed(2)}%`;
+    if (ui.transport?.posVal) {
+      const per = S.beatsPerBar || 4;
+      const total = Math.max(1, (S.bars || 4) * per);
+      const idx = Math.floor(playPos * total) % total;
+      const text = `${Math.floor(idx / per) + 1}·${(idx % per) + 1}`;
+      // only touch the DOM when the beat actually changes
+      if (ui.transport.posVal.textContent !== text) ui.transport.posVal.textContent = text;
+    }
   }
   requestAnimationFrame(tick);
 }

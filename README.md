@@ -105,6 +105,14 @@ Python to install. Four things stay the operating system's:
 | GTK 3 + WebKit2GTK + PyGObject | the window is the desktop's, built against its own Python and GTK |
 | PipeWire / JACK | your audio driver |
 
+Those are not bundled because of what they cost: measured on the build machine,
+the GTK 3 + WebKit2GTK closure is **281 MB in 138 libraries** (WebKit alone
+98.6 MB, JavaScriptCore 40.6 MB, ICU 33.1 MB) and SuperCollider's is **477 MB in
+242** (sclang links Qt6WebEngine, 203.7 MB of it). Bundling both would make a
+~300 MB AppImage that only runs within the same glibc generation. A 12 MB
+download plus one password prompt is the better trade; `goal.md` records the
+numbers and the conditions under which a full bundle would be worth it.
+
 You do not hunt for those package names. The app knows what is missing, spells
 it correctly for your distribution, and installs all of it behind one password
 prompt:
@@ -123,6 +131,12 @@ administrator password — or unzip the portable build and double-click
 `LooperOSS.exe`. Install [SuperCollider for Windows](https://supercollider.github.io/)
 once; without it the app opens a window that says exactly that, instead of
 dying quietly.
+
+**Windows is not supported yet.** The PyInstaller/Inno Setup recipe and the
+`driver = asio` code path exist, but no Windows host has run them, so a Windows
+build is an experiment rather than a release. Windows becomes its own task:
+verify under Wine first, then on real hardware. Everything else in this document
+was verified on CachyOS + PipeWire.
 
 **From source** (development):
 
@@ -166,7 +180,8 @@ Closing the window stops the audio engine on purpose: a looper that keeps a
 | tap while recording | close the layer, it loops |
 | tap while playing | record another layer on top |
 | **undo / redo** | drop or restore the last layer, instantly |
-| **hold clear** (0.8 s) | wipe the track — long press so it cannot happen by accident |
+| **clear** (tap twice) | wipe the track: tap once → `sure?`, tap again to confirm |
+| **clear all** (tap twice) | wipe *every* track and the autosave — a clean slate |
 | **stop** | silence the track, keep its layers |
 | **fx** | per-track drawer: input, gate, filter, loop, delay, reverb, plugin slots |
 | **setup** | audio device, loop, clock, UI scale, MIDI learn, sessions |
@@ -175,6 +190,27 @@ Closing the window stops the audio engine on purpose: a looper that keeps a
 
 Keyboard on the laptop: `1`–`8` press a track, `u` undo, `s` stop, `space` stop
 all, `esc` close a drawer, `d` toggle the 48 px target overlay.
+
+The **position** readout next to the clock counts your place in the loop as
+`bar·beat` (`3·2` = third bar, second beat), wrapping with the blue playhead so
+you can count a four-bar phrase without watching the line.
+
+### Two instruments, one interface
+
+The record source is **per track**, so a microphone and a guitar plugged into the
+same 2-channel interface are two independent loops:
+
+| track | fx → input FX | header badge | records |
+| --- | --- | --- | --- |
+| 1 — voice | `L` | `IN L` | channel 1 only |
+| 2 — guitar | `R` | `IN R` | channel 2 only |
+
+`stereo` sums both channels (×0.7071, so it cannot clip) and records the sum to
+both sides — right for a stereo keyboard or a stereo pedal. `L` / `R` take one
+channel and record it to both sides — right for a mono mic and a mono guitar.
+On a wider interface the list keeps going (`ch 3`, `ch 4`, … up to
+`setup → audio → inputs`, which is how many input channels the engine opens).
+The badge in the track header shows the choice without opening anything.
 
 ## How loops stay in sync
 
@@ -344,7 +380,7 @@ have the UI outline each target and count any that fall below that floor.
 
 ```bash
 ./install.sh                          # .venv + pinned requirements
-./scripts/smoke.py                    # starts its own engine: 38 end-to-end checks
+./scripts/smoke.py                    # starts its own engine: 40 end-to-end checks
 ./scripts/smoke.py --attach            # run against a stack you already started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules ./scripts/uicheck.mjs
 ./scripts/release.py --check           # is the tree shippable? builds nothing
