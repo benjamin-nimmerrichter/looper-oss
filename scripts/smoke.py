@@ -481,6 +481,19 @@ async def run_tests(c: Client) -> None:
           st is not None and all(t["state"] == 0 for t in st["tracks"]),
           f"layers={[t['layers'] for t in st['tracks']] if st else '?'}")
 
+    # BOUNCE IN: every track that has layers, summed into one, one loop pass
+    await c.act("press", 0)
+    await c.act("press", 1)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["layers"] > 0
+                 and m["tracks"][1]["layers"] > 0, 30)
+    await c.act("bounce", 2)
+    st = await c.wait(lambda m: m.get("t") == "s"
+                      and m["tracks"][2]["layers"] == 1
+                      and m["tracks"][0]["layers"] == 0
+                      and m["tracks"][1]["layers"] == 0, 35)
+    check("bounce merges every track into one", st is not None,
+          f"layers={[t['layers'] for t in st['tracks']] if st else '?'}")
+
     await c.svc("load", [7])
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["layers"] > 0, 20)
     check("session load restores layers",

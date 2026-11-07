@@ -198,6 +198,7 @@ The learned map persists in `ui/config.json` under `midi.map`.
 | SLOT | stepper | 1–8, default 1 | Which phrase slot save/load uses. Persisted. | `cfg session.slot` | — |
 | **save slot** | button | — | Writes `sessions/slotN/`: `t<track>_l<layer>.wav`, `session.json`, `vst.txt`, `vst_*.bin`. | `svc save` | `~writeSession` |
 | **load slot** | button | — | Restores layers, plugin chain and plugin state from that slot. | `svc load` | `~loadSessionDir` |
+| **BOUNCE** | button | — | Merges **every track that has layers** into track 1 as a single layer, in one loop pass (`\ld_bounce`, its own `Line`, self-freeing). The destination's synth is stopped for the pass — it writes its buffers back every sample and would clobber the sum — then rebuilt. Sources are cleared afterwards. | `act bounce 0` | `~bounce`, `\ld_bounce` |
 | **bounce 30 s** | button | — | Renders 30 s of the master bus to `sessions/exports/mixdown_*.wav`. | `svc export` | `~exportMix` |
 | autosave | toggle | on | Snapshot of committed layers after every layer change. On the next start the layers come back **stopped and silent** — press a pad to play them. Turn it off for a session you do not want back. | `cfg loop.autosave` | `autosave`, `~autosaveTick` |
 | **clear autosave** | button | — | Deletes the autosave snapshot now. (Clearing all tracks does this automatically.) | `svc clearAutosave` | `~clearAutosave` |

@@ -300,6 +300,26 @@ if (~hasVST) {
 		SendReply.kr(trig, '/ldauto', [idx]);
 	}).add;
 
+	// BOUNCE IN: sum committed layers into one buffer in a single pass. It runs
+	// on its own Line (not the master phase) and frees itself when the pass ends.
+	// The destination track's synth is stopped before this runs -- it writes its
+	// own buffers back every sample and would overwrite the sum.
+	// Layer 0 is both a source and the destination on purpose: BufRd reads the
+	// old sample before BufWr replaces it, so nothing is zeroed beforehand.
+	SynthDef(\ld_bounce, { |dst = 0, len = 48000, secs = 8,
+				b0 = 0, b1 = 0, b2 = 0, b3 = 0,
+				b4 = 0, b5 = 0, b6 = 0, b7 = 0,
+				g0 = 1, g1 = 1, g2 = 1, g3 = 1,
+				g4 = 1, g5 = 1, g6 = 1, g7 = 1|
+		var ph  = Line.ar(0, 1, secs.max(0.05), doneAction: 2);
+		var pos = ((ph * len).floor).clip(0, (len - 1).max(0));
+		var sig = (BufRd.ar(1, b0, pos) * g0) + (BufRd.ar(1, b1, pos) * g1)
+			+ (BufRd.ar(1, b2, pos) * g2) + (BufRd.ar(1, b3, pos) * g3)
+			+ (BufRd.ar(1, b4, pos) * g4) + (BufRd.ar(1, b5, pos) * g5)
+			+ (BufRd.ar(1, b6, pos) * g6) + (BufRd.ar(1, b7, pos) * g7);
+		BufWr.ar(sig, dst, pos);
+	}).add;
+
 	// master out + hardware in, in the same buffer (slots 60..63)
 	SynthDef(\ld_global_meter, { |meterBuf = 0, slot = 60|
 		BufWr.kr(Amplitude.kr(In.ar(0, 1), 0.001, 0.08), meterBuf, slot);
@@ -349,9 +369,43 @@ if (~hasVST) {
 };
 
 // ------------------------------------------------------------------ boot ----
-~boot = {
-	~addDefs.value;
-	s.sync;
+	// One place builds a track's three synths, so a bounce can stop the
+	// destination and put it back exactly as it was.
+	~makeTrackSynth = { |t, i|
+		var args = [
+			\outBus, ~mixBus.index + (i * 2), \revBus, ~revBus,
+			\phaseBus, ~phaseBus, \idx, i, \testBus, ~testBus,
+			\scratch, ~scratch.bufnum,
+			\loopLen, ~loopFrames.value, \loopRatio, t[\loopRatio],
+			\speed, t[\speed],
+			\contentLen, ~contentLenNow.value(t),
+			\xfade, ~xfadeFrames.value, \recordOffset, ~state[\recordOffset],
+			\beatLen, ~beatSeconds.value, \loopSec, ~loopSeconds.value,
+			\vol, t[\vol], \pan, t[\pan], \gateOn, t[\gateOn],
+			\gateThr, t[\gateThr], \hp, t[\hp], \lp, t[\lp],
+			\input, t[\input], \delayDecay, t[\delayDecay], \playing, 0,
+			\monitor, ~state[\monitor]
+		];
+		4.do { |li|
+			var b = if (li < ~maxLayers, { t[\bufs][li].bufnum }, { ~scratch.bufnum });
+			args = args ++ [~layerKeys[li], b, ~gainKeys[li], 0,
+				("w" ++ li).asSymbol, 0];
+		};
+		t[\synth] = Synth(\ld_track, args, ~grpTracks, \addToTail);
+		t[\meterSynth] = Synth(\ld_meter,
+			[\bus, ~mixBus.index + (i * 2), \idx, i, \meterBuf, ~meterBuf],
+			~grpTracks, \addToTail);
+		t[\autoSynth] = Synth(\ld_autodetect,
+			[\idx, i, \arm, 0, \thresh, t[\autoThresh], \input, t[\input],
+			 \gain, t[\gain]], ~grpTracks, \addToTail);
+		// the args above carry the static setup; live state is pushed back on top
+		~maxLayers.do { |k| t[\synth].set(~gainKeys[k], t[\gains][k]) };
+		t[\synth].set(\playing, t[\playing], \recOn, 0);
+	};
+
+	~boot = {
+		~addDefs.value;
+		s.sync;
 
 	~phaseBus  = Bus.audio(s, 1);
 	~mixBus    = Bus.audio(s, ~maxTracks * 2);
@@ -415,33 +469,7 @@ if (~hasVST) {
 
 	~makeBuffers.value;
 
-	~tracks.do { |t, i|
-		var args = [
-			\outBus, ~mixBus.index + (i * 2), \revBus, ~revBus,
-			\phaseBus, ~phaseBus, \idx, i, \testBus, ~testBus,
-			\scratch, ~scratch.bufnum,
-			\loopLen, ~loopFrames.value, \loopRatio, t[\loopRatio],
-			\contentLen, ~contentLenNow.value(t),
-			\xfade, ~xfadeFrames.value, \recordOffset, ~state[\recordOffset],
-			\beatLen, ~beatSeconds.value, \loopSec, ~loopSeconds.value,
-			\vol, t[\vol], \pan, t[\pan], \gateOn, t[\gateOn],
-			\gateThr, t[\gateThr], \hp, t[\hp], \lp, t[\lp],
-			\input, t[\input], \delayDecay, t[\delayDecay], \playing, 0,
-			\monitor, ~state[\monitor]
-		];
-		4.do { |li|
-			var b = if (li < ~maxLayers, { t[\bufs][li].bufnum }, { ~scratch.bufnum });
-			args = args ++ [~layerKeys[li], b, ~gainKeys[li], 0,
-				("w" ++ li).asSymbol, 0];
-		};
-		t[\synth] = Synth(\ld_track, args, ~grpTracks, \addToTail);
-		t[\meterSynth] = Synth(\ld_meter,
-			[\bus, ~mixBus.index + (i * 2), \idx, i, \meterBuf, ~meterBuf],
-			~grpTracks, \addToTail);
-		t[\autoSynth] = Synth(\ld_autodetect,
-			[\idx, i, \arm, 0, \thresh, t[\autoThresh], \input, t[\input],
-			 \gain, t[\gain]], ~grpTracks, \addToTail);
-	};
+	~tracks.do { |t, i| ~makeTrackSynth.value(t, i) };
 	s.sync;
 
 	~initVST.value;
@@ -593,6 +621,61 @@ if (~hasVST) {
 		};
 	};
 
+	// BOUNCE IN: merge every track that has layers into one, as a single layer.
+	~bounce = { |dstIdx|
+		var dst = ~tracks[dstIdx];
+		var srcs, bufs = [], gains = [], secs, args, synth;
+		// No `^` anywhere here: this runs from an OSC responder, and a non-local
+		// return unwinds that thread without an error (AGENTS.md rule 8).
+		if (dst.notNil) {
+		srcs = ~tracks.select { |t| t[\layerCount] > 0 };
+		if (srcs.notEmpty) {
+		secs = ~loopSeconds.value;
+		srcs.do { |t|
+			t[\bufs].do { |b, li|
+				if (li < t[\layerCount]) {
+					bufs = bufs ++ [b.bufnum];
+					gains = gains ++ [t[\gains][li]];
+				};
+			};
+		};
+		while { bufs.size < 8 } { bufs = bufs ++ [0]; gains = gains ++ [0] };
+		bufs = bufs.keep(8); gains = gains.keep(8);
+		// stop the destination: its unconditional write-back would clobber the sum
+		dst[\synth].free; dst[\meterSynth].free; dst[\autoSynth].free;
+		dst[\playing] = 0; dst[\recOn] = 0;
+		args = [\dst, dst[\bufs][0].bufnum, \len, dst[\contentLen], \secs, secs];
+		8.do { |k|
+			args = args ++ [("b" ++ k).asSymbol, bufs[k], ("g" ++ k).asSymbol, gains[k]];
+		};
+		synth = Synth(\ld_bounce, args, ~grpTracks, \addToTail);
+		fork {
+			(secs + 0.4).wait;
+			synth.free;
+			// the destination is now exactly one layer: the sum
+			dst[\bufs].do { |b, li| if (li > 0) { b.zero } };
+			dst[\gains] = Array.fill(~maxLayers, 0);
+			dst[\gains][0] = 1;
+			dst[\layerCount] = 1; dst[\undone] = 0;
+			dst[\recOn] = 0; dst[\playing] = 1; dst[\state] = 2;
+			dst[\contentLen] = ~contentLenNow.value(dst);
+			srcs.do { |t|
+				if (t !== dst) {
+					if (t[\synth].notNil) {
+						~maxLayers.do { |li| t[\synth].set(("w" ++ li).asSymbol, 0) };
+					};
+					t[\gains] = Array.fill(~maxLayers, 0);
+					t[\layerCount] = 0; t[\undone] = 0;
+					t[\recOn] = 0; t[\playing] = 0; t[\state] = 0;
+				};
+			};
+			~makeTrackSynth.value(dst, dstIdx);
+			~bridge.sendMsg('/ldbounce', dstIdx);
+		};
+		};
+		};
+	};
+
 	// dub mode: every layer loses dubDecay of its gain per loop pass
 	~dubPass = {
 		if (~state[\dubDecay] > 0.001) {
@@ -724,6 +807,7 @@ if (~hasVST) {
 			"redo",   { if (t.notNil) { ~redo.value(t) } },
 			"mark",   { if (t.notNil) { ~setMark.value(t) } },
 			"markBack", { if (t.notNil) { ~markBack.value(t) } },
+			"bounce", { ~bounce.value(i.asInteger) },
 			"stopAll",{
 				~tracks.do { |tr| ~stopTrack.value(tr) };
 				~state[\gridOn] = 0; ~applyRate.value;    // playhead + click stop

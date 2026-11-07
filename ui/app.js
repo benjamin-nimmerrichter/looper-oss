@@ -1069,6 +1069,10 @@ function renderSettings() {
       rowButton("save", "save slot", () => svc("save", [Number(CFG.session?.slot ?? 1)])),
       rowButton("load", "load slot", () => svc("load", [Number(CFG.session?.slot ?? 1)])),
       rowButton("export", "bounce 30 s", () => svc("export", [30])),
+      rowButton("bounce", "sum into track 1", () => {
+        act("bounce", 0);
+        toast("bouncing every track into track 1…");
+      }, "one loop pass; the sources are cleared"),
     );
     const auto = card(body, "autosave");
     auto.append(

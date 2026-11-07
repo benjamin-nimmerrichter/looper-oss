@@ -102,7 +102,7 @@ Generic setters, so a new knob needs no new OSC path:
 | --- | --- | --- |
 | `/ld/set` | `path, value` | `/ld/set "t2.hp" 300` → `synth.set(\hp, 300)` |
 | `/ld/set` | `path, value` | `/ld/set "g.bpm" 128` → global (see below) |
-| `/ld/act` | `action, track` | `press stop clear clearAll undo redo stopAll save load export reboot` |
+| `/ld/act` | `action, track` | `press stop clear clearAll undo redo mark markBack bounce stopAll save load export reboot` |
 | `/ld/svc` | `what, ...args` | service calls, see below |
 
 Global paths for `/ld/set`: `g.bpm g.bars g.beatsPerBar g.metro g.countIn
