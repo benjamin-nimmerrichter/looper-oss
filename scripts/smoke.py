@@ -340,6 +340,43 @@ async def run_tests(c: Client) -> None:
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["layers"] > base, 8)
     check("redo restores it", st is not None)
 
+    # MARK BACK jumps to a bookmark instead of stepping down one layer at a time
+    await c.act("mark", 0)
+    await asyncio.sleep(0.4)
+    marks_at = c.track(0)["layers"]
+    await c.act("dub", 0)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 1, 8)
+    await asyncio.sleep(0.7)
+    await c.act("dub", 0)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["layers"] > marks_at, 8)
+    await c.act("markBack", 0)
+    st = await c.wait(lambda m: m.get("t") == "s"
+                      and m["tracks"][0]["layers"] == marks_at, 8)
+    check("mark back jumps to the bookmark", st is not None,
+          f"layers={st['tracks'][0]['layers'] if st else '?'}")
+
+    # replace mode: the new take mutes what it covers, and undo puts it back
+    await c.cfg("loop.overdubMode", 1)
+    await asyncio.sleep(0.8)
+    before_replace = c.track(0)["layers"]
+    await c.act("dub", 0)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 1, 8)
+    await asyncio.sleep(0.7)
+    await c.act("dub", 0)
+    await c.wait(lambda m: m.get("t") == "s"
+                 and m["tracks"][0]["layers"] > before_replace, 8)
+    await c.svc("probe", [0])
+    pr = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 0, 8)
+    check("replace mode mutes the covered layers",
+          pr is not None and pr["gains"][0] == 0 and pr["gains"][-1] > 0,
+          f"gains={pr['gains'] if pr else '?'}")
+    await c.act("undo", 0)
+    await c.svc("probe", [0])
+    pr = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 0, 8)
+    check("undo restores the covered layers",
+          pr is not None and pr["gains"][0] > 0, f"gains={pr['gains'] if pr else '?'}")
+    await c.cfg("loop.overdubMode", 0)
+
     await c.act("stop", 0)
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 3, 8)
     check("stop keeps the layers", st is not None and st["tracks"][0]["layers"] > base)

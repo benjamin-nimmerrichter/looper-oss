@@ -26,7 +26,8 @@
     "quantizeStart": 0,
     "monitor": 0.0,
     "autoDub": 1,
-    "autosave": 1
+    "autosave": 1,
+    "overdubMode": 0
   },
   "clock": {
     "clickVol": 0.3,

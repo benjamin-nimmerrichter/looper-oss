@@ -91,6 +91,8 @@ s.latency = 0.02;
 	recordOffset: ~cfg[\loop][\recordOffset].asInteger,
 	dubDecay: ~cfg[\loop][\dubDecay].asFloat,
 	autoDub: (~cfg[\loop][\autoDub] ? 1).asInteger,
+	// 0 = a new take adds itself on top; 1 = it replaces what it covered
+	overdubMode: (~cfg[\loop][\overdubMode] ? 0).asInteger,
 	// 0 = hear only the loop: most interfaces monitor directly, and mixing our
 	// delayed copy on top of that is comb filtering
 	monitor: (~cfg[\loop][\monitor] ? 0).asFloat,
@@ -395,7 +397,7 @@ if (~hasVST) {
 			hp: 40, lp: 16000,
 			delayOn: 0, delayBeats: 0.75, delayDecay: 0.4, delayMix: 0.25,
 			revSend: 0.0, reverse: 0, fadeIn: 0, fadeOut: 0,
-			loopRatio: 1, speed: 1, contentLen: 0,
+			loopRatio: 1, speed: 1, mark: 1, contentLen: 0,
 			meterL: 0, meterR: 0, layerPeak: 0, meterPeak: 0, meterSum: 0, cpu: 0,
 			vst: [nil, nil, nil], vstNames: ["", "", ""], vstBypass: [0, 0, 0],
 			vstGui: [nil, nil, nil],
@@ -487,7 +489,32 @@ if (~hasVST) {
 			t[\undone] = 0;
 			t[\gains][li] = 1;
 			t[\synth].set(~gainKeys[li], 1);
+			if ((~state[\overdubMode] ? 0) == 1) {
+				// REPLACE: this take covers the ones below it. The content stays in
+				// the buffers, so undo puts it back.
+				~maxLayers.do { |k|
+					if (k < li) { t[\gains][k] = 0; t[\synth].set(~gainKeys[k], 0) };
+				};
+			};
 			t[\state] = 2;
+		};
+	};
+
+	// MARK BACK: jump straight to a bookmarked layer count instead of stepping
+	// down one layer at a time. Everything above the mark is gated but kept, so
+	// redo still walks it back.
+	~setMark = { |t| t[\mark] = t[\layerCount].max(1) };
+
+	~markBack = { |t|
+		var m = (t[\mark] ? 1).clip(0, ~maxLayers);
+		~commit.value(t);
+		if (t[\layerCount] > m) {
+			~maxLayers.do { |k|
+				if (k >= m) { t[\gains][k] = 0; t[\synth].set(~gainKeys[k], 0) };
+			};
+			t[\undone] = t[\undone] + (t[\layerCount] - m);
+			t[\layerCount] = m;
+			t[\state] = if (m > 0, 2, 0);
 		};
 	};
 
@@ -545,8 +572,13 @@ if (~hasVST) {
 			t[\layerCount] = li;
 			t[\gains][li] = 0;
 			t[\synth].set(~gainKeys[li], 0);
-			t[\undone] = t[\undone] + 1;
-			t[\state] = if (li > 0, 2, 0);
+					t[\undone] = t[\undone] + 1;
+					// REPLACE mode mutes the layers a new take covered; undo brings
+					// them straight back, because the content was never erased.
+					~maxLayers.do { |k|
+						if (k < li) { t[\gains][k] = 1; t[\synth].set(~gainKeys[k], 1) };
+					};
+					t[\state] = if (li > 0, 2, 0);
 		};
 	};
 
@@ -638,6 +670,7 @@ if (~hasVST) {
 				if (v.asInteger == 0) { ~clearAutosave.value };
 			},
 			"quantizeStart", { ~state[\quantizeStart] = v.asInteger },
+			"overdubMode", { ~state[\overdubMode] = v.asInteger.clip(0, 1) },
 			"sel",         { ~state[\sel] = v.asInteger }
 		);
 	};
@@ -689,6 +722,8 @@ if (~hasVST) {
 			},
 			"undo",   { if (t.notNil) { ~undo.value(t) } },
 			"redo",   { if (t.notNil) { ~redo.value(t) } },
+			"mark",   { if (t.notNil) { ~setMark.value(t) } },
+			"markBack", { if (t.notNil) { ~markBack.value(t) } },
 			"stopAll",{
 				~tracks.do { |tr| ~stopTrack.value(tr) };
 				~state[\gridOn] = 0; ~applyRate.value;    // playhead + click stop

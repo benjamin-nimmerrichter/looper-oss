@@ -73,6 +73,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | length | segmented | 1 · ½ · ¼, default 1 | That track loops 1×, 2× or 4× per master loop (`loopRatio`). Stays locked to the same grid. | `set t{i}.loopRatio` | `loopRatio` |
 | length | segmented | 1 · ½ · ¼, default 1 | That track loops 1×, 2× or 4× per master loop (`loopRatio`). Stays locked to the same grid. | `set t{i}.loopRatio` | `loopRatio` |
 | **speed** | segmented + knob | ½ · 1 · 2 · 4 and continuous 0.25–4, default 1 | Varispeed. At `1` the track reads from the master phase and stays grid-locked; anything else free-runs its own phasor, reset when the track starts, so the material plays slower or faster and **re-pitches** (the hardware's SPEED knob). Not time-stretch: pitch moves with speed, by design. | `set t{i}.speed` | `speed`, `Phasor` in `\ld_track` |
+| **MARK / MARK BACK** | buttons | — | `mark` bookmarks the current layer count; `mark back` drops straight to it instead of stepping down one layer at a time. The layers above the mark are gated but kept, so REDO still walks them back one by one. | `act mark` / `act markBack` | `~setMark`, `~markBack` |
 | REVERSE | toggle | off | Reads the layer backwards. | `set t{i}.reverse` | `reverse` |
 | FADES 0 | button | — | Resets both fades to zero. | `set t{i}.fadeIn/out` | `fadeIn`, `fadeOut` |
 | FADE IN | knob | 0–5 s, default 0 | Ramp up at the start of the loop. | `set t{i}.fadeIn` | `fadeIn` |
@@ -147,6 +148,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | INPUT MONITOR | stepper | 0–1.5, **default 0** | Dry input heard while recording. `0` = loop only, which is right when your interface has direct monitoring / a hardware loopback — two copies at different latencies is comb filtering. | `cfg loop.monitor` | `monitor` |
 | AUTO-CLOSE 1ST LAYER | toggle | on | The first take closes on the loop boundary instead of running on. | `cfg loop.autoClose` | `autoClose` |
 | CONTINUE INTO OVERDUB | toggle | on | After that close, recording carries straight on as an overdub (hardware behaviour) instead of dropping to playback. | `cfg loop.autoDub` | `autoDub` |
+| OVERDUB REPLACES | toggle | off | A new take **mutes the layers it covered** instead of layering on top — the hardware's replace mode. Their content is never erased, so UNDO brings them straight back. | `cfg loop.overdubMode` | `overdubMode` in `~commit` |
 | QUANTIZE START | toggle | off | Start recording on the next loop boundary instead of immediately. | `cfg loop.quantizeStart` | `quantizeStart` |
 | DUB DECAY | stepper | 0–95 %, default 0 | Every pass, existing layers lose this fraction — the classic dub fade. | `cfg loop.dubDecay` | `dubDecay` |
 

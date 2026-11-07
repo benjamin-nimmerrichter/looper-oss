@@ -69,6 +69,7 @@ CFG_TO_ENGINE = {
     "loop.autoClose": "autoClose",
     "loop.quantizeStart": "quantizeStart",
     "loop.autoDub": "autoDub",
+    "loop.overdubMode": "overdubMode",
     "loop.autosave": "autosave",
     "loop.revMix": "revMix",
     "loop.room": "room",

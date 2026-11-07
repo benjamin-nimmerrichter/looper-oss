@@ -581,6 +581,21 @@ function openFx(i) {
       options: SPEEDS, value: t ? t.speed : 1,
       onPick: (v) => set(`t${i}.speed`, v),
     }));
+    // MARK BACK drops straight to a bookmarked layer count instead of stepping
+    // down one layer at a time; MARK sets the bookmark where you are now.
+    const markRow = el("div", "row2");
+    const mark = Button({ label: "mark", cls: "tiny" });
+    mark.addEventListener("pointerup", () => {
+      act("mark", i);
+      toast(`mark set at ${t ? t.layers : 0} layers`);
+    });
+    const back = Button({ label: "mark back", cls: "tiny" });
+    back.addEventListener("pointerup", () => {
+      act("markBack", i);
+      toast("back to the mark");
+    });
+    markRow.append(mark, back);
+    c.append(markRow);
     const row = el("div", "row2");
     const rev = Button({ label: "reverse", toggle: true, cls: "tiny" });
     if (t && t.reverse) rev.classList.add("on");
@@ -891,6 +906,9 @@ function renderSettings() {
       }),
       rowToggle("auto-close 1st layer", "loop.autoClose"),
       rowToggle("continue into overdub", "loop.autoDub"),
+      rowToggle("overdub replaces", "loop.overdubMode", {
+        hint: "new take mutes what it covers; undo brings it back",
+      }),
       rowToggle("quantize start", "loop.quantizeStart"),
       rowStepper("dub decay", "loop.dubDecay", {
         min: 0, max: 0.95, step: 0.05, format: (v) => `${Math.round(v * 100)}%`,
