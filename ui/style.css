@@ -468,9 +468,29 @@ body.no-master #master { display: none; }
 .cfgrow .fader { flex: 1; }
 .cfgrow .num {
   font-variant-numeric: tabular-nums;
-  min-width: 4.2rem;
-  text-align: right;
-  font-size: 0.85rem;
+  min-width: 5rem;
+  text-align: center;
+  font-size: 1.08rem;
+  font-weight: 600;
+  color: var(--text);
+}
+/* The stepper readout sits *between* the − and + buttons. Left to itself the
+   div stretches to the full 48 px row and its text rides the top edge, which
+   reads as a stray number in the corner of the buttons. Centre it in a cell of
+   its own and give it the same plate as the buttons, so it reads as part of
+   the control and as the value you are changing. */
+.seg .num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  padding: 0 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  line-height: 1;
+  font-size: 1.35rem;
+  font-weight: 600;
 }
 .cfgrow select {
   min-height: var(--tap);

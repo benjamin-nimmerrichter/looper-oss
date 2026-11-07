@@ -16,6 +16,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | control | type | range / default | what it does | wire | engine |
 | --- | --- | --- | --- | --- | --- |
 | **STOP ALL** | button | — | Stops every track (commits anything recording, `playing` 0, layers kept) **and parks the clock**: the playhead and the metronome stop. Any take resumes the grid. | `act stopAll` | `~stopTrack` × N + `gridOn = 0` |
+| **CLEAR ALL** | button (tap twice) | — | Empties **every** track: all layers, the undo stacks and playback, and it drops the autosave so the wipe cannot come back on the next start. Tap once to arm (`sure?`), tap again within 2.5 s to confirm. | `act clearAll` | `~clearTrack` × N + `gridOn = 0` |
 | **SETUP** | button | — | Opens the setup drawer (six tabs, see §5). | — | — |
 | **tempo value** | button (numeric keypad) | 40–240, default 120 | **Tap the number to type a tempo**: keypad with digits, `clear` and `set`. Sets and persists the BPM. | `set g.bpm` + `cfg bpm` | `\ld_transport` rate, track `beatLen`/`loopSec` |
 | tempo fader | fader | 40–240, default 120 | Sets the tempo. Existing layers **re-pitch** (varispeed), they are not re-recorded. | `set g.bpm` | transport `rate`, every track `beatLen`/`loopSec` |
@@ -36,7 +37,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | volume fader | fader | 0–1.4, default 0.8 | Track output level, smoothed 10 ms. | `set t{i}.vol` | `\ld_track` `vol` |
 | **UNDO** | button | depth = layers (max 4) | Drops the newest layer. The buffer is kept, so redo is instant. | `act undo` | `~undo` |
 | **REDO** | button | — | Restores the last undone layer. | `act redo` | `~redo` |
-| **CLEAR** | **hold 0.8 s** | — | Wipes the track: all layers dropped, `contentLen` reset. Long-press on purpose so a stray finger cannot erase a phrase. Progress bar fills while holding. | `act clear` | `~clearTrack` |
+| **CLEAR** | tap twice | — | Wipes this track: all layers dropped, `contentLen` reset. Tap once to arm (`sure?`), tap again within 2.5 s to confirm, so a stray finger cannot erase a phrase. A long-press is deliberately *not* used: on a touchscreen the OS claims the hold and turns it into a context menu, so the hold never completes. | `act clear` | `~clearTrack` |
 | track meter | meter | — | Post-fader output level of this track. | — | state `meter` |
 
 ## 3. FX drawer (per track, opened by **FX**)

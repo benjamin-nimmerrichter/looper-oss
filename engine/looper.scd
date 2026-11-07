@@ -656,6 +656,13 @@ if (~hasVST) {
 			"dub",    { if (t.notNil) { ~dub.value(t) } },
 			"stop",   { if (t.notNil) { ~stopTrack.value(t) } },
 			"clear",  { if (t.notNil) { ~clearTrack.value(t) } },
+			"clearAll", {
+				// wipe every track in one gesture. ~clearTrack drops the autosave
+				// once the last loop is gone, so a reset cannot come back on the
+				// next start.
+				~tracks.do { |tr| ~clearTrack.value(tr) };
+				~state[\gridOn] = 0; ~applyRate.value;
+			},
 			"undo",   { if (t.notNil) { ~undo.value(t) } },
 			"redo",   { if (t.notNil) { ~redo.value(t) } },
 			"stopAll",{

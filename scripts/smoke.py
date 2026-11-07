@@ -405,6 +405,19 @@ async def run_tests(c: Client) -> None:
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["layers"] == 0, 6)
     check("clear empties the track", st is not None)
 
+    # ---- clear all: one gesture wipes every track, not just the selected one ----
+    await c.act("press", 0)
+    await c.act("press", 1)
+    st = await c.wait(
+        lambda m: m.get("t") == "s" and all(t["layers"] > 0 or t["state"] == 1
+                                              for t in m["tracks"][:2]), 10)
+    await c.act("clearAll", 0)
+    st = await c.wait(lambda m: m.get("t") == "s" and all(t["layers"] == 0
+                                                          for t in m["tracks"]), 10)
+    check("clear all empties every track",
+          st is not None and all(t["state"] == 0 for t in st["tracks"]),
+          f"layers={[t['layers'] for t in st['tracks']] if st else '?'}")
+
     await c.svc("load", [7])
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["layers"] > 0, 20)
     check("session load restores layers",

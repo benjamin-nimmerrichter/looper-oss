@@ -236,6 +236,38 @@ function openKeypad({ title, value, min, max, hint, onOk }) {
 }
 
 /* -------------------------------------------------------------- transport -- */
+/**
+ * Two taps: arm, then confirm within 2.5 s.
+ *
+ * A press-and-hold is not an option here. On a touchscreen (Windows and Linux)
+ * the OS claims the hold and turns it into a right-click / context menu, so the
+ * hold never completes -- the same reason the per-track clear is two taps.
+ */
+function confirmButton(label, onConfirm, cls = "") {
+  const b = Button({ label, cls });
+  let armedAt = 0;
+  const disarm = () => {
+    armedAt = 0;
+    b.classList.remove("on");
+    b.textContent = label;
+  };
+  b.addEventListener("pointerup", () => {
+    const now = performance.now();
+    if (armedAt && now - armedAt < 2500) {
+      disarm();
+      onConfirm();
+    } else {
+      armedAt = now;
+      b.classList.add("on");
+      b.textContent = "sure?";
+      setTimeout(() => {
+        if (armedAt && performance.now() - armedAt >= 2400) disarm();
+      }, 2600);
+    }
+  });
+  return b;
+}
+
 function buildTransport() {
   const root = document.getElementById("transport");
   root.replaceChildren();
@@ -244,9 +276,15 @@ function buildTransport() {
   g0.append(el("div", "caption", "looper-oss"));
   const stopAll = Button({ label: "stop all", cls: "danger" });
   stopAll.addEventListener("pointerup", () => act("stopAll", 0));
+  const clearAll = confirmButton("clear all", () => {
+    act("clearAll", 0);
+    toast("all tracks cleared");
+  }, "danger");
+  const looperBtns = el("div", "row2");
+  looperBtns.append(stopAll, clearAll);
   const settings = Button({ label: "setup" });
   settings.addEventListener("pointerup", () => openSettings());
-  g0.append(stopAll, settings);
+  g0.append(looperBtns, settings);
 
   const g1 = el("div", "group grow");
   g1.append(el("div", "caption", "tempo"));
@@ -357,32 +395,10 @@ function buildTracks(n) {
     undo.addEventListener("pointerup", () => act("undo", i));
     const redo = Button({ label: "redo", cls: "tiny" });
     redo.addEventListener("pointerup", () => act("redo", i));
-    // Tap to arm, tap again to confirm. A press-and-hold cannot be used: on a
-    // touchscreen (Windows and Linux) holding is claimed by the OS and turns into
-    // a right-click / context menu, so the hold never completes.
-    const clear = Button({ label: "clear", cls: "tiny danger" });
-    let armedAt = 0;
-    clear.addEventListener("pointerup", () => {
-      const now = performance.now();
-      if (armedAt && now - armedAt < 2500) {
-        armedAt = 0;
-        clear.classList.remove("on");
-        clear.textContent = "clear";
-        act("clear", i);
-        toast(`track ${i + 1} cleared`);
-      } else {
-        armedAt = now;
-        clear.classList.add("on");
-        clear.textContent = "sure?";
-        setTimeout(() => {
-          if (armedAt && performance.now() - armedAt >= 2400) {
-            armedAt = 0;
-            clear.classList.remove("on");
-            clear.textContent = "clear";
-          }
-        }, 2600);
-      }
-    });
+    const clear = confirmButton("clear", () => {
+      act("clear", i);
+      toast(`track ${i + 1} cleared`);
+    }, "tiny danger");
     rowB.append(undo, redo, clear);
 
     const meter = Meter();
