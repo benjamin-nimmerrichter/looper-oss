@@ -28,6 +28,7 @@ import time
 import traceback
 from typing import Any
 
+from app import deps
 from app.window import open_window
 
 APP_NAME = "Looper OSS"
@@ -441,7 +442,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-engine", action="store_true", help="UI + bridge only (tests)")
     ap.add_argument("--check", action="store_true", help="report what would happen, then exit")
     ap.add_argument("--no-reexec", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--deps", action="store_true",
+                    help="report the system dependencies and exit")
+    ap.add_argument("--install-deps", action="store_true",
+                    help="install the missing system dependencies and exit")
     args = ap.parse_args(argv)
+
+    # These two print to the terminal, so they must run before capture_output()
+    # redirects stdout into logs/app.log.
+    if args.deps:
+        print(deps.summary())
+        return 0 if not deps.missing_keys() else 1
+    if args.install_deps:
+        return deps.install()
 
     bundled = getattr(sys, "frozen", False) or bool(os.environ.get("APPDIR"))
     home = resolve_home(bundled)
@@ -454,6 +467,12 @@ def main(argv: list[str] | None = None) -> int:
         version = (home / "VERSION").read_text().strip()
     except OSError:
         version = "0.0.0"
+
+    # Say it once, in the log, before anything tries to open a window: a missing
+    # library that only shows up as "no window appeared" is the worst kind.
+    gap = deps.hint()
+    if gap:
+        print(gap)
 
     cfg = load_config(home)
     ui_cfg = cfg.get("ui", {})
@@ -468,6 +487,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  ui      {url}   ws :{ws}")
         print(f"  sclang  {sclang or 'NOT FOUND'}")
         print(f"  window  {args.window}{' kiosk' if args.kiosk else ''}")
+        missing = deps.missing_keys()
+        print(f"  deps    {'all present' if not missing else ', '.join(missing) + ' missing'}")
         return 0 if sclang or args.no_engine else 1
 
     if not port_free(port):
@@ -480,11 +501,12 @@ def main(argv: list[str] | None = None) -> int:
         rotate(logs / name)
 
     if not args.no_engine and not sclang:
+        how = ("Run Looper OSS with --install-deps and it will install them "
+               "for you." if os.environ.get("LOOPER_OSS_PACKAGED") else
+               "Install them with:  python3 looper_oss.py --install-deps")
         open_window(url, kiosk=args.kiosk, mode=args.window,
                     error="SuperCollider was not found.\n\n"
-                          "Looper OSS needs sclang and scsynth. Install SuperCollider "
-                          "and sc3-plugins with your package manager, then start "
-                          "Looper OSS again.")
+                          "Looper OSS needs sclang and scsynth. " + how)
         return 1
 
     write_config = load_module("looper_write_config", home / "bridge" / "write_config.py")

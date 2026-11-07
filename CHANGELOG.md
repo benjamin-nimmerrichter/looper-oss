@@ -18,6 +18,15 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
   sclang is missing instead of failing with an import error.
 - `docs/img/` — real screenshots of the main screen, the fx drawer and all seven
   setup tabs.
+- **CLEAR ALL** in the transport bar: tap once to arm (`sure?`), tap again to
+  wipe every track — layers, undo stacks and playback — and drop the autosave
+  with it, so a reset cannot reappear on the next start. `act clearAll`.
+- `--deps` and `--install-deps`. The AppImage carries all of Python, but
+  SuperCollider, `sc3-plugins`, GTK 3/WebKit2GTK and PyGObject remain the
+  operating system's. Instead of making anyone collect package names, the app
+  reports exactly what is missing and installs the lot for your distribution
+  (pacman / apt / dnf / zypper) behind a single polkit prompt. `install.sh` uses
+  the same code.
 
 ### Changed — docs
 
@@ -93,6 +102,24 @@ through to a browser without saying so. The AppImage now prefers the host
 `python3` (which has gi) and keeps the bundled interpreter as a fallback, adding
 any host site-packages that actually contain gi. `open_window()` also logs the
 path it chose, so a silent fallback can never happen again.
+
+### Changed — settings readouts
+
+- **The numbers in setup were small, and sat in the top corner of the −/+ group.**
+  The readout is a plain `div` between two 48 px buttons: with no rule of its
+  own it stretched to the full row height and its text stayed on the top edge,
+  right-aligned. It is now its own centred cell on the same plate as the
+  buttons, at 1.35 rem and 600 weight instead of 0.85 rem — the value reads as
+  the thing you are changing, not a stray label.
+
+### Fixed — a source check-out never opened its window
+
+- A virtualenv is created with `include-system-site-packages = false`, so
+  `python3 looper_oss.py` could not import the distro's PyGObject and silently
+  fell back to a browser tab even with `python3-gi` installed. `_native()` now
+  puts the distribution's site-packages back on `sys.path`, `install.sh` creates
+  the venv with `--system-site-packages`, and `--deps` agrees with the window
+  instead of reporting a false miss.
 
 ### Removed
 

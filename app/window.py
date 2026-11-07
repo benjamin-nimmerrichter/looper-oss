@@ -23,6 +23,8 @@ import subprocess
 import sys
 import time
 
+from app.deps import gi_paths
+
 
 def _html_escape(text: str) -> str:
     return (text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -50,6 +52,15 @@ def _native(url: str, kiosk: bool, error: str | None) -> bool:
     project), so it is imported dynamically: a frozen build must not treat it as
     a bundling dependency, and it is genuinely optional.
     """
+    # A source check-out runs inside a virtualenv, and venvs are created with
+    # include-system-site-packages = false: the distro's PyGObject is invisible
+    # there, so `import gi` failed and the app silently fell back to a browser
+    # even when python3-gi was installed. Put the distro's site-packages back
+    # before trying (the packaged app gets the same from AppRun).
+    for extra in gi_paths():
+        if extra not in sys.path:
+            sys.path.append(extra)
+
     try:
         gi = importlib.import_module("gi")
         gi.require_version("Gtk", "3.0")

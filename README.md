@@ -94,21 +94,28 @@ allow executing, then double-click; if you have AppImageLauncher it will offer
 **Integrate and run**, which adds Looper OSS to your application menu (it then
 moves the file into `~/Applications`, so look there if it seems to disappear).
 
-The AppImage carries its dependencies. It does **not** carry SuperCollider —
-that is a system install, like your audio driver. For the window itself it uses
-your desktop's `python3` and PyGObject (`python3-gi`), which every GTK desktop
-already has and which cannot be bundled meaningfully because it is built against
-the host's Python and GTK. A bundled interpreter is included as a fallback for
-machines without one.
+**What is inside, and what it installs for you.** The AppImage carries the whole
+Python side — a CPython plus `websockets` and `python-osc` — so there is nothing
+Python to install. Four things stay the operating system's:
+
+| | why it is not in the bundle |
+| --- | --- |
+| SuperCollider (`sclang` + `scsynth`) | it is the audio server, like PipeWire: it links against the system's libjack, libpipewire, libsndfile and libsystemd, and a bundled copy would fight the host's |
+| `sc3-plugins` | extra UGens the engine's SynthDefs use |
+| GTK 3 + WebKit2GTK + PyGObject | the window is the desktop's, built against its own Python and GTK |
+| PipeWire / JACK | your audio driver |
+
+You do not hunt for those package names. The app knows what is missing, spells
+it correctly for your distribution, and installs all of it behind one password
+prompt:
 
 ```bash
-sudo pacman -S supercollider sc3-plugins pipewire-jack     # Arch / CachyOS
-sudo apt install supercollider sc3-plugins pipewire-jack   # Debian / Ubuntu
-sudo dnf install supercollider sc3-plugins pipewire-jack   # Fedora
+./looper-oss-0.1.0-x86_64.AppImage --install-deps
 ```
 
-`pipewire-jack` puts scsynth on the PipeWire graph like any other client. If you
-keep `jack` (jack2) instead, choose driver **alsa** in setup → audio and pick your
+`--deps` reports what it found without changing anything. `pipewire-jack` is
+what puts scsynth on the PipeWire graph like any other client; if you keep
+`jack` (jack2) instead, choose driver **alsa** in setup → audio and pick your
 interface there.
 
 **Windows.** Run `looper-oss-<version>-setup.exe` — a per-user install, so no
@@ -126,8 +133,9 @@ cd looper-oss
 python3 looper_oss.py     # and you are playing
 ```
 
-`./install.sh` checks for `sclang` first and prints the exact package command
-for your distribution if it is missing.
+`./install.sh` checks every system dependency (audio engine, plugins, window)
+and prints one command that fixes whatever is missing; `./install.sh
+--install-deps` runs it for you behind a single password prompt.
 
 Optional, VST3 inserts: the `VSTPlugin` extension (AUR `sc3-vstplugin`, or the
 prebuilt release zip from `github.com/Spacechild1/vstplugin` unpacked into
