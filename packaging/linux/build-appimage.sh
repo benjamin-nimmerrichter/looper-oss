@@ -50,6 +50,14 @@ cp -L "$(command -v python3)" "$APPDIR/usr/bin/python3"
 for lib in $(ldd "$(command -v python3)" | awk '/libpython/ {print $3}'); do
   cp -L "$lib" "$APPDIR/usr/lib/"
 done
+# Ubuntu ships libpython unstripped (29 MB against Arch's ~5 MB), and its stdlib
+# is 93 MB -- the first CI build produced a 35 MB AppImage instead of 12 MB.
+# The symbols are not ours to ship.
+STRIP_BIN="$(command -v strip || true)"
+if [ -n "$STRIP_BIN" ]; then
+  find "$APPDIR/usr/lib" -type f -name '*.so*' \
+    -exec "$STRIP_BIN" --strip-unneeded {} + || true
+fi
 tar -cf - -C "$STDLIB" \
   --exclude='test' --exclude='tests' --exclude='idlelib' --exclude='tkinter' \
   --exclude='turtledemo' --exclude='ensurepip' --exclude='site-packages' \

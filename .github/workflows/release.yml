@@ -29,7 +29,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libfuse2 squashfs-tools zsync
+            libfuse2 squashfs-tools zsync binutils
           python -m pip install -r requirements.txt
 
       - name: source archives + checksums
@@ -59,23 +59,29 @@ jobs:
             v[0-9]*) ;;
             *) echo "refusing to publish '$tag': not a v* tag" >&2; exit 1 ;;
           esac
-          # notes come from CHANGELOG.md when the version has a section there,
-          # otherwise GitHub's generated notes
-          notes=()
-          if grep -q "^## \[${tag#v}\]" CHANGELOG.md; then
-            awk -v pat="^## \\[${tag#v}\\]" '
-              $0 ~ pat {found=1; next}
-              found && /^## \[/ {exit}
+          ver="${tag#v}"
+
+          # index(), not a regex: "^## \[0.1.0\]" is the character class
+          # [0.1.0] to awk and matches nothing at all -- which is how the first
+          # release ended up with an empty body.
+          if grep -q "^## \[$ver\]" CHANGELOG.md; then
+            awk -v ver="$ver" '
+              !found && index($0, "## [" ver "]") == 1 {found=1; next}
+              found && index($0, "## [") == 1 {exit}
               found {print}
             ' CHANGELOG.md > /tmp/notes.md
             notes=(--notes-file /tmp/notes.md)
           else
             notes=(--generate-notes)
           fi
-          gh release create "$tag" \
-            dist/looper-oss-*.tar.gz \
-            dist/looper-oss-*.zip \
-            dist/looper-oss-*-x86_64.AppImage \
-            dist/SHA256SUMS \
-            --title "Looper OSS ${tag#v}" \
-            "${notes[@]}"
+
+          files=(dist/looper-oss-*.tar.gz dist/looper-oss-*.zip
+                 dist/looper-oss-*-x86_64.AppImage dist/SHA256SUMS)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # re-running (or dispatching on an existing tag) updates in place
+            gh release edit "$tag" --title "Looper OSS $ver" "${notes[@]}"
+            gh release upload "$tag" "${files[@]}" --clobber
+          else
+            gh release create "$tag" "${files[@]}" \
+              --title "Looper OSS $ver" "${notes[@]}"
+          fi
