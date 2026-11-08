@@ -605,6 +605,10 @@ if (~hasVST) {
 	~meterBuf  = Buffer.alloc(s, 64, 1);
 	~clockBuf  = Buffer.alloc(s, 8, 1);
 	~patternBuf = Buffer.alloc(s, 64, 1);   // 4 voices x 16 steps
+	// Buffer.alloc is asynchronous: without this the transport and the tracks were
+	// created against buffers the server had not allocated yet, which is the
+	// "Buffer UGen: no buffer data" burst on a slower (Windows) start.
+	s.sync;
 	// explicit order: clock -> tracks -> master. Synth() defaults to \addToHead,
 	// so a group target alone would run the master BEFORE the tracks it sums.
 	~grpClock  = Group.new;
@@ -679,6 +683,7 @@ if (~hasVST) {
 	~makeBuffers.value;
 
 	~seqBufs = Array.fill(~nTracks, { Buffer.alloc(s, 8, 1) });   // step sequence
+	s.sync;                                                      // see above
 	~inputSynths = Array.fill(~inCount, { |ch|
 		Synth(\ld_input, [\outBus, ~inBus.index + ch, \inCh, ch,
 			\gain, (~inGain ? [])[ch] ? 1], ~grpTracks, \addToTail)

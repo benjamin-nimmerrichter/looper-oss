@@ -151,6 +151,8 @@ def read_clock() -> dict:
     """PipeWire's current period: under JACK this is the real buffer size, and
     scsynth follows it — SC's own blockSize option is ignored."""
     out = {"quantum": 0, "rate": 0}
+    if os.name == "nt":
+        return out       # no PipeWire clock to read
     try:
         res = subprocess.run(["pw-metadata", "-n", "settings", "0"],
                              capture_output=True, text=True, timeout=4, check=False)
@@ -166,13 +168,19 @@ def read_clock() -> dict:
 
 def apply_quantum(frames: int) -> None:
     frames = int(frames)
-    if frames <= 0:
+    if frames <= 0 or os.name == "nt":
+        # There is no PipeWire on Windows: the period belongs to the driver, and
+        # calling pw-metadata there only produced "cannot set the quantum" on
+        # every start -- a failure message about something that does not exist.
         return
     try:
-        subprocess.run(["pw-metadata", "-n", "settings", "0",
-                        "clock.force-quantum", str(frames)],
-                       capture_output=True, timeout=4, check=False)
-        log(f"pipewire quantum forced to {frames} frames")
+        res = subprocess.run(["pw-metadata", "-n", "settings", "0",
+                              "clock.force-quantum", str(frames)],
+                             capture_output=True, timeout=4, check=False)
+        if res.returncode == 0:
+            log(f"pipewire quantum forced to {frames} frames")
+        else:
+            log(f"pw-metadata could not force the quantum (exit {res.returncode})")
     except (OSError, subprocess.TimeoutExpired) as exc:
         log(f"cannot set the quantum ({exc})")
 
