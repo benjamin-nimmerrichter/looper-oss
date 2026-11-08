@@ -678,6 +678,14 @@ if (~hasVST) {
 				t[\synth].set(\contentLen, t[\contentLen]);
 			};
 			buf.zero;
+			// The layer being recorded must NOT be played back: wpos is derived from
+			// rpos, so the play head reads the very sample the write head is writing
+			// in the same block, and UGen order inside a synth is unspecified --
+			// that overlap is a one-sample mismatch, audible as HF distortion at the
+			// seam. Silent while it records (you hear the committed layers plus your
+			// dry monitor), gain restored by ~commit at the boundary.
+			t[\gains][li] = 0;
+			t[\synth].set(~gainKeys[li], 0);
 			t[\synth].set(("w" ++ li).asSymbol, 1, \recOn, 1, \playing, 1);
 			t[\recOn] = 1; t[\playing] = 1; t[\state] = 1;
 			t[\passes] = 0;
