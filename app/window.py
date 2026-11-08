@@ -174,6 +174,10 @@ def _browser_tab(url: str) -> bool:
     return True
 
 
+# public: main.py falls back to this when an --app window never appears
+browser_tab = _browser_tab
+
+
 def open_window(url: str, kiosk: bool = False, mode: str = "auto",
                 error: str | None = None) -> str:
     """Show the UI.

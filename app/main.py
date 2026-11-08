@@ -334,7 +334,8 @@ def start_static_server(root: pathlib.Path, port: int) -> None:
     threading.Thread(target=httpd.serve_forever, name="ui-http", daemon=True).start()
 
 
-def wait_for_ui(bridge, timeout: float = 180.0, grace: float = 6.0) -> None:
+def wait_for_ui(bridge, url: str | None = None, timeout: float = 180.0,
+                grace: float = 6.0, fallback_after: float = 15.0) -> None:
     """Keep the app alive while a UI is attached, then leave.
 
     A browser process exiting is NOT the user closing the window: Edge and Chrome
@@ -347,11 +348,25 @@ def wait_for_ui(bridge, timeout: float = 180.0, grace: float = 6.0) -> None:
 
     started = _time.monotonic()
     last_seen = None
+    fell_back = False
     while True:
         clients = len(getattr(bridge, "clients", ()) or ())
         now = _time.monotonic()
         if clients:
             last_seen = now
+        elif (url and not fell_back and last_seen is None
+              and (now - started) > fallback_after):
+            # --app can start Edge and still leave no window (a policy, a profile
+            # prompt, a Store build). One fallback to the default browser is
+            # better than a black screen; two would be the old cascade again.
+            fell_back = True
+            print("window: no UI after %.0fs, opening the default browser"
+                  % fallback_after, flush=True)
+            try:
+                from app.window import browser_tab  # noqa: PLC0415
+                browser_tab(url)
+            except Exception as exc:  # noqa: BLE001 - never kill the app for this
+                print(f"window: fallback failed ({exc})", file=sys.stderr, flush=True)
         elif last_seen is not None and (now - last_seen) > grace:
             print("window: UI closed", flush=True)
             return
@@ -657,7 +672,7 @@ def main(argv: list[str] | None = None) -> int:
         # "launched" means a window was started and its process is not a proxy for
         # the user's window: the bridge's UI clients decide when we are done.
         if open_window(url, kiosk=args.kiosk, mode=args.window) == "launched":
-            wait_for_ui(bridge_module)
+            wait_for_ui(bridge_module, url)
     except SystemExit as exc:
         code = exc.code if isinstance(exc.code, int) else 1
     finally:
