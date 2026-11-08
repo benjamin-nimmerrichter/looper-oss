@@ -17,14 +17,24 @@ the UI is a browser page; the only Python translates OSC to JSON.
   separately parametric too, 1–16 channels each.
 - **Built for a finger, not a mouse.** Every target is at least 48 px in both
   axes (`--tap`), driven by pointer events with `touch-action: none`, no
-  hover-only affordances, and a 0.8 s long-press guard before anything
-  destructive happens. `--browser` gives an app window, `--kiosk` gives a bare
+  hover-only affordances, and **tap twice** (arm, then confirm) before anything
+  destructive happens — not a long-press, because a touchscreen turns a hold into
+  the system's context menu. `--browser` gives an app window, `--kiosk` gives a bare
   fullscreen panel; press `d` to outline every target and count any below the
   floor.
 - **Any panel or monitor**, 1024×600 up to 4K, portrait or landscape, rescaled
   by one slider (0.75–1.75) that persists.
 - **No build step, no framework, no network at runtime.** Offline by
   construction.
+
+**0.2 added** — per-track **speed** (varispeed 0.25–4×), **mark / mark back**,
+**replace-overdub**, **bounce all tracks into one**, **clear all**, a
+**synthesised drum engine** (16 kits, 200 patterns, no samples), **four plugin
+insert slots** with four recallable banks, a **toggle/momentary** mode per slot
+and an **eight-step sequencer** on the low pass, an **input mixer** with a
+compressor and per-channel EQ, **three output buses** with per-track routing and
+a **cue send**, **99 memories**, one-file **backup/restore**, **WAV import**, and
+the `bar·beat` position readout.
 
 ```text
 app/            the desktop application: window, launcher, shutdown
@@ -85,8 +95,8 @@ generated `engine/_config.scd`, and it rebuilds byte-identically.
 executable, run it:
 
 ```bash
-chmod +x looper-oss-0.1.0-x86_64.AppImage
-./looper-oss-0.1.0-x86_64.AppImage
+chmod +x looper-oss-0.2.0-x86_64.AppImage
+./looper-oss-0.2.0-x86_64.AppImage
 ```
 
 That is the whole installation. In a file manager, right-click → *Properties* →
@@ -118,7 +128,7 @@ it correctly for your distribution, and installs all of it behind one password
 prompt:
 
 ```bash
-./looper-oss-0.1.0-x86_64.AppImage --install-deps
+./looper-oss-0.2.0-x86_64.AppImage --install-deps
 ```
 
 `--deps` reports what it found without changing anything. `pipewire-jack` is

@@ -84,7 +84,9 @@ $PIP install --quiet --disable-pip-version-check \
 
 echo "== desktop integration"
 install -m 755 packaging/linux/AppRun "$APPDIR/AppRun"
-install -m 644 packaging/linux/looper-oss.desktop "$APPDIR/looper-oss.desktop"
+sed "s/@VERSION@/$VERSION/g" packaging/linux/looper-oss.desktop \
+  > "$APPDIR/looper-oss.desktop"
+chmod 644 "$APPDIR/looper-oss.desktop"
 if [ -f packaging/linux/looper-oss.png ]; then
   install -m 644 packaging/linux/looper-oss.png "$APPDIR/looper-oss.png"
 elif command -v inkscape >/dev/null 2>&1; then

@@ -245,7 +245,7 @@ The "selected" track is the last pad you touched (it gets a highlighted border).
 | --- | --- |
 | drag a fader anywhere | jumps to that value immediately (no need to grab the thumb) |
 | drag a knob vertically | full range over ~150 px; the dot shows the value |
-| hold **CLEAR** 0.8 s | wipe the track (release early = nothing happens) |
+| tap **CLEAR** twice | wipe the track (arm, then confirm within 2.5 s) |
 | tap **BARS** | set loop length; the change is immediate and re-times existing layers |
 | tap the **BPM number** | opens the numeric keypad (digits / clear / set) |
 | tap **TAP** 2+ times | sets the BPM from the interval you tap |

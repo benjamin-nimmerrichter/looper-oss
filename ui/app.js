@@ -1153,7 +1153,7 @@ function renderSettings() {
       ["DUB (overdub)", "tap the pad while playing"],
       ["PLAY", "tap the pad while stopped"],
       ["STOP", "STOP under the pad"],
-      ["CLEAR", "hold CLEAR (0.8 s)"],
+      ["CLEAR", "tap CLEAR twice"],
       ["UNDO / REDO", "UNDO / REDO (last layer only, depth = layers)"],
       ["MEASURE (loop length)", "BARS / LOOP in the top bar: 1 2 4 8"],
       ["TEMPO", "the tempo bar, or TAP"],

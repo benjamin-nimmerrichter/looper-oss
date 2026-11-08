@@ -1,6 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=Looper OSS
+# filled in by build-appimage.sh; AppImageLauncher shows it in the menu name
+X-AppImage-Version=@VERSION@
 GenericName=Loop Station
 Comment=Touchscreen loop station built on SuperCollider
 Exec=AppRun

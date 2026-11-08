@@ -691,6 +691,17 @@ select.sel {
    (Cost a whole afternoon chasing a "font bug" that was this element.) */
 .boot.done { opacity: 0; pointer-events: none; visibility: hidden; }
 .boot .boot-inner { display: grid; gap: 0.9rem; justify-items: center; padding: 2rem; }
+/* Which app is this? Large, light grey, above the spinner -- on the loading
+   screen and on the failure screen alike. */
+.boot .boot-name {
+  font-size: 2.6rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+  line-height: 1;
+}
+.boot.failed .boot-name { color: var(--text); }
 .boot .spinner {
   width: 2.8rem;
   height: 2.8rem;

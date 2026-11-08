@@ -62,7 +62,7 @@ SynthDefs): `\ld_meter` writes `BufWr.kr` into a 64-frame buffer, sclang sends
 
 ### `/ldstate` field order
 
-Global (23):
+Global (26):
 
 ```text
 bpm bars beatsPerBar metro countIn masterVol clickVol sel cpu
@@ -75,7 +75,7 @@ inL inR masterL masterR phase
 reset on `/ldwrap`, so it covers the whole loop; the UI dead-reckons between
 20 Hz frames for a smooth playhead.
 
-Per track (25), repeated for every track:
+Per track (32), repeated for every track:
 
 ```text
 state vol pan muted meter input layers

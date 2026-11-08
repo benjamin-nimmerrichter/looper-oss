@@ -37,11 +37,13 @@ ERROR_PAGE = """<!doctype html><meta charset="utf-8">
     font:16px/1.5 system-ui,sans-serif;display:flex;align-items:center;
     justify-content:center;text-align:center}}
   div{{max-width:34rem;padding:2rem}}
+  .app{{font-size:2.4rem;font-weight:700;letter-spacing:.16em;
+    text-transform:uppercase;color:#8b96a5;margin:0 0 1.2rem}}
   h1{{font-size:1.3rem;margin:0 0 1rem;color:#e05a4f}}
   p{{color:#9fb0c0;margin:0}}
   code{{background:#161d26;padding:.15rem .35rem;border-radius:.25rem}}
 </style>
-<div><h1>Looper OSS cannot start yet</h1><p>{message}</p></div>
+<div><div class="app">Looper OSS</div><h1>cannot start yet</h1><p>{message}</p></div>
 """
 
 
