@@ -216,7 +216,9 @@ Before you call a change done:
 - **No time-stretch**: a tempo change re-pitches (varispeed), like SPEED CHANGE.
 - VST editor is the plugin's own window, or VSTPlugin's generic parameter UI when
   the plugin ships none.
-- **Windows is unverified** (the PyInstaller + Inno Setup recipe ships; no Windows host was available to boot
-  WASAPI). Everything else is verified on CachyOS + PipeWire.
+- **Windows has never been built, installed or run.** `packaging/windows/` holds
+  the recipe and the engine has a `driver = asio` path, but no Windows host has
+  executed either — do not describe Windows as "unverified", it is untested.
+  Everything else is verified on CachyOS + PipeWire. Full support: 0.3.0.
 - Meters/latency: PipeWire quantum governs round-trip (~21 ms at 1024, ~6.7 ms at
   256); `loop.recordOffset` compensates the grid alignment.

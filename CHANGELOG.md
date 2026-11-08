@@ -29,8 +29,10 @@ The RC-505mkII round (issue #3) plus the tooling that keeps the docs honest.
   UI server, the OSC bridge, the SuperCollider engine and the window. Second
   launch raises the running window; closing it stops everything and releases the
   audio device; SIGTERM follows the same cleanup path, so no orphaned `scsynth`.
-- **Linux AppImage** and **Windows portable + installer** (`packaging/`), with
-  `looper_oss.py` as the single entry point for both.
+- **Linux AppImage**, plus PyInstaller and Inno Setup recipes for a Windows
+  portable build and installer (`packaging/windows/`). Those recipes have **never
+  been built, installed or run on Windows** — there was no Windows host — so
+  Windows support is not claimed here; it is the 0.3.0 milestone.
 - `install.sh` for source check-outs: prompts for the right package command when
   sclang is missing instead of failing with an import error.
 - `docs/img/` — real screenshots of the main screen, the fx drawer and all seven
@@ -60,9 +62,10 @@ The RC-505mkII round (issue #3) plus the tooling that keeps the docs honest.
 
 ### Next
 
-- **Windows support is the 0.3.0 milestone.** 0.2.0 ships the PyInstaller/Inno
-  Setup recipe and the `driver = asio` path, but no Windows host has run them, so
-  a Windows build is an experiment rather than a supported release. 0.3.0 is
+- **Windows support is the 0.3.0 milestone.** 0.2.0 contains the PyInstaller and
+  Inno Setup *files* and the `driver = asio` branch, and nothing else: no Windows
+  build has been produced, installed or run, so Windows is not a supported
+  platform and no Windows artefact is published. 0.3.0 is
   WASAPI/ASIO device handling, the engine's Windows paths, a verified installer,
   and the same test evidence the Linux build has.
 
@@ -261,7 +264,8 @@ First release. A working touchscreen loop station: record, overdub, undo, save.
 - Loop length comes from **bars + BPM**, never from the first take (no AUTO mode).
 - 4 layers per track instead of the RC-505's single loop + Mark Back.
 - No time-stretch: a tempo change re-pitches.
-- Windows launcher ships but WASAPI boot is **unverified**.
+- No Windows build is shipped or claimed: `packaging/windows/` holds the
+  recipe, and it has never been built, installed or run on Windows.
 - VST inserts need the `VSTPlugin` extension; without it the slots are absent.
 
 [0.2.0]: https://github.com/benjamin-nimmerrichter/looper-oss/compare/v0.1.0...v0.2.0

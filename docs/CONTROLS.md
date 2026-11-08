@@ -131,7 +131,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 
 | control | type | range / default | what it does | wire | engine |
 | --- | --- | --- | --- | --- | --- |
-| DRIVER | select | auto · jack · alsa · asio | `auto` = JACK if available (PipeWire), else ALSA. `jack` never passes a device. `alsa` opens the hardware directly and takes it exclusively. `asio` (Windows) prefixes the device with `ASIO : ` so PortAudio picks the ASIO backend — the low-latency path. **Restart required.** | `cfg audio.driver` | `s.options.device` logic |
+| DRIVER | select | auto · jack · alsa · asio | `auto` = JACK if available (PipeWire), else ALSA. `jack` never passes a device. `alsa` opens the hardware directly and takes it exclusively. `asio` (Windows) prefixes the device with `ASIO : ` so PortAudio picks the ASIO backend — the low-latency path, and **never exercised on Windows**: the branch exists in the engine and is untested. **Restart required.** | `cfg audio.driver` | `s.options.device` logic |
 | ALSA DEVICE | select | `hw:N,M` list | Only shown for driver = `alsa`. These are the only names scsynth accepts. **Restart required.** | `cfg audio.device` | `s.options.device` |
 | DEVICE + **clear** | read-out + button | — | Shown when a stale device string is in the config (e.g. a PipeWire node name from an older build, which makes scsynth fail with "couldn't initialize audio"). **clear** removes it. | `cfg audio.device = null` | — |
 | SAMPLE RATE | stepper | 0 = default, or 44.1k…192k | Server sample rate. **Restart required.** | `cfg audio.sampleRate` | `s.options.sampleRate` |
