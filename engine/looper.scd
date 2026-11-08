@@ -189,6 +189,7 @@ if (~hasVST) {
 				vol = 0.8, pan = 0, muted = 0, monitor = 0.8,
 				input = 0, gain = 1.0, recGain = 1.0,
 				gateOn = 1, gateThr = 0.02, autoArm = 0, autoThresh = 0.02,
+				compOn = 0, compThr = 0.6, compRatio = 0.4,
 				hp = 40, lp = 16000,
 				delayOn = 0, delayBeats = 0.75, delayDecay = 0.4, delayMix = 0.25,
 				revSend = 0.0, beatLen = 0.5, loopSec = 8,
@@ -237,6 +238,10 @@ if (~hasVST) {
 			gate    = Select.kr(gateOn, [1, LagUD.kr((gateEnv > gateThr), 0.003, 0.06)]);
 			sig     = BHiPass.ar(raw, hp.clip(10, 20000), 0.707);
 			sig     = BLowPass.ar(sig, lp.clip(200, 19000), 0.707) * gate;
+			// input compressor: the mic'ed channel can be tamed before the write head
+			sig     = Select.ar(K2A.ar(compOn),
+				[sig, Compander.ar(sig, sig, compThr.clip(0.05, 0.95),
+					1, compRatio.clip(0.05, 1), 0.01, 0.12)]);
 			sig     = (sig * recGain).tanh;
 
 			// ---- layers ----
@@ -538,6 +543,7 @@ if (~hasVST) {
 			state: 0, playing: 0, recOn: 0,
 			vol: 0.8, pan: 0.0, muted: 0, input: 0, gain: 1.0, recGain: 1.0,
 			gateOn: 1, gateThr: 0.02, autoArm: 0, autoThresh: 0.02,
+			compOn: 0, compThr: 0.6, compRatio: 0.4,
 			hp: 40, lp: 16000,
 			delayOn: 0, delayBeats: 0.75, delayDecay: 0.4, delayMix: 0.25,
 			revSend: 0.0, reverse: 0, fadeIn: 0, fadeOut: 0,
@@ -1558,6 +1564,7 @@ if (~hasVST) {
 				t[\state], t[\vol], t[\pan], t[\muted],
 				t[\meterPeak], t[\input], t[\layerCount],
 				t[\gateOn], t[\gateThr], t[\hp], t[\lp],
+				t[\compOn], t[\compThr], t[\compRatio],
 				t[\delayOn], t[\delayBeats], t[\delayDecay], t[\delayMix],
 				t[\revSend], t[\gain], t[\recGain], t[\reverse],
 				t[\fadeIn], t[\fadeOut], t[\loopRatio], t[\speed], t[\meterSum],

@@ -48,6 +48,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 
 | control | type | range / default | what it does | wire | engine |
 | --- | --- | --- | --- | --- | --- |
+| **compressor** | toggle + 2 knobs | off · threshold 5–95 % · ratio 1–20:1 | A `Compander` on the input path, before the write head, so a hot microphone is tamed on the way in instead of after the fact. Per track, like the gate and the filters. | `set t{i}.compOn/compThr/compRatio` | `\ld_track` `compOn`… |
 | INPUT | segmented (select past 4 sources) | `stereo` · `L` · `R` · `ch 3…n`, default `stereo` | Which hardware input feeds this track. `stereo` sums both channels (×0.7071); `L`/`R` take one channel and record it to both sides, so a mono mic and a mono guitar can be two tracks from one 2-channel interface. The list is built from `audio.in`, so an 8-input box offers 8 sources. The track header shows the choice as `IN ST` / `IN L` / `IN R`. | `set t{i}.input` | `~inputChannels` → `\ld_track` `input` |
 | GAIN | knob | 0–2 (100 %), default 1 | Input gain into the gate and filters. | `set t{i}.gain` | `gain` |
 | REC LEVEL | knob | 0–1.5 (100 %), default 1 | Level written into the buffer, before the `tanh` soft clip. | `set t{i}.recGain` | `recGain` |

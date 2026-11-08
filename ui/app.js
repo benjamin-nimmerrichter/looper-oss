@@ -561,7 +561,7 @@ function openFx(i) {
 
   // ---- input FX ----
   {
-    const [c] = card("input FX");
+    const [c, h] = card("input FX");
     if (Number(CFG.loop?.monitor ?? 0) === 0) {
       c.append(el("div", "caption", "software monitor off — you hear your interface directly"));
     }
@@ -575,6 +575,17 @@ function openFx(i) {
       label: "gain", min: 0, max: 2, value: t ? t.gain : 1,
       format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.gain`, v),
     }));
+    k.append(Knob({
+      label: "comp thr", min: 0.05, max: 0.95, value: t ? t.compThr : 0.6,
+      format: (v) => `${Math.round(v * 100)}%`,
+      onInput: (v) => set(`t${i}.compThr`, v),
+    }));
+    k.append(Knob({
+      label: "comp", min: 0.05, max: 1, value: t ? t.compRatio : 0.4,
+      format: (v) => `${(1 / v).toFixed(1)}:1`,
+      onInput: (v) => set(`t${i}.compRatio`, v),
+    }));
+    toggle(h, t && t.compOn, "compressor", `t${i}.compOn`);
     k.append(Knob({
       label: "rec level", min: 0, max: 1.5, value: t ? t.recGain : 1,
       format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.recGain`, v),
