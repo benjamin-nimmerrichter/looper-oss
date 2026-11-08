@@ -72,7 +72,12 @@ def analyse(path: pathlib.Path) -> dict:
             "rms": (sum(v * v for v in seg) / len(seg)) ** 0.5,
             "peak": max(abs(v) for v in seg),
         })
-    body = sorted(w["band"] for w in windows)
+    # Reference = the median of windows that actually carry signal. With
+    # percussive material most windows are silence, so a median over ALL windows
+    # is ~0 and every click onset scores hundreds of times the "body" -- which
+    # measures the material, not an artefact.
+    loud = [w["band"] for w in windows if w["rms"] >= 0.2 * max((x["rms"] for x in windows), default=0.0)]
+    body = sorted(loud or [w["band"] for w in windows])
     median = body[len(body) // 2] if body else 0.0
     guard = max(median, 1e-18)
     for w in windows:
@@ -170,11 +175,17 @@ async def drive() -> pathlib.Path:
         # take is built from kicks plus short 3 kHz clicks, which is the material
         # the metallic buzz was reported on -- and it puts real HF energy in the
         # body, so the band ratio means something.
+        # Continuous, not a fixed count: a source that stops inside the take puts a
+        # step in the material (and a body of digital silence), which the analysis
+        # then reports as an artefact. The bursts have to run for the whole take.
+        perc = None
         if os.environ.get("SEAM_PERC"):
-            for _ in range(8):
-                await send(op="svc", what="testTone", args=[60, 0.6, 0.09])
-                await send(op="svc", what="testTone", args=[3000, 0.35, 0.005])
-                await asyncio.sleep(0.25)
+            async def bursts():
+                while True:
+                    await send(op="svc", what="testTone", args=[60, 0.6, 0.09])
+                    await send(op="svc", what="testTone", args=[3000, 0.35, 0.005])
+                    await asyncio.sleep(0.25)
+            perc = asyncio.create_task(bursts())
         # log the transitions instead of guessing which one we caught
         seen, end = [], time.monotonic() + 6.0
         while time.monotonic() < end:
@@ -203,6 +214,8 @@ async def drive() -> pathlib.Path:
         # commit the overdub, stop, then PLAY: pressing once more while autoDub is
         # on only commits and starts ANOTHER take (state stays 1), and exporting
         # while a take is open captures a half-open loop.
+        if perc is not None:
+            perc.cancel()
         await send(op="act", a="press", t=0)
         await asyncio.sleep(0.6)
         await send(op="act", a="stop", t=0)

@@ -368,6 +368,34 @@ with a median, a window aligned to the loop point, and a source that is
 continuous across the seam. Until then "below baseline" is not a claim this
 measurement can support.
 
+
+## M3 bench: fixed twice, and what it now says
+
+The probe was measuring itself, in three separate ways. All three are fixed:
+
+1. **Body reference.** It used the median band energy over *all* windows. With
+   percussive material most windows are silence, so the median is ~0 and every
+   click onset scored 50-70x -- that was the material, not an artefact.
+2. **Source that stopped inside the take.** The percussive source fired a fixed
+   number of bursts and then stopped, which put a hard step in the take and
+   made the body digital silence (`wavcheck` reported `|dx|=0.00000` and a 37.7%
+   step at the stop). It now runs for the whole take.
+3. **Single export.** One export is dominated by where it starts relative to the
+   loop; `--repeat N` takes a median, which turned 1.5x-8.5x into a stable number.
+
+What the corrected bench reports:
+
+| source | worst 5-15 kHz window | verdict |
+| --- | --- | --- |
+| steady 220 Hz tone, 3 exports | **median 1.1x** (1.1, 1.1, 2.0) | no burst |
+| continuous percussive bursts | **3.7x** | no burst, but the highest reading so far |
+
+So the engine does not exceed the 4x threshold on either source in a controlled
+take. That does **not** mean the user is imagining it: their material, level and
+timing are not this bench. What it does mean is that the buffer-pair rewrite
+cannot be justified by these numbers, and the next step is to reproduce the
+sound with the user's own recording rather than with synthesised clicks.
+
 ## M4 under Wine (partial)
 
 `act reboot` returns the engine to `engine ready (5 tracks)` and state frames
