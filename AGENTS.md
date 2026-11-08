@@ -203,6 +203,14 @@ SuperCollider and its corners, in the order they bit us. Read before editing
     `color-scheme: dark` on `html` for the *opened* popup, which CSS cannot
     reach. In a WebKit snapshot a native select comes out blank as well.
 
+26. **`RecordBuf` records silence in this build (3.14.1).** With a 440 Hz tone at
+    0.2 straight into the UGen, `BufWr` lands 0.2 and `RecordBuf` lands 0.0 — same
+    signal, same buffer. The mixdown capture uses `BufWr` with a `Line` for
+    position and `Done.kr(line)` for the reply. Note this is not yet a complete
+    fix: the live export is *still* empty after the switch, so a second cause
+    (the `In.ar(masterBus, 2)` read, or the Bus/Buffer args on the capture) is
+    outstanding — see the open item in `goal.md`.
+
 ## 7. Change checklist
 
 Before you call a change done:

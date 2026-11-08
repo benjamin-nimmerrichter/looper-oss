@@ -426,11 +426,27 @@ if (~hasVST) {
 		Out.ar(outBus, sig);
 	}).add;
 
+	// ---- diagnostics: a known signal in the record path ---------------------
+	// The test bus exists so the recording chain can be *measured*: a track with
+	// `input` = n+1 records this tone, and the exported WAV then says whether the
+	// pitch, the routing and the bounce are right. Never offered in the UI.
+	SynthDef(\ld_testtone, { |bus = 0, freq = 220, amp = 0.25, secs = 8|
+		var env = EnvGen.kr(Env([0, 1, 1, 0], [0.01, (secs - 0.02).max(0.02), 0.01]),
+			doneAction: 2);
+		Out.ar(bus, SinOsc.ar(freq) * amp * env);
+	}).add;
+
 	// ---- session capture ---------------------------------------------------
-	SynthDef(\ld_capture, { |masterBus, buf, doneId = -1|
-		var sig = In.ar(masterBus, 2);
-		RecordBuf.ar(sig, buf, loop: 0, doneAction: 2);
-		SendReply.kr(Done.kr(Line.kr(0, 1, BufDur.kr(buf))), '/ldcaptured', [doneId]);
+	// RecordBuf records silence in this build (3.14.1): the same signal written
+	// with BufWr lands at full level, which is how the export was found to have
+	// been producing empty mixdowns. BufWr with a Line for position and Done for
+	// the reply is the version that actually works.
+	SynthDef(\ld_capture, { |masterBus, buf, doneId = -1, secs = 1.5|
+		var line = Line.ar(0, 1, secs.max(0.05));
+		var frames = BufFrames.kr(buf).max(1);
+		var pos = (line * frames).clip(0, frames - 1);
+		BufWr.ar(In.ar(masterBus, 2), buf, pos);
+		SendReply.kr(Done.kr(line), '/ldcaptured', [doneId]);
 	}).add;
 };
 
@@ -1194,8 +1210,8 @@ if (~hasVST) {
 		var frames = (seconds * s.sampleRate).round.asInteger;
 		File.mkdir(~sessionRoot);
 		~captureBuf = Buffer.alloc(s, frames, 2);
-		Synth(\ld_capture, [\masterBus, ~masterBus, \buf, ~captureBuf, \doneId, 1],
-			~grpClock);
+		Synth(\ld_capture, [\masterBus, ~masterBus, \buf, ~captureBuf, \doneId, 1,
+			\secs, seconds], ~grpClock);
 		~bridge.sendMsg('/ldcapturing', seconds);
 	};
 
@@ -1498,6 +1514,11 @@ if (~hasVST) {
 			"tap",       { ~tapTempo.value },
 			"stats",     { ~sendStats.value },
 			"probe",     { ~probeTrack.value((msg[2] ? 0).asInteger) },
+			// mute the hardware output without touching internal buses, so a test
+			// can drive a tone through the record path and measure it in silence
+			"silence",   { if ((msg[2] ? 1) != 0) { s.mute } { s.unmute } },
+			"testTone",  { Synth(\ld_testtone, [\bus, ~testBus,
+				\freq, msg[2] ? 220, \amp, msg[3] ? 0.25, \secs, msg[4] ? 8], ~grpClock) },
 			"midiAdd",   { ~midiAdd.value(msg[2], msg[3], msg[4], msg[5]) },
 			"inputGains", { ~bridge.sendMsg('/ldinputs',
 				(~inGain ? []).collect { |g| g ? 1 }.join(",").asString) },

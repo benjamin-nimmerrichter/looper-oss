@@ -189,6 +189,21 @@ release of their own, and D5 depends on a sample licence that does not exist yet
 
 ---
 
+## Open: the mixdown export is silent
+
+Found while adding audio-truth tests: every `svc export` writes a correctly
+sized WAV of zeros, and always has — the suite only ever checked that the file
+existed.
+
+- `RecordBuf` writes 0.0 for a signal that `BufWr` writes at 0.2 (verified with a
+  standalone sclang probe). `\ld_capture` now uses `BufWr` + a `Line`.
+- That alone did not fix it: the live export is still empty, so the remaining
+  suspects are the `In.ar(masterBus, 2)` read inside the capture synth and the
+  Bus/Buffer values passed as synth args.
+- Until it is fixed, the audio-truth checks (pitch under speed, routing to
+  buses B/C, bounce summing) cannot be written, because they read an exported
+  WAV. They were prototyped and removed rather than left red.
+
 ## Next: v0.3.0 — Windows
 
 Linux is the supported platform in 0.2.0. Windows is the next release, and the
