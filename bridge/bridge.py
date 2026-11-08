@@ -97,6 +97,10 @@ engine = SimpleUDPClient("127.0.0.1", ENGINE_PORT)
 quit_task: Any = None
 clients: set = set()
 last_state: dict[str, Any] | None = None
+# readiness is state, not an event: a UI that connects after the engine booted
+# must still learn that it booted, or it shows the boot screen for ever.
+engine_ready: dict[str, Any] | None = None
+engine_failed: str | None = None
 
 
 # --------------------------------------------------------------------- utils --
@@ -475,13 +479,19 @@ def on_auto(_addr: str, *args: Any) -> None:
 def on_boot_fail(_addr: str, *args: Any) -> None:
     why = str(args[0]) if args else "unknown"
     log(f"ENGINE BOOT FAILED: {why}")
+    global engine_failed, engine_ready
+    engine_failed = why
+    engine_ready = None
     push({"t": "bootfail", "msg": why})
 
 
 def on_ready(_addr: str, *args: Any) -> None:
+    global engine_ready, engine_failed
     tracks = inum(args[0]) if args else N
+    engine_ready = {"t": "ready", "tracks": tracks}
+    engine_failed = None
     log(f"engine ready ({tracks} tracks)")
-    push({"t": "ready", "tracks": tracks})
+    push(engine_ready)
     engine.send_message("/ld/svc", ["stats"])
 
 
@@ -706,6 +716,14 @@ async def ws_handler(ws: Any) -> None:
                 }
             )
         )
+        # replay readiness for a UI that connected late (browser windows can
+        # take many seconds to appear; the engine usually wins that race)
+        if engine_ready is not None:
+            await ws.send(json.dumps(engine_ready))
+        elif engine_failed is not None:
+            await ws.send(json.dumps({"t": "bootfail", "msg": engine_failed}))
+        if last_state is not None:
+            await ws.send(json.dumps(last_state))
         async for raw in ws:
             handle_command(raw)
     except websockets.ConnectionClosed as exc:

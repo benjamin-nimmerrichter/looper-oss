@@ -360,8 +360,8 @@ def wait_for_ui(bridge, url: str | None = None, timeout: float = 180.0,
             # prompt, a Store build). One fallback to the default browser is
             # better than a black screen; two would be the old cascade again.
             fell_back = True
-            print("window: no UI after %.0fs, opening the default browser"
-                  % fallback_after, flush=True)
+            print(f"window: no UI after {fallback_after:.0f}s, opening the default browser",
+                  flush=True)
             try:
                 from app.window import browser_tab  # noqa: PLC0415
                 browser_tab(url)
@@ -422,6 +422,10 @@ def start_bridge(home: pathlib.Path, logfile: pathlib.Path):
 
 
 # ------------------------------------------------------------------- engine --
+    return bridge
+
+
+
 def resume_drift(last_wall: float, last_mono: float,
                  wall: float, mono: float) -> float:
     """Seconds the machine spent asleep between two samples.
@@ -506,7 +510,6 @@ def reexec_in_venv(argv: list[str]) -> int | None:
         return None
     env = dict(os.environ, LOOPER_OSS_REEXEC="1")
     return subprocess.run([str(exe), "-m", "app.main", *argv], env=env).returncode
-    return bridge
 
 
 def main(argv: list[str] | None = None) -> int:
