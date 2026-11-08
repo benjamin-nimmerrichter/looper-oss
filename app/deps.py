@@ -164,7 +164,18 @@ def report() -> list[dict[str, object]]:
 
 
 def missing_keys() -> list[str]:
-    return [str(row["key"]) for row in report() if not row["ok"]]
+    """Dependencies that are actually missing *on this platform*.
+
+    GTK and WebKit are how the window is drawn on Linux; on Windows the window is
+    Edge or Chromium in --app mode, and SuperCollider ships inside the package.
+    Telling a Windows user to run `python3 looper_oss.py --install-deps` for GTK
+    is wrong twice over: the packages do not exist there and the command is not
+    how they installed it.
+    """
+    keys = [str(row["key"]) for row in report() if not row["ok"]]
+    if os.name == "nt":
+        keys = [k for k in keys if k not in ("gtk", "webkit", "plugins")]
+    return keys
 
 
 def install_command(keys: list[str] | None = None) -> list[str] | None:
