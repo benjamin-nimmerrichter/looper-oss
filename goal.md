@@ -66,7 +66,14 @@ missing and installs it in one step (`--install-deps`, shipped). Full bundling
 stays on the table as a separate "fat" variant, and only if a machine without
 those packages actually has to run it.
 
-## Phase D — RC-505mkII parity (issue #3)
+## Phase D — RC-505mkII parity (issue #3) — status
+
+| | |
+| --- | --- |
+| D1 speed · D2 layer tricks · D4 mixer/routing · D5 rhythm · D6 MIDI · D7 memories · D8 rest | **done**, each verified in `scripts/smoke.py` |
+| D3 FX banks | 4 insert slots and 4 recallable banks **done**; **toggle/momentary** and the **parameter step-sequence** open — both need an editor in the drawer before they are usable, not just engine plumbing |
+| Phase E drawer screenshots | blocked: this sandbox's rasteriser turns text inside composited layers into wrong glyphs; `scripts/shots.py` is ready for a GPU machine |
+
 
 Issue #3 lists the hardware's manual. It is a roadmap, not a sprint. Ordered the
 way it can be built on what already exists:
