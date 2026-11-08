@@ -258,7 +258,9 @@ def find_sclang() -> str | None:
     # A packaged build carries SuperCollider with it (sc/sclang.exe beside the
     # application): no separate install, nothing to find on PATH.
     here = pathlib.Path(sys.executable).resolve().parent
-    for bundled in (here / "sc" / "sclang.exe", here.parent / "sc" / "sclang.exe"):
+    for where in (bundled_root() / "sc", here / "sc", here.parent / "sc",
+                  here / "_internal" / "sc"):
+        bundled = where / "sclang.exe"
         if bundled.is_file():
             return str(bundled)
     # On Windows never resolve a bare "sclang": PATH there can hold a foreign

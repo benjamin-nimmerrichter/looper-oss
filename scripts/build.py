@@ -204,7 +204,13 @@ def bundle_supercollider(appdir: pathlib.Path, allow_download: bool = True) -> N
     if not (src / "sclang.exe").exists():
         print(f"   SuperCollider not found at {src} — the build will need it installed")
         return
-    dest = appdir / "sc"
+    # PyInstaller onedir keeps the payload in _internal/, and app/main.py:stage()
+    # copies _internal/ into the versioned home. A bundle placed beside the exe
+    # is therefore never staged, and the launched copy finds no sc/sclang.exe --
+    # which is exactly how the first Windows install came up with an empty
+    # engine.log. Put it where the payload actually lives.
+    payload = appdir / "_internal"
+    dest = (payload if payload.is_dir() else appdir) / "sc"
     if dest.exists():
         try:
             shutil.rmtree(dest)
