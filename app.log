@@ -1,8 +1,0 @@
---- Looper OSS looper-oss starting: home=C:\Users\Benjamin\AppData\Local\looper-oss\app\0.2.0
-Missing: sc, plugins, gtk, webkit.
-Install them with:  python3 looper_oss.py --install-deps
-bridge: cannot set the quantum ([WinError 2] Systém nemůže nalézt uvedený soubor)
-bridge: ws://127.0.0.1:8182  osc in 9001 -> engine 9000  (5 tracks)
-window: mode=auto kiosk=False error=False
-window: native unavailable (no PyGObject/WebKit for this python)
-window: chromium/edge --app closed

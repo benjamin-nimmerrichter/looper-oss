@@ -45,3 +45,6 @@ desktop.ini
 screenshots/
 *.wav
 !tests/fixtures/*.wav
+
+# logs dropped in the repo root while debugging
+*.log
