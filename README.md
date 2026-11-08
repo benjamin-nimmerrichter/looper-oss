@@ -474,9 +474,9 @@ to play out. It will never be the real thing — a pedal has the buttons under y
 fingers and nothing to look at — but it's a way in, and that seemed worth building.
 
 It's a passion project, built with an AI assistant in the editor. Vibecoded, if you
-like. I'm the one standing behind it though, and the audio side is my degree
-talking: when something sounded wrong I measured it instead of trusting that it
-looked fine. Beardyman's Beardytron 5000 mkII — an Ableton session driven from
+like. I'm the one standing behind it though — six years of audio processing and
+programming, so when something sounded wrong I measured it instead of trusting that
+it looked fine. Beardyman's Beardytron 5000 mkII — an Ableton session driven from
 custom iPad apps — is the same idea at a scale I can't reach; I wanted the "have a
 go" version.
 
