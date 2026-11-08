@@ -470,8 +470,9 @@ what I do for fun.
 I built this because I wanted to try looping and couldn't justify the price of a
 hardware loop station just to find out whether I'd like it. A cheap touchscreen off
 AliExpress plus this app is enough to train on, and with a decent interface enough
-to play out. It will never be the real thing — a pedal has the buttons under your
-fingers and nothing to look at — but it's a way in, and that seemed worth building.
+to play out. It will never be the real thing: a pedal puts physical buttons under
+your fingers, so you can play without looking at anything. But it is a way in, and
+that is what I wanted to make.
 
 It's a passion project, built with an AI assistant in the editor. Vibecoded, if you
 like. I'm the one standing behind it though — six years of audio processing and
