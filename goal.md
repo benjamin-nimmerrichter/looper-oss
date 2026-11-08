@@ -338,6 +338,30 @@ So the buffer pair is still to build, and the next attempt must start by
 isolating which layer's playback the burst belongs to (per-layer export or a
 solo'd layer), not by rewriting the write path again.
 
+
+### M3 isolation result: the layers are clean, the instrument is not
+
+Soloing each layer's gain and exporting separately, same take:
+
+| what | peak | worst 5-15 kHz window |
+| --- | --- | --- |
+| layer 0 (first take) | 0.112 | **1.0x** |
+| layer 1 (the overdub) | 0.114 | **1.9x** |
+| layer 2 (empty) | 0.005 | -- |
+
+Neither take carries the artefact. Repeating the *mix* export within one session
+gave 1.5x, while separate runs of the same configuration measured 2.2x, 3.6x,
+4.6x and 8.5x. The spread across identical settings is larger than any effect
+currently being chased.
+
+**Conclusion: `seamprobe` cannot gate M3 yet.** The worst-window statistic is a
+maximum over ~80 windows, so it is dominated by where the export happens to start
+relative to the loop and by the tone switching on or off inside the take. Before
+the buffer pair is built the instrument needs: several exports per configuration
+with a median, a window aligned to the loop point, and a source that is
+continuous across the seam. Until then "below baseline" is not a claim this
+measurement can support.
+
 ## M4 under Wine (partial)
 
 `act reboot` returns the engine to `engine ready (5 tracks)` and state frames
