@@ -223,6 +223,16 @@ between the first take and the dub there is a digital buzz, main energy around
 **10 kHz, metallic**. It is a transition artefact, not a level problem, and it
 only appears when the loop rolls from take 1 into take 2.
 
+**Measured fact: it lasts about 100 ms.** That rules out the hand-off window
+(a few ms), and it is longer than the seam: `xfadeMs` is clamped to 0.1-50 ms and
+defaults to 2, so the seam dip is 4 ms unless it was driven to the ceiling. A
+100 ms artefact at the moment a *new layer* opens points instead at **that
+layer's buffer**: `~startRec` sends `buf.zero` and opens the write gate in the
+same breath, so whatever the layer held before -- an earlier take, or content
+restored from a session -- is played into the mix until the zero lands. That is
+also a better explanation for the missing drum downbeat than a few ms of
+overwrite: it would take out ~100 ms of the take's first pass, every time.
+
 **Candidates, none proven -- do not "fix" one of these blind:**
 
 1. **The overdub hand-off itself.** `/ldwrap` reaches sclang after the wrap, so
