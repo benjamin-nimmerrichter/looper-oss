@@ -140,7 +140,11 @@ def _app_window(url: str, kiosk: bool) -> bool:
     exe = _browser_exe()
     if not exe:
         return False
-    flags = ["--app=" + url, "--window-size=1280,800"]
+    # --no-proxy-server: a system proxy / PAC / VPN client will happily try to
+    # proxy even 127.0.0.1, and then the page never loads while the app's own
+    # request to the same URL succeeds -- which is precisely the reported symptom.
+    flags = ["--app=" + url, "--window-size=1280,800", "--no-proxy-server",
+             "--proxy-bypass-list=127.0.0.1;localhost"]
     if kiosk:
         flags.append("--start-fullscreen")
     try:

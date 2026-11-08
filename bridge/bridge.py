@@ -303,6 +303,50 @@ def opened_from_log() -> dict[str, str]:
     return found
 
 
+
+# ------------------------------------------------------------------- ui files --
+# The page and its WebSocket are served from the SAME origin and port. Chromium
+# (Chrome 142 / Edge 143 onward) asks permission before a page may talk to a
+# local network destination, and a socket on a second port can be blocked with
+# nothing in the log to show for it: the page loads, the socket never opens, the
+# boot screen waits for ever. One origin removes the question entirely.
+UI_ROOT: pathlib.Path | None = None
+
+
+def _ui_response(request: Any) -> Any:
+    import mimetypes
+    from http import HTTPStatus
+
+    from websockets.datastructures import Headers
+    from websockets.http11 import Response
+
+    if UI_ROOT is None:
+        return None
+    path = request.path.split("?", 1)[0]
+    if path in ("/", ""):
+        path = "/index.html"
+    target = (UI_ROOT / path.lstrip("/")).resolve()
+    try:
+        target.relative_to(UI_ROOT.resolve())
+    except ValueError:
+        return Response(HTTPStatus.FORBIDDEN, "Forbidden", Headers(), b"")
+    if not target.is_file():
+        return Response(HTTPStatus.NOT_FOUND, "Not found", Headers(), b"")
+    body = target.read_bytes()
+    headers = Headers()
+    headers["Content-Type"] = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+    headers["Content-Length"] = str(len(body))
+    headers["Cache-Control"] = "no-store"      # a rebuilt UI must apply on reload
+    return Response(HTTPStatus.OK, "OK", headers, body)
+
+
+def process_request(connection: Any, request: Any) -> Any:
+    """WebSocket handshakes pass through; plain GETs are answered with the UI."""
+    if request.headers.get("Upgrade"):
+        return None
+    return _ui_response(request)
+
+
 # --------------------------------------------------------------------- state --
 def on_state(_addr: str, *args: Any) -> None:
     global last_state
@@ -755,7 +799,8 @@ async def main() -> None:
     osc_server = AsyncIOOSCUDPServer(("127.0.0.1", STATE_PORT), dispatcher, loop)
     await osc_server.create_serve_endpoint()
 
-    async with websockets.serve(ws_handler, "127.0.0.1", WS_PORT, max_size=None):
+    async with websockets.serve(ws_handler, "127.0.0.1", WS_PORT, max_size=None,
+                                process_request=process_request):
         log(
             f"ws://127.0.0.1:{WS_PORT}  osc in {STATE_PORT} -> engine {ENGINE_PORT}  "
             f"({N} tracks)"

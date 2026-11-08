@@ -626,6 +626,12 @@ def main(argv: list[str] | None = None) -> int:
     if last_error is not None:
         print(f"ui: NOT reachable at {url} ({last_error})", file=sys.stderr, flush=True)
     bridge_module = start_bridge(home, logs / "bridge.log")
+    # Serve the page from the SAME port as the socket, and open the window there:
+    # one origin, so a Chromium "local network access" prompt cannot strand the UI
+    # with a loaded page and a socket that never opens.
+    bridge_module.UI_ROOT = home / "ui"
+    ws_port = int(getattr(bridge_module, "WS_PORT", 8182))
+    ui_url = f"http://127.0.0.1:{ws_port}/"
 
     engine: Engine | None = None
     if sclang:
@@ -702,8 +708,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         # "launched" means a window was started and its process is not a proxy for
         # the user's window: the bridge's UI clients decide when we are done.
-        if open_window(url, kiosk=args.kiosk, mode=args.window) == "launched":
-            wait_for_ui(bridge_module, url)
+        if open_window(ui_url, kiosk=args.kiosk, mode=args.window) == "launched":
+            wait_for_ui(bridge_module, ui_url)
     except SystemExit as exc:
         code = exc.code if isinstance(exc.code, int) else 1
     finally:
