@@ -130,7 +130,7 @@ def migrate_config(path: pathlib.Path) -> None:
         loop["autoDub"] = 1          # 0.1.0 shipped this off; the RC-505 carries on
     cfg["version"] = CONFIG_VERSION
     with contextlib.suppress(OSError):
-        path.write_text(json.dumps(cfg, indent=2) + "\n")
+        path.write_text(json.dumps(cfg, indent=2) + "\n", newline="\n")
 
 
 def stage(src: pathlib.Path, dst: pathlib.Path) -> None:

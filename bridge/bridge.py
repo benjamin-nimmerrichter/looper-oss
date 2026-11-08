@@ -344,7 +344,7 @@ def on_midi_map(_addr: str, *args: Any) -> None:
     if CFG["midi"].get("map") != entries:
         set_path(CFG, "midi.map", entries)
         try:
-            CONFIG_JSON.write_text(json.dumps(CFG, indent=2) + "\n")
+            CONFIG_JSON.write_text(json.dumps(CFG, indent=2) + "\n", newline="\n")
             write_from(str(CONFIG_JSON), str(CONFIG_SCD))
         except OSError as exc:
             log(f"cannot persist midi map ({exc})")
@@ -391,7 +391,7 @@ def on_vst_banks(_addr: str, *args: Any) -> None:
     if CFG.setdefault("vst", {}).get("banks") != tracks:
         CFG["vst"]["banks"] = tracks
         try:
-            CONFIG_JSON.write_text(json.dumps(CFG, indent=2) + "\n")
+            CONFIG_JSON.write_text(json.dumps(CFG, indent=2) + "\n", newline="\n")
             write_from(str(CONFIG_JSON), str(CONFIG_SCD))
         except OSError as exc:
             log(f"cannot persist vst banks ({exc})")
@@ -452,7 +452,8 @@ def on_saved(_addr: str, *args: Any) -> None:
         sess.mkdir(parents=True, exist_ok=True)
         out = (sess / "session.json").resolve()
         if out.is_relative_to(ROOT.resolve()):
-            out.write_text(json.dumps({"state": last_state, "slot": slot}, indent=2))
+            out.write_text(json.dumps({"state": last_state, "slot": slot}, indent=2),
+                       newline="\n")
     push({"t": "saved", "slot": slot, "layers": written, "dir": directory})
 
 
@@ -577,7 +578,7 @@ def apply_config(dotted: str, value: Any) -> None:
     set_path(CFG, dotted, value)
     CFG_JSON_BACKUP = CONFIG_JSON.with_suffix(".json.bak")
     shutil.copyfile(CONFIG_JSON, CFG_JSON_BACKUP)
-    CONFIG_JSON.write_text(json.dumps(CFG, indent=2) + "\n")
+    CONFIG_JSON.write_text(json.dumps(CFG, indent=2) + "\n", newline="\n")
     write_from(str(CONFIG_JSON), str(CONFIG_SCD))
 
     if dotted == "audio.quantum":
