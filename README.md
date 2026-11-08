@@ -8,6 +8,42 @@ recording with autosave. Runs fully offline on Linux and Windows.
 Nothing in this repo implements audio DSP. Audio is stock SuperCollider UGens;
 the UI is a browser page; the only Python translates OSC to JSON.
 
+## About
+
+Hi — I'm Benjamin Nimmerrichter. I studied audio engineering (my master's is the
+"Ing." in front of my name) and I'm a Ph.D. student at BUT Brno, working on machine
+learning for audio, visuals and cybersecurity. Beatboxing and producing music are
+what I do for fun.
+
+I built this because I wanted to try looping and couldn't justify the price of a
+hardware loop station just to find out whether I'd like it. A cheap touchscreen off
+AliExpress plus this app is enough to train on, and with a decent interface enough
+to play out. It will never be the real thing: a pedal puts physical buttons under
+your fingers, so you can play without looking at anything. But it is a way in, and
+that is what I wanted to make.
+
+It's a passion project, built with **pi** — the coding agent, packaged as
+`@earendil-works/pi-coding-agent` 1.5.0, not a chat panel bolted onto an editor.
+Vibecoded, if you like; but I'm the one standing behind it, and after six years of
+audio processing and programming I measured what sounded wrong instead of trusting
+that it looked fine.
+
+pi began as Mario Zechner's project and is now maintained under Earendil Works —
+thanks to that team for building it, and to the people behind the extensions this
+ran through: `@narumitw/pi-goal`, `@quintinshaw/pi-dynamic-workflows`,
+`@mjasnikovs/pi-task`, `pi-lens`, the `bigpowers` skill set,
+`@juicesharp/rpiv-todo`, `pi-web-access`, `pi-tool-guard`, `@melihmucuk/leash`,
+`@hicaru/pi-rlm`, `@firstpick/pi-package-webui` and `pi-lmstudio`.
+
+I name the package outright on purpose. pi is easy to muddle, and an agent asked
+about it will sometimes describe something else entirely.
+
+If you know looping you probably know Beardyman. His Beardytron 5000 mkII is an
+Ableton Live session driven from custom iPad apps and controllers — the same idea
+at a scale I can't reach; I wanted the "have a go" version of that.
+
+If it's useful, great. If it's broken or annoying, open an issue.
+
 ## What you get
 
 - **A parametric track count, not a fixed layout.** 1 to 16 tracks, chosen in
@@ -459,42 +495,6 @@ works and persists, and writes screenshots to `/tmp/looper-oss-ui/`.
 Logs are in `logs/`, rotated at 5 MB. Closing the window stops the engine,
 the bridge and the interface server together — if a crash ever leaves an
 `scsynth` behind, the next start clears it.
-
-## About
-
-Hi — I'm Benjamin Nimmerrichter. I studied audio engineering (my master's is the
-"Ing." in front of my name) and I'm a Ph.D. student at BUT Brno, working on machine
-learning for audio, visuals and cybersecurity. Beatboxing and producing music are
-what I do for fun.
-
-I built this because I wanted to try looping and couldn't justify the price of a
-hardware loop station just to find out whether I'd like it. A cheap touchscreen off
-AliExpress plus this app is enough to train on, and with a decent interface enough
-to play out. It will never be the real thing: a pedal puts physical buttons under
-your fingers, so you can play without looking at anything. But it is a way in, and
-that is what I wanted to make.
-
-It's a passion project, built with **pi** — the coding agent, packaged as
-`@earendil-works/pi-coding-agent` 1.5.0, not a chat panel bolted onto an editor.
-Vibecoded, if you like; but I'm the one standing behind it, and after six years of
-audio processing and programming I measured what sounded wrong instead of trusting
-that it looked fine.
-
-pi began as Mario Zechner's project and is now maintained under Earendil Works —
-thanks to that team for building it, and to the people behind the extensions this
-ran through: `@narumitw/pi-goal`, `@quintinshaw/pi-dynamic-workflows`,
-`@mjasnikovs/pi-task`, `pi-lens`, the `bigpowers` skill set,
-`@juicesharp/rpiv-todo`, `pi-web-access`, `pi-tool-guard`, `@melihmucuk/leash`,
-`@hicaru/pi-rlm`, `@firstpick/pi-package-webui` and `pi-lmstudio`.
-
-I name the package outright on purpose. pi is easy to muddle, and an agent asked
-about it will sometimes describe something else entirely.
-
-If you know looping you probably know Beardyman. His Beardytron 5000 mkII is an
-Ableton Live session driven from custom iPad apps and controllers — the same idea
-at a scale I can't reach; I wanted the "have a go" version of that.
-
-If it's useful, great. If it's broken or annoying, open an issue.
 
 ## Credits
 
