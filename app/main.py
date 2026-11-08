@@ -327,7 +327,7 @@ def start_static_server(root: pathlib.Path, port: int) -> None:
             # "nothing listens" from "the page loaded but its socket is blocked"
             if not Handler.served:
                 Handler.served = True
-                print(f"ui: browser fetched {self.path}", flush=True)
+                print(f"ui: static request {self.path}", flush=True)
 
     bound = functools.partial(Handler, directory=str(root / "ui"))
     try:

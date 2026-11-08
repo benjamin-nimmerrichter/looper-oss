@@ -311,6 +311,8 @@ def opened_from_log() -> dict[str, str]:
 # nothing in the log to show for it: the page loads, the socket never opens, the
 # boot screen waits for ever. One origin removes the question entirely.
 UI_ROOT: pathlib.Path | None = None
+_ui_seen = False
+_ws_seen = False
 
 
 def _ui_response(request: Any) -> Any:
@@ -341,9 +343,22 @@ def _ui_response(request: Any) -> Any:
 
 
 def process_request(connection: Any, request: Any) -> Any:
-    """WebSocket handshakes pass through; plain GETs are answered with the UI."""
+    """WebSocket handshakes pass through; plain GETs are answered with the UI.
+
+    Both are logged once: "nothing connects" has three very different causes and
+    this line tells them apart -- page never loaded, handshake refused, handler
+    failing.
+    """
     if request.headers.get("Upgrade"):
+        global _ws_seen
+        if not _ws_seen:
+            _ws_seen = True
+            log(f"ws handshake from {request.path}")
         return None
+    global _ui_seen
+    if not _ui_seen:
+        _ui_seen = True
+        log(f"served {request.path} to a browser")
     return _ui_response(request)
 
 
