@@ -21,7 +21,7 @@ SoundIn 0..n ─▶ select ──▶ gain ──▶ gate ──▶ highpass ─�
                      │                                         │
                      └──────────────▶ fade in/out ──▶ pan/vol ──▶ mix bus (2 ch / track)
                                                                   └──▶ reverb send
-master: Σ mix + FreeVerb2(send) + click ──▶ master HP/LP ──▶ Compander ──▶ clip .98 ──▶ out
+master: Σ(busA·gA + busB·gB + busC·gC) + FreeVerb2(send) + click ──▶ master HP/LP ──▶ Compander ──▶ clip .98 ──▶ out
 ```
 
 One `Phasor` in `\ld_transport` writes loop phase to an **audio bus**. Every
@@ -36,6 +36,18 @@ Because the phase comes from one source, tracks cannot drift, and a track with
 `loopRatio = 2` stays locked to the others.
 
 ## Rhythm engine
+
+## Output buses
+
+There are **three** stereo buses, each as wide as the track count, so every
+track owns a pair on every bus. A track's `route` picks which one it writes
+into (`~busFor`); changing it is `synth.set(\outBus, …)` plus the meter's bus, so
+it takes effect without rebuilding anything. A is the main mix and carries the
+reverb send, the click and the drums; B and C are dry. `\ld_master` sums each
+bus with its own gain and then adapts to the device: six or more output channels
+get a pair each, four gives A and (B+C) on 2/3, two folds everything into 0/1.
+The master compressor and limiter run per bus, so a hot mix on C cannot clip the
+main output.
 
 `\ld_rhythm` is a fourth source, on its own bus, summed by `\ld_master` after the
 track mix:

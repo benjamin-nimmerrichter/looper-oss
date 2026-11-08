@@ -343,26 +343,40 @@ if (~hasVST) {
 	}).add;
 
 	// ---- master: mix + reverb + click, master FX, limiter ------------------
-	SynthDef(\ld_master, { |mixBase, revBus, clickBus, masterBus, rhythmBus = 0,
+	SynthDef(\ld_master, { |busA, busB, busC, gA = 1, gB = 1, gC = 1,
+			revBus, clickBus, masterBus, rhythmBus = 0,
 			vol = 0.8, revMix = 0.6, room = 0.8, damp = 0.3, clickVol = 0.3,
 			masterHp = 0, masterLp = 18000|
-		var rv, dry, wet, click, full, sig, mfx;
+		// Three stereo output buses. Reverb, click and rhythm belong to the main
+		// (A) mix; B and C are dry groups a player routes tracks into.
+		// The device decides how they reach hardware: 6+ outputs get a pair each,
+		// 4 gets A and (B+C), anything less folds all three into 0/1.
+		var a, b, c, rv, wet, click, rhy, mfx, lim, outA, outB, nOut;
+		nOut  = (~audio[\out] ? 2).asInteger;
+		a     = In.ar(busA, 32).clump(2).sum * gA;
+		b     = In.ar(busB, 32).clump(2).sum * gB;
+		c     = In.ar(busC, 32).clump(2).sum * gC;
 		rv    = In.ar(revBus, 2);
-		// the rhythm engine has its own bus, so it survives a track clear and is
-		// summed after the limiter chain like any other source
-		dry   = In.ar(mixBase, 32).clump(2).sum + In.ar(rhythmBus, 2);
-		wet   = FreeVerb2.ar(rv[0], rv[1], 1, room, damp);
+		wet   = FreeVerb2.ar(rv[0], rv[1], 1, room, damp) * revMix;
 		click = In.ar(clickBus, 2) * clickVol;
-		full  = dry + (wet * revMix) + click;
+		rhy   = In.ar(rhythmBus, 2);
+		a     = a + wet + click + rhy;
 		mfx   = ((masterHp > 1) + (masterLp < 19999)).clip(0, 1);
-		full  = Select.ar(K2A.ar(mfx), [
-			full,
-			BLowPass.ar(BHiPass.ar(full, masterHp.clip(20, 2000), 0.707),
-				masterLp.clip(1000, 19000), 0.707)
-		]);
-		sig = Compander.ar(full, full, 0.9, 1, 0.1, 0.001, 0.1).clip2(0.98);
-		Out.ar(masterBus, sig * vol);
-		Out.ar(0, sig * vol);
+		lim   = { |x|
+			x = Select.ar(K2A.ar(mfx), [
+				x,
+				BLowPass.ar(BHiPass.ar(x, masterHp.clip(20, 2000), 0.707),
+					masterLp.clip(1000, 19000), 0.707)
+			]);
+			Compander.ar(x, x, 0.9, 1, 0.1, 0.001, 0.1).clip2(0.98) * vol
+		};
+		outA = a + (if (nOut < 4) { b } { DC.ar(0) })
+			+ (if (nOut < 6) { c } { DC.ar(0) });
+		outB = b + (if (nOut < 6) { c } { DC.ar(0) });
+		Out.ar(0, lim.(outA));
+		if (nOut >= 4) { Out.ar(2, lim.(outB)) };
+		if (nOut >= 6) { Out.ar(4, lim.(c)) };
+		Out.ar(masterBus, lim.(a + b + c));
 	}).add;
 
 	// ---- rhythm engine ------------------------------------------------------
@@ -403,6 +417,10 @@ if (~hasVST) {
 
 ~pushTrack = { |t, key, v| t[key.asSymbol] = v; t[\synth].set(key.asSymbol, v) };
 
+// which output bus a track writes into: 0 = A (main), 1 = B, 2 = C
+~busGains = [1, 1, 1];
+~busFor = { |route| [~busA, ~busB, ~busC][route.asInteger.clip(0, 2)].index };
+
 ~pushAll = { |t, keys|
 	keys.do { |k| t[\synth].set(k.asSymbol, t[k.asSymbol]) };
 };
@@ -412,7 +430,7 @@ if (~hasVST) {
 	// destination and put it back exactly as it was.
 	~makeTrackSynth = { |t, i|
 		var args = [
-			\outBus, ~mixBus.index + (i * 2), \revBus, ~revBus,
+			\outBus, ~busFor.value(t[\route]) + (i * 2), \revBus, ~revBus,
 			\phaseBus, ~phaseBus, \idx, i, \testBus, ~testBus,
 			\scratch, ~scratch.bufnum,
 			\loopLen, ~loopFrames.value, \loopRatio, t[\loopRatio],
@@ -432,7 +450,7 @@ if (~hasVST) {
 		};
 		t[\synth] = Synth(\ld_track, args, ~grpTracks, \addToTail);
 		t[\meterSynth] = Synth(\ld_meter,
-			[\bus, ~mixBus.index + (i * 2), \idx, i, \meterBuf, ~meterBuf],
+			[\bus, ~busFor.value(t[\route]) + (i * 2), \idx, i, \meterBuf, ~meterBuf],
 			~grpTracks, \addToTail);
 		t[\autoSynth] = Synth(\ld_autodetect,
 			[\idx, i, \arm, 0, \thresh, t[\autoThresh], \input, t[\input],
@@ -494,7 +512,11 @@ if (~hasVST) {
 		s.sync;
 
 	~phaseBus  = Bus.audio(s, 1);
-	~mixBus    = Bus.audio(s, ~maxTracks * 2);
+	// three stereo output buses, each wide enough for every track's pair
+	~busA      = Bus.audio(s, ~maxTracks * 2);
+	~busB      = Bus.audio(s, ~maxTracks * 2);
+	~busC      = Bus.audio(s, ~maxTracks * 2);
+	~mixBus    = ~busA;   // A is the main mix: reverb, click and rhythm
 	~revBus    = Bus.audio(s, 2);
 	~clickBus  = Bus.audio(s, 2);
 	~testBus   = Bus.audio(s, 1);      // diagnostics only
@@ -525,7 +547,9 @@ if (~hasVST) {
 	~rhythmSet.value(~state[\rhythmOn], ~state[\rhythmKit], ~state[\rhythmPattern]);
 
 	~master = Synth(\ld_master, [
-		\mixBase, ~mixBus, \revBus, ~revBus, \clickBus, ~clickBus,
+		\busA, ~busA, \busB, ~busB, \busC, ~busC,
+		\gA, ~busGains[0], \gB, ~busGains[1], \gC, ~busGains[2],
+		\revBus, ~revBus, \clickBus, ~clickBus,
 		\rhythmBus, ~rhythmBus,
 		\masterBus, ~masterBus, \vol, ~state[\masterVol],
 		\revMix, ~state[\revMix], \room, ~state[\room],
@@ -547,7 +571,7 @@ if (~hasVST) {
 			hp: 40, lp: 16000,
 			delayOn: 0, delayBeats: 0.75, delayDecay: 0.4, delayMix: 0.25,
 			revSend: 0.0, reverse: 0, fadeIn: 0, fadeOut: 0,
-			loopRatio: 1, speed: 1, mark: 1, contentLen: 0,
+			route: 0, loopRatio: 1, speed: 1, mark: 1, contentLen: 0,
 			meterL: 0, meterR: 0, layerPeak: 0, meterPeak: 0, meterSum: 0, cpu: 0,
 			// sized from ~vstIds so adding an insert slot cannot leave these short
 			vst: Array.fill(~vstIds.size, nil),
@@ -864,6 +888,13 @@ if (~hasVST) {
 	~setTrack = { |i, key, v|
 		var t = ~tracks[i];
 		if (t.notNil) {
+			if (key == "route") {
+				var base;
+				t[\route] = v.asInteger.clip(0, 2);
+				base = ~busFor.value(t[\route]) + (i * 2);
+				t[\synth].set(\outBus, base);
+				if (t[\meterSynth].notNil) { t[\meterSynth].set(\bus, base) };
+			} {
 			if (key == "loopRatio") {
 				t[\loopRatio] = v.asInteger.clip(1, 8);
 				t[\synth].set(\loopRatio, t[\loopRatio]);
@@ -878,6 +909,7 @@ if (~hasVST) {
 				} {
 					~pushTrack.value(t, key, v);
 				};
+			};
 			};
 		};
 	};
@@ -1564,7 +1596,7 @@ if (~hasVST) {
 				t[\state], t[\vol], t[\pan], t[\muted],
 				t[\meterPeak], t[\input], t[\layerCount],
 				t[\gateOn], t[\gateThr], t[\hp], t[\lp],
-				t[\compOn], t[\compThr], t[\compRatio],
+				t[\compOn], t[\compThr], t[\compRatio], t[\route],
 				t[\delayOn], t[\delayBeats], t[\delayDecay], t[\delayMix],
 				t[\revSend], t[\gain], t[\recGain], t[\reverse],
 				t[\fadeIn], t[\fadeOut], t[\loopRatio], t[\speed], t[\meterSum],

@@ -211,8 +211,8 @@ async def run_tests(c: Client) -> None:
         return
     globals_ = len(st) - 2
     fields = len(st["tracks"][0])
-    check("state shape (23 globals / 28 track fields)",
-          globals_ == 23 and fields == 28 and len(st["tracks"]) == N,
+    check("state shape (23 globals / 29 track fields)",
+          globals_ == 23 and fields == 29 and len(st["tracks"]) == N,
           f"{globals_}/{fields}/{len(st['tracks'])}")
 
     # meters + playhead live inside the state frame (no separate OSC paths)
@@ -306,6 +306,13 @@ async def run_tests(c: Client) -> None:
     check("input compressor is per track", st is not None,
           f"compOn={st['tracks'][0]['compOn'] if st else '?'}")
     await c.set("t0.compOn", 0)
+
+    # D4: per-track output routing into bus A/B/C
+    await c.set("t0.route", 2)
+    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["route"] == 2, 6)
+    check("track routes to output bus C", st is not None,
+          f"route={st['tracks'][0]['route'] if st else '?'}")
+    await c.set("t0.route", 0)
 
     # ---- record -> auto-close -> overdub -> undo -> redo -> stop -> resume ----
     await c.act("press", 0)
