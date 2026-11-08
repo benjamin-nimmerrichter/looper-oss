@@ -600,12 +600,25 @@ def main(argv: list[str] | None = None) -> int:
     # Prove the UI is reachable from this machine before blaming the browser: a
     # bound socket that Windows Firewall drops and a server that never started
     # look identical from the outside ("nothing loads").
-    try:
-        import urllib.request  # noqa: PLC0415
-        with urllib.request.urlopen(url, timeout=5) as probe:
-            print(f"ui: serving at {url} (HTTP {probe.status})", flush=True)
-    except OSError as exc:
-        print(f"ui: NOT reachable at {url} ({exc})", file=sys.stderr, flush=True)
+    # Do not open a window until the UI actually answers. Starting the thread and
+    # launching a browser in the same breath is fine on Linux and racy everywhere
+    # else: a browser that reaches a socket which is not accepting yet shows an
+    # error page and never retries, and nothing ever connects.
+    import time as _time  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+
+    last_error: str | None = None
+    for _ in range(50):                     # up to 5 s
+        try:
+            with urllib.request.urlopen(url, timeout=2) as probe:
+                print(f"ui: serving at {url} (HTTP {probe.status})", flush=True)
+                last_error = None
+                break
+        except OSError as exc:
+            last_error = str(exc)
+            _time.sleep(0.1)
+    if last_error is not None:
+        print(f"ui: NOT reachable at {url} ({last_error})", file=sys.stderr, flush=True)
     bridge_module = start_bridge(home, logs / "bridge.log")
 
     engine: Engine | None = None
