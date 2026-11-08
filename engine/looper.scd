@@ -440,10 +440,13 @@ if (~hasVST) {
 	// ---- session capture ---------------------------------------------------
 	// The capture must run AFTER the master writes its bus -- see the note in
 	// ~exportMix. RecordBuf interleaves channels for us, so the index is frames.
-	SynthDef(\ld_capture, { |masterBus, buf, doneId = -1|
+	// `secs` is passed explicitly: BufDur.kr on a buffer the server has only just
+	// been asked to allocate reads 0, so Line.kr(0, 1, 0) completed on the first
+	// block and the capture was reported (and written) almost empty.
+	SynthDef(\ld_capture, { |masterBus, buf, doneId = -1, secs = 1|
 		var sig = In.ar(masterBus, 2);
 		RecordBuf.ar(sig, buf, loop: 0, doneAction: 2);
-		SendReply.kr(Done.kr(Line.kr(0, 1, BufDur.kr(buf))), '/ldcaptured', [doneId]);
+		SendReply.kr(Done.kr(Line.kr(0, 1, secs)), '/ldcaptured', [doneId]);
 	}).add;
 };
 
@@ -1212,16 +1215,24 @@ if (~hasVST) {
 		~loadSessionDir.value(~sessionRoot +/+ ("slot" ++ slot), slot.asInteger);
 	};
 	~exportMix = { |seconds = 30|
-		var frames = (seconds * s.sampleRate).round.asInteger;
-		File.mkdir(~sessionRoot);
-		~captureBuf = Buffer.alloc(s, frames, 2);
-		// The capture must run AFTER the master writes its bus. Audio buses are
-		// cleared at the start of every block, so a synth in an earlier group
-		// reads zeros -- which is why every mixdown was silent even though the
-		// hardware output was fine.
-		Synth(\ld_capture, [\masterBus, ~masterBus, \buf, ~captureBuf, \doneId, 1,
-			\secs, seconds], ~grpMaster, \addToTail);
-		~bridge.sendMsg('/ldcapturing', seconds);
+		// Buffer.alloc is asynchronous. Creating the capture synth in the same
+		// message meant it could run against a buffer the server had not
+		// allocated yet -- BufDur read 0, Done fired after one block, and the
+		// mixdown was written with a fraction of the audio in it. Allocate, wait
+		// for the alloc, then start the capture.
+		fork {
+			var frames = (seconds * s.sampleRate).round.asInteger;
+			File.mkdir(~sessionRoot);
+			~captureBuf = Buffer.alloc(s, frames, 2);
+			s.sync;
+			// The capture must run AFTER the master writes its bus: audio buses
+			// are cleared at the start of every block, so a synth in an earlier
+			// group reads zeros.
+			~captureSynth = Synth(\ld_capture, [\masterBus, ~masterBus,
+				\buf, ~captureBuf, \doneId, 1, \secs, seconds],
+				~grpMaster, \addToTail);
+			~bridge.sendMsg('/ldcapturing', seconds);
+		};
 	};
 
 	OSCdef(\ldCaptured, { |msg|

@@ -216,6 +216,28 @@ measure anything. Pick one before writing them:
   `s.mute` does not touch, or
 - run the audio checks with `masterVol` around 0.08 and accept a quiet tone.
 
+
+## M0 result (measured, 0.2.0 engine + 2639b83)
+
+Two findings, and the first is not about the seam at all.
+
+1. **The mixdown export was silent again, for a third reason.**
+   `Buffer.alloc` is asynchronous, and `~exportMix` created the capture synth in
+   the same message. `BufDur.kr` therefore read **0**, `Line.kr(0, 1, 0)` was done
+   on the first block, and the file was written with about 100 ms of audio and
+   the rest zeros. The capture now allocates, waits (`s.sync`) in a `fork`, then
+   starts, and takes `secs` as an explicit argument instead of asking the buffer
+   its duration. Export rms went 0.0035 -> 0.1804 on the same take.
+   That also explains every earlier "the export is empty" report that survived
+   the group-order fix.
+2. **No metallic burst with a steady tone.** `scripts/seamprobe.py` records take
+   1 with a 220 Hz tone, rolls through the auto-dub hand-off, exports and reports
+   5-15 kHz band energy per 100 ms window against the take's median:
+   worst window **2.2x**, threshold 4x -> *no burst found*. Biggest sample step
+   0.065 at t=1.02 s (**13x** the median step), i.e. a discontinuity, but not in
+   the 5-15 kHz band.
+   A steady tone is not drums; the listening half of M0 is still the user's.
+
 ## Open: metallic buzz at the auto-dub transition
 
 Heard by the user, while overdubbing several layers in a row: at the hand-off
