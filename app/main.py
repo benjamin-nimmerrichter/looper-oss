@@ -320,8 +320,14 @@ def start_static_server(root: pathlib.Path, port: int) -> None:
             self.send_header("Cache-Control", "no-store")
             super().end_headers()
 
+        served = False
+
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - base signature
-            return
+            # one line only: proof the browser fetched the page, which separates
+            # "nothing listens" from "the page loaded but its socket is blocked"
+            if not Handler.served:
+                Handler.served = True
+                print(f"ui: browser fetched {self.path}", flush=True)
 
     bound = functools.partial(Handler, directory=str(root / "ui"))
     try:

@@ -87,6 +87,11 @@ function connect() {
     toast("connected");
     svc("stats");
   };
+  ws.onerror = () => {
+    // Say it on the boot screen: a blocked localhost socket is invisible
+    // otherwise, and the user sees only "waiting for the engine" for ever.
+    setBoot(`cannot reach the engine at ${wsUrl} — is localhost blocked?`, false, true);
+  };
   ws.onclose = () => {
     setBoot("waiting for the engine…", false, true);
     toast("engine offline — retrying");
