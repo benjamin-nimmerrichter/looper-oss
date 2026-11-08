@@ -362,17 +362,11 @@ def wait_for_ui(bridge, url: str | None = None, timeout: float = 180.0,
             last_seen = now
         elif (url and not fell_back and last_seen is None
               and (now - started) > fallback_after):
-            # --app can start Edge and still leave no window (a policy, a profile
-            # prompt, a Store build). One fallback to the default browser is
-            # better than a black screen; two would be the old cascade again.
+            # No second window. If the app window started, opening a browser tab
+            # as well is just two apps on one port -- say where the UI is instead.
             fell_back = True
-            print(f"window: no UI after {fallback_after:.0f}s, opening the default browser",
+            print(f"window: no UI after {fallback_after:.0f}s; open {url} by hand",
                   flush=True)
-            try:
-                from app.window import browser_tab  # noqa: PLC0415
-                browser_tab(url)
-            except Exception as exc:  # noqa: BLE001 - never kill the app for this
-                print(f"window: fallback failed ({exc})", file=sys.stderr, flush=True)
         elif last_seen is not None and (now - last_seen) > grace:
             print("window: UI closed", flush=True)
             return
@@ -454,9 +448,12 @@ class Engine:
 
     def start(self) -> None:
         with self.log.open("a", buffering=1) as out:
+            # CREATE_NO_WINDOW: sclang.exe is a console binary, and a musician
+            # should never see a black window with SuperCollider's output in it.
+            quiet = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
             self.proc = subprocess.Popen(
                 [self.sclang, str(self.home / "engine" / "looper.scd")],
-                cwd=str(self.home),
+                cwd=str(self.home), creationflags=quiet,
                 stdin=subprocess.PIPE,  # sclang quits on EOF, so hold it open
                 stdout=out, stderr=subprocess.STDOUT,
             )
