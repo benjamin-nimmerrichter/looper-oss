@@ -123,7 +123,7 @@ if (~rhythmSynth.notNil) { ~rhythmSynth.set(\bpm, ~state[\bpm]) };
 
 ~layerKeys = [\b0, \b1, \b2, \b3];
 ~gainKeys  = [\g0, \g1, \g2, \g3];
-~vstIds    = [\fx0, \fx1, \fx2];
+~vstIds    = [\fx0, \fx1, \fx2, \fx3];
 ~hasVST    = \VSTPlugin.asClass.notNil;
 if (~hasVST) {
 	~vstFile = "engine/vst.scd".standardizePath;
@@ -192,7 +192,7 @@ if (~hasVST) {
 				hp = 40, lp = 16000,
 				delayOn = 0, delayBeats = 0.75, delayDecay = 0.4, delayMix = 0.25,
 				revSend = 0.0, beatLen = 0.5, loopSec = 8,
-				fadeIn = 0, fadeOut = 0, vB0 = 0, vB1 = 0, vB2 = 0|
+				fadeIn = 0, fadeOut = 0, vB0 = 0, vB1 = 0, vB2 = 0, vB3 = 0|
 
 			var tph, tphFree, pos, wpos, raw, gateEnv, gate, sig, sigR, layers, src,
 			    dl, wet, dst, fades, st, seam, xfd, rpos, playGain;
@@ -263,7 +263,7 @@ if (~hasVST) {
 			src = (layers * seam) + (sig * monitor * LagUD.kr(recOn, 0.01, 0.01));
 
 			// ---- plugin inserts (engine/vst.scd draws them) ----
-			src = if (postFx.notNil, { postFx.value(src, [vB0, vB1, vB2]) }, { src });
+			src = if (postFx.notNil, { postFx.value(src, [vB0, vB1, vB2, vB3]) }, { src });
 
 			dl  = (delayBeats * beatLen).clip(0.01, 1.9);
 			wet = CombN.ar(src, 2.0, dl, delayDecay.clip(0.02, 8));
@@ -543,8 +543,11 @@ if (~hasVST) {
 			revSend: 0.0, reverse: 0, fadeIn: 0, fadeOut: 0,
 			loopRatio: 1, speed: 1, mark: 1, contentLen: 0,
 			meterL: 0, meterR: 0, layerPeak: 0, meterPeak: 0, meterSum: 0, cpu: 0,
-			vst: [nil, nil, nil], vstNames: ["", "", ""], vstBypass: [0, 0, 0],
-			vstGui: [nil, nil, nil],
+			// sized from ~vstIds so adding an insert slot cannot leave these short
+			vst: Array.fill(~vstIds.size, nil),
+			vstNames: Array.fill(~vstIds.size, ""),
+			vstBypass: Array.fill(~vstIds.size, 0),
+			vstGui: Array.fill(~vstIds.size, nil),
 			synth: nil
 		)
 	});

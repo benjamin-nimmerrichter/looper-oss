@@ -4,7 +4,7 @@
 // a function body that names a class that does not exist, so every VSTPlugin
 // reference lives here and nowhere else.
 (
-	// ---- the three slots inside the track chain -----------------------------
+	// ---- the insert slots inside the track chain ----------------------------
 	~vstPost = { |src, bypasses|
 		var out = src;
 		~vstIds.do { |id, i|
@@ -83,7 +83,7 @@
 		var csv;
 		if (~tracks.isNil) { ^this };
 		csv = ~tracks.collect { |t|
-			3.collect { |sl|
+			~vstIds.size.collect { |sl|
 				"%|%|%|%".format(sl, ~vstName.value(t, sl),
 					t[\vstBypass][sl] ? 0, ~vstWindowOpen.value(t, sl).asInteger)
 			}.join(",")

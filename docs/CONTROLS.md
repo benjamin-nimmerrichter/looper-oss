@@ -95,11 +95,11 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | --- | --- | --- | --- | --- | --- |
 | SEND | knob | 0–1, default 0 | How much of this track goes to the shared `FreeVerb2`. Size/mix live in setup → loop → master chain. | `set t{i}.revSend` | `revSend` |
 
-### Plugin slots (VST3 / VST2, insert chain after the read head)
+### Plugin slots (VST3 / VST2, **four** insert slots after the read head)
 
 | control | type | range / default | what it does | wire | engine |
 | --- | --- | --- | --- | --- | --- |
-| slot 1–3 → `load…` | select | plugin catalog | Loads a plugin into that insert slot. | `svc vstOpen` | `VSTPluginController.open` |
+| slot 1–4 → `load…` | select | plugin catalog | Loads a plugin into that insert slot. | `svc vstOpen` | `VSTPluginController.open` |
 | **UI** | button | — | Opens the plugin's own editor, or VSTPlugin's generic parameter window when the plugin has none. | `svc vstEditor` | `editor` / `VSTPluginGui` |
 | **BYP** | toggle | off | Bypasses the slot (the plugin stays loaded). | `svc vstBypass` | `vB0..vB2` |
 | **×** | button | — | Unloads the plugin from the slot. | `svc vstClose` | `close` |

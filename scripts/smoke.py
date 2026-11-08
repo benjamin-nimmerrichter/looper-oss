@@ -538,6 +538,16 @@ async def run_tests(c: Client) -> None:
             )
             check("VST3 loads on a track insert", st is not None,
                   keys[0])
+            # D3: four simultaneous inserts. Slot 3 is the fourth.
+            await c.svc("vstOpen", [0, 3, keys[0]])
+            st = await c.wait(
+                lambda m: m.get("t") == "vst"
+                and len(m["csv"].split(";")[0].split(",")) >= 4
+                and m["csv"].split(";")[0].split(",")[3].split("|")[1],
+                20,
+            )
+            check("fourth plugin slot loads", st is not None)
+            await c.svc("vstClose", [0, 3])
             await c.svc("vstClose", [0, 0])
         else:
             check("VST3 plugin available", False, "catalog empty")

@@ -701,7 +701,7 @@ function openFx(i) {
     const list = el("div", "slots");
     const csv = (VST || "").split(";")[i] || "";
     const slots = csv.split(",").map((x) => x.split("|"));
-    for (let s = 0; s < 3; s++) {
+    for (let s = 0; s < (STATS.slots || 4); s++) {
       const row = el("div", "slot");
       const name = slots[s] && slots[s][1] ? slots[s][1] : "";
       const bypassed = slots[s] && String(slots[s][2]) === "1";
