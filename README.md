@@ -424,9 +424,10 @@ something up; it is self-contained.
 Read-only, and worth one look if you know an RC-505: it maps every Boss control
 to what you do here — REC/DUB/PLAY/STOP/CLEAR/UNDO, MEASURE, TEMPO, RHYTHM
 level, INPUT FX/TRACK FX/MASTER FX, SPEED CHANGE, MEMORY, and LOOP SYNC off. It
-also lists the four places where this deliberately differs from the hardware
-(loop length from bars and tempo, four layers instead of one loop plus Mark
-Back, no drum patterns yet, and your own VSTs instead of the Boss algorithms).
+also lists the places where this deliberately differs from the hardware (loop
+length from bars and tempo, four layers instead of one loop, synthesised drum
+kits rather than the Boss ones, and your own VSTs instead of the Boss
+algorithms).
 
 ## The fx drawer
 

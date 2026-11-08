@@ -69,7 +69,7 @@ multiply, reverse, rate, undo/redo), **LoopMix** (5 ms seam crossfade),
 | metronome with accent + level | ✅ own bus, own level |
 | count-in (independent of metronome) | ✅ beat-accurate |
 | grid follows tempo | ✅ varispeed |
-| rhythm guide / drum patterns | ⬜ (RC-505 has 6 kits) |
+| rhythm guide / drum patterns | ✅ 16 synthesised kits, 200 patterns (generated, no samples) |
 | external MIDI clock in/out | ⬜ |
 | Ableton Link (SC Link quark) | ⬜ |
 | JACK transport sync | ⬜ |
@@ -124,16 +124,14 @@ Ordered by value-for-effort, all still library-first:
    have: each layer its own volume/mute/delete. Pure UI + 3 args per layer, no new audio.
 3. **Loop multiply** — repeat the first pass underneath while recording (SooperLooper
    semantics); needs a second write head and a length multiplier per track.
-4. **Rhythm guide** — RC-505-style drum patterns. Cheapest path: a few `Buffer`s of
-   stock hits triggered by the transport phasor, or an `sc3-plugins` drum UGen.
-5. **Free-length / AUTO loop** — first pass defines the length; needs the phasor to be
+4. **Free-length / AUTO loop** — first pass defines the length; needs the phasor to be
    per-track instead of global. Big change to the grid, do it consciously.
-6. **Ableton Link / MIDI clock** — tempo in from outside; `Phasor` rate follows.
-7. **Session capture + export** — record the master bus for the whole session and slice
+5. **Ableton Link / MIDI clock** — tempo in from outside; `Phasor` rate follows.
+6. **Session capture + export** — record the master bus for the whole session and slice
    by marker.
-8. **Phrase slots** — 8–99 slots with a browser, WAV per layer.
-9. **Waveform view** — `Buffer.getToFloatArray` → peak-decimated SVG in the track column.
-10. **Kiosk deployment** — systemd user unit, `--kiosk` autostart, boot-to-pedal.
+7. **Phrase slots** — 8–99 slots with a browser, WAV per layer.
+8. **Waveform view** — `Buffer.getToFloatArray` → peak-decimated SVG in the track column.
+9. **Kiosk deployment** — systemd user unit, `--kiosk` autostart, boot-to-pedal.
 
 ## Out of scope (deliberately)
 

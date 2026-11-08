@@ -222,7 +222,8 @@ The learned map persists in `ui/config.json` under `midi.map`.
 
 Read-only. Maps Boss RC-505 controls to their Looper OSS equivalents, and lists the
 deliberate differences (grid length from BARS+BPM rather than AUTO, 4 layers
-instead of one loop + undo, no drum patterns, effects are stock UGens / your VSTs).
+instead of one loop, synthesised drum kits rather than the Boss ones, and effects
+that are stock UGens or your VSTs).
 
 ---
 

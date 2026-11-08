@@ -211,8 +211,11 @@ Before you call a change done:
 ## 10. Current limitations (deliberate, documented)
 
 - Loop length comes from **BARS + BPM**, not from the first take (no AUTO mode).
-- **4 layers** per track (undo depth) instead of the RC-505's single loop + Mark Back.
-- No drum **rhythm patterns** — metronome only.
+- **4 layers** per track (undo depth) instead of the RC-505's single loop. Mark
+  Back exists, but it bookmarks a layer count rather than the hardware's loop
+  position.
+- Drum patterns are **fixed and synthesised**: 16 kits × 200 patterns generated
+  from rows. No sample import, no user patterns — that is 0.3.0 territory.
 - **No time-stretch**: a tempo change re-pitches (varispeed), like SPEED CHANGE.
 - VST editor is the plugin's own window, or VSTPlugin's generic parameter UI when
   the plugin ships none.
