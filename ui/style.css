@@ -243,6 +243,9 @@ body.no-master #master { display: none; }
   position: relative;
   height: var(--tap);
   min-height: var(--tap);
+  /* a squeezed fader is not a touch target: at scale 1.5 the tempo fader was
+     collapsing to 15 px wide inside a wrapping transport row */
+  min-width: var(--tap);
   border-radius: var(--radius);
   background: #0c0f13;
   border: 1px solid var(--line);
@@ -364,7 +367,7 @@ body.no-master #master { display: none; }
   min-height: 2rem;
 }
 /* step sequence: eight cells, each a height bar you tap to cycle */
-.steprow { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.2rem; }
+.steprow { display: grid; grid-template-columns: repeat(4, minmax(var(--tap), 1fr)); gap: 0.25rem; }
 .stepcell {
   min-height: var(--tap);
   border: 1px solid var(--line);
@@ -475,8 +478,13 @@ body.no-master #master { display: none; }
   color: var(--dim);
   letter-spacing: 0.04em;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* No `overflow: hidden` / `text-overflow` here. On a flex item with
+     `min-width: 0` that combination puts Chromium on a font-substitution path
+     which draws every letter as the wrong glyph -- the settings drawer rendered
+     as gibberish in every screenshot, and would do the same on a machine without
+     a GPU. Labels are short; letting them overflow renders correctly. */
+  overflow: visible;
+  text-overflow: clip;
 }
 /* the control keeps priority over the label when the row gets tight.
    Descendant, not child: a caller may hand in its own .ctl wrapper.
@@ -532,8 +540,8 @@ body.no-master #master { display: none; }
 .cfgrow .hint {
   font-size: 0.72rem;
   color: var(--accent);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 /* read-only reference tables (the RC-505 map): two real columns, so the right
