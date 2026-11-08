@@ -216,6 +216,33 @@ measure anything. Pick one before writing them:
   `s.mute` does not touch, or
 - run the audio checks with `masterVol` around 0.08 and accept a quiet tone.
 
+## Open: metallic buzz at the auto-dub transition
+
+Heard by the user, while overdubbing several layers in a row: at the hand-off
+between the first take and the dub there is a digital buzz, main energy around
+**10 kHz, metallic**. It is a transition artefact, not a level problem, and it
+only appears when the loop rolls from take 1 into take 2.
+
+**Candidates, none proven -- do not "fix" one of these blind:**
+
+1. **The overdub hand-off itself.** `/ldwrap` reaches sclang after the wrap, so
+   the write head stays open at position 0 for a few ms and writes the incoming
+   signal over the start of the committed take: a discontinuity at the seam,
+   repeated every pass. (`SetResetFF` tried to fix this and broke DUB and STOP
+   ALL -- reverted in 7b82ad0. Any retry must be measured.)
+2. **The seam fade.** `seam` dips the layer stack to 0 at `pos` 0 and
+   `contentLen`; a fade that short plus a jump in `wpos`/`rpos` at the wrap reads
+   as "metallic" rather than "click".
+3. **`~lerpRead` at the wrap.** Invariant 20 fixed the modulo, but the
+   fractional index just under `contentLen` is where a rounding error would
+   still show, and it would show as HF noise.
+
+**Settle it before touching code:** record a 220 Hz tone as take 1 with
+`autoClose`/`autoDub` on, stop after the second pass, export, and read the seam
+with `scripts/wavcheck.py` -- the step across the loop point and the HF energy in
+the 5-15 kHz band, layer 1 alone and the mix. Whichever number moves identifies
+the candidate.
+
 ## Next: v0.3.0 — Windows
 
 Linux is the supported platform in 0.2.0. Windows is the next release, and the
