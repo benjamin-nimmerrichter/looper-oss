@@ -334,7 +334,34 @@ def start_static_server(root: pathlib.Path, port: int) -> None:
     threading.Thread(target=httpd.serve_forever, name="ui-http", daemon=True).start()
 
 
-def start_bridge(home: pathlib.Path, logfile: pathlib.Path) -> None:
+def wait_for_ui(bridge, timeout: float = 180.0, grace: float = 6.0) -> None:
+    """Keep the app alive while a UI is attached, then leave.
+
+    A browser process exiting is NOT the user closing the window: Edge and Chrome
+    hand the URL to an already-running instance and exit at once, so waiting on
+    that process shut the app down a fraction of a second after opening it (and
+    the fallback chain opened more windows on the way out). The bridge counts
+    websocket clients, which is the only honest signal.
+    """
+    import time as _time  # noqa: PLC0415
+
+    started = _time.monotonic()
+    last_seen = None
+    while True:
+        clients = len(getattr(bridge, "clients", ()) or ())
+        now = _time.monotonic()
+        if clients:
+            last_seen = now
+        elif last_seen is not None and (now - last_seen) > grace:
+            print("window: UI closed", flush=True)
+            return
+        elif last_seen is None and (now - started) > timeout:
+            print("window: no UI ever connected; stopping", flush=True)
+            return
+        _time.sleep(0.5)
+
+
+def start_bridge(home: pathlib.Path, logfile: pathlib.Path):
     """Run the OSC<->WebSocket bridge in its own thread and event loop."""
     import asyncio  # noqa: PLC0415
 
@@ -464,6 +491,7 @@ def reexec_in_venv(argv: list[str]) -> int | None:
         return None
     env = dict(os.environ, LOOPER_OSS_REEXEC="1")
     return subprocess.run([str(exe), "-m", "app.main", *argv], env=env).returncode
+    return bridge
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -551,7 +579,7 @@ def main(argv: list[str] | None = None) -> int:
     write_config.write_from(home / "ui" / "config.json", home / "engine" / "_config.scd")
 
     start_static_server(home, port)
-    start_bridge(home, logs / "bridge.log")
+    bridge_module = start_bridge(home, logs / "bridge.log")
 
     engine: Engine | None = None
     if sclang:
@@ -626,7 +654,10 @@ def main(argv: list[str] | None = None) -> int:
 
     code = 0
     try:
-        open_window(url, kiosk=args.kiosk, mode=args.window)
+        # "launched" means a window was started and its process is not a proxy for
+        # the user's window: the bridge's UI clients decide when we are done.
+        if open_window(url, kiosk=args.kiosk, mode=args.window) == "launched":
+            wait_for_ui(bridge_module)
     except SystemExit as exc:
         code = exc.code if isinstance(exc.code, int) else 1
     finally:

@@ -136,6 +136,7 @@ def _browser_exe() -> str | None:
 
 
 def _app_window(url: str, kiosk: bool) -> bool:
+    """Start an app window and return at once: the caller owns the lifetime."""
     exe = _browser_exe()
     if not exe:
         return False
@@ -143,65 +144,72 @@ def _app_window(url: str, kiosk: bool) -> bool:
     if kiosk:
         flags.append("--start-fullscreen")
     try:
-        proc = subprocess.Popen([exe, *flags], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen([exe, *flags], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError:
         return False
-    try:
-        proc.wait()
-    except KeyboardInterrupt:
-        proc.terminate()
+    # NOT proc.wait(): on Windows msedge/chrome hands the URL to the instance that
+    # is already running and exits immediately, so waiting on this process means
+    # "the window closed" a fraction of a second after opening it -- the app then
+    # tore itself down, and the fallback chain opened more windows on the way out.
     return True
 
 
-def _browser_tab(url: str) -> None:
+def _browser_tab(url: str) -> bool:
+    """Open the UI in the default browser. Returns True when a tab was opened.
+
+    Does not block: the browser process is not a proxy for the user's window, so
+    the caller waits on the bridge's UI clients instead.
+    """
     import webbrowser  # noqa: PLC0415
 
     opened = False
     try:
         opened = bool(webbrowser.open(url))
-    except Exception as exc:  # noqa: BLE001 - no browser configured is normal on a pedal
+    except (OSError, webbrowser.Error) as exc:
         print(f"cannot open a browser: {exc}", file=sys.stderr)
     if not opened:
-        # Returning here lets the launcher shut the engine down cleanly instead
-        # of sitting in a hidden process nobody can see or close.
         print("no window and no browser available; stopping.", file=sys.stderr)
-        return
+        return False
     print(f"Looper OSS is running at {url}  (close it to quit)", flush=True)
-    try:
-        while True:
-            time.sleep(1.0)
-    except KeyboardInterrupt:
-        pass
+    return True
 
 
 def open_window(url: str, kiosk: bool = False, mode: str = "auto",
-                error: str | None = None) -> None:
-    """Show the UI (or an error page) and block until the window is closed."""
+                error: str | None = None) -> str:
+    """Show the UI.
+
+    Returns "closed" when this function waited for the window and it is now gone,
+    or "launched" when a window was started and the *caller* owns the lifetime --
+    a browser process exiting is not the user closing the window.
+    """
     # Say which path was taken: a silent fallback from "native" to a browser is
     # exactly the kind of failure that looks like "I click it and nothing happens".
     print(f"window: mode={mode} kiosk={kiosk} error={bool(error)}", flush=True)
     if mode == "none":
         if error:
             print(error, file=sys.stderr)
-            return
+            return "closed"
         print(f"Looper OSS running at {url}  (Ctrl-C to quit)", flush=True)
         try:
             while True:
                 time.sleep(0.5)
         except KeyboardInterrupt:
-            return
+            return "closed"
 
     if mode in ("auto", "native"):
         if _native(url, kiosk, error):
             print("window: native (GTK/WebKit2) closed", flush=True)
-            return
+            return "closed"
         print("window: native unavailable (no PyGObject/WebKit for this python)", flush=True)
     if error:  # no window toolkit at all: say it where someone can see it
         print(error, file=sys.stderr)
-        return
+        return "closed"
     if mode in ("auto", "app"):
         if _app_window(url, kiosk):
-            print("window: chromium/edge --app closed", flush=True)
-            return
+            print("window: chromium/edge --app started", flush=True)
+            return "launched"
         print("window: no chromium/edge for an app window", flush=True)
-    _browser_tab(url)
+    if _browser_tab(url):
+        print("window: default browser tab opened", flush=True)
+        return "launched"
+    return "closed"
