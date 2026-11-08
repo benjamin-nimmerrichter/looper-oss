@@ -74,6 +74,22 @@ switch (~driver,
 		if (~audio[\device].notNil) { s.options.device = ~audio[\device] };
 	}
 );
+// scsynth is not on PATH on Windows and SC boots the server by its bare name --
+// inside Wine that became "Can't recognize 'scsynth.exe'" and the engine died
+// three times. If an scsynth sits beside the class library, that is the server:
+// no OS test needed (Platform.os does not exist in 3.13), and on Linux
+// /usr/share/SuperCollider has no such file, so PATH keeps working.
+// The compiled-SynthDef cache is also missing on a fresh Windows install.
+block {
+	["scsynth.exe", "scsynth"].do { |name|
+		var p = Platform.resourceDir +/+ name;
+		if (File.exists(p)) { Server.program = p };
+	};
+	if (File.exists(Platform.userAppSupportDir +/+ "synthdefs").not) {
+		File.mkdir(Platform.userAppSupportDir +/+ "synthdefs");
+	};
+};
+
 s.options.numWireBufs = 512;
 s.options.memSize     = 8192 * 8;
 s.options.numBuffers  = 2048;
@@ -660,7 +676,11 @@ if (~hasVST) {
 
 	~initVST.value;
 	if (~hasVST) { ~vstBanksInit.value };   // four FX banks per track
-	~initMIDI.value;
+	// MIDI must never be able to stop the engine: PortMidi fails to OPEN inputs on
+	// Wine ("Host error") and on a Windows machine with no interface attached, and
+	// the primitive unwinds the boot routine with it. The app then had no audio at
+	// all because MIDI was unhappy.
+	protect { ~initMIDI.value };
 
 	"--- Looper OSS ------------------------------------------".postln;
 	"tracks % | layers % | loop % s | max % s | VST %".format(
@@ -1351,11 +1371,17 @@ if (~hasVST) {
 			~midiMap = ~parseMIDIMap.value(~cfg[\midi][\map]);
 			~midiDevice = ~cfg[\midi][\device] ? -1;
 		};
-		MIDIClient.init;
-		MIDIIn.connectAll;
-		protect { ~sendMIDIDevices.value };
+		// PortMidi can refuse to OPEN an input: inside Wine it is "Host error", and
+		// on real Windows when no interface is attached. The primitive unwinds
+		// whatever thread it runs in, so connect in its own thread: a dead MIDI
+		// thread must not cost the user their audio (it did -- the engine never
+		// finished booting and the app was silent with no obvious cause).
+		fork {
+			protect { MIDIClient.init };
+			protect { MIDIIn.connectAll };
+			};
 
-		MIDIdef.cc(\ldCC, { |val, num, chan, src|
+MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			if (~midiAccepts.value(src)) {
 				if (~learnTarget.notNil && (val > 0)) {
 					var tgt = ~learnTarget;
