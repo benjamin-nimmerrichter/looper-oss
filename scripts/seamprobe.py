@@ -166,6 +166,15 @@ async def drive() -> pathlib.Path:
                   f"layers={cl['tracks'][0].get('layers')}")
 
         await send(op="act", a="press", t=0)
+        # A steady sine cannot show a transient artefact. With SEAM_PERC set the
+        # take is built from kicks plus short 3 kHz clicks, which is the material
+        # the metallic buzz was reported on -- and it puts real HF energy in the
+        # body, so the band ratio means something.
+        if os.environ.get("SEAM_PERC"):
+            for _ in range(8):
+                await send(op="svc", what="testTone", args=[60, 0.6, 0.09])
+                await send(op="svc", what="testTone", args=[3000, 0.35, 0.005])
+                await asyncio.sleep(0.25)
         # log the transitions instead of guessing which one we caught
         seen, end = [], time.monotonic() + 6.0
         while time.monotonic() < end:

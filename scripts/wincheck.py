@@ -36,6 +36,28 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
     return ok
 
 
+def sessions_dir() -> pathlib.Path:
+    """Where this run actually keeps its sessions.
+
+    From source it is <repo>/sessions; a packaged build stages itself into a
+    per-version home and writes there, which made three working features report
+    as failures when this looked only at the repository. The directory holding
+    the newest export wins, so it does not matter which one is running.
+    """
+    candidates = [ROOT / "sessions"]
+    for pattern in (
+        str(pathlib.Path.home() / ".wine-*/drive_c/users/*/AppData/Local/looper-oss/app/*/sessions"),
+        str(pathlib.Path.home() / ".local/share/looper-oss/app/*/sessions"),
+    ):
+        candidates += [p for p in pathlib.Path("/").glob(pattern.lstrip("/"))]
+
+    def newest(path: pathlib.Path) -> float:
+        files = list((path / "exports").glob("*.wav"))
+        return max((f.stat().st_mtime for f in files), default=0.0)
+
+    return max(candidates, key=newest)
+
+
 async def run() -> None:
     import websockets
 
@@ -118,7 +140,8 @@ async def run() -> None:
         check("press resumes playback", playing is not None)
 
         # export: the file has to contain something, measured, not assumed
-        exports = ROOT / "sessions" / "exports"
+        sessions = sessions_dir()
+        exports = sessions / "exports"
         before = set(exports.glob("*.wav")) if exports.exists() else set()
         await send(op="svc", what="export", args=[2])
         got = await wait(lambda m: m.get("t") == "exported", 300)
@@ -134,18 +157,17 @@ async def run() -> None:
                   f"{len(data)} frames @ {sr}, peak {peak:.4f}, rms {rms:.4f}")
 
         # files: a session save and a backup zip
-        slot = ROOT / "sessions" / "winslot"
         await send(op="svc", what="save", args=[90])
         saved = await wait(lambda m: m.get("t") == "saved" and m["slot"] == 90, 90)
         check("a session saves", saved is not None)
         check("the session wrote its manifest",
-              (ROOT / "sessions" / "slot90" / "session.json").exists())
+              (sessions / "slot90" / "session.json").exists(),
+              str(sessions))
         await ws.send(json.dumps({"op": "backup"}))
         backed = await wait(lambda m: m.get("t") == "backup", 180)
-        zips = sorted((ROOT / "sessions" / "backups").glob("looper-*.zip"))
+        zips = sorted((sessions / "backups").glob("looper-*.zip"))
         check("backup writes one zip", bool(backed and backed.get("ok")) and bool(zips),
               zips[-1].name if zips else "no zip")
-        del slot
 
 
 def main(argv: list[str]) -> int:

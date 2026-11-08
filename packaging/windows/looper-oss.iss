@@ -18,7 +18,10 @@ AppId={{8F2C1A54-9E7B-4C31-B0D7-1F5E6C2A9D31}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=Looper OSS contributors
-DefaultDirName={localappdata}\looper-oss\app
+; Never %LOCALAPPDATA%\\looper-oss\\app: that is where the app stages a
+; per-version copy AND keeps sessions/, so an uninstall could remove the
+; user's music. Programs live under Programs, state lives under app/.
+DefaultDirName={localappdata}\Programs\Looper OSS
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest

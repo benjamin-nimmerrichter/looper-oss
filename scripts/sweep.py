@@ -32,6 +32,21 @@ def is_bridge(argv: list[str]) -> bool:
     )
 
 
+def is_app_main(argv: list[str]) -> bool:
+    """A run started with `python -m app.main` (or a Playwright/test harness).
+
+    Not swept before, so a crashed or forgotten run kept :8181 and the next one
+    silently failed to bind -- the failure looked like "the app is broken" and
+    the real cause was a process nobody could see.
+    """
+    joined = " ".join(argv)
+    return ("-m app.main" in joined or "app/main.py" in joined) and "sweep" not in joined
+
+
+def is_packaged_app(argv: list[str]) -> bool:
+    return argv[0].rsplit("/", 1)[-1].lower().startswith("loopeross")
+
+
 def is_ui_server(port: str):
     def match(argv: list[str]) -> bool:
         return (
@@ -43,7 +58,8 @@ def is_ui_server(port: str):
     return match
 
 
-TARGETS = (("scsynth", is_scsynth), ("sclang", is_sclang), ("bridge", is_bridge))
+TARGETS = (("scsynth", is_scsynth), ("sclang", is_sclang), ("bridge", is_bridge),
+           ("app", is_app_main), ("packaged app", is_packaged_app))
 
 
 def read_argv(pid: str) -> list[str]:
