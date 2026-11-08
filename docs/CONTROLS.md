@@ -26,6 +26,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | **METRONOME** | toggle | off by default | The click. Independent of everything else; count-in clicks even when this is off. | `set g.metro` | transport `metro` |
 | **COUNT-IN** | toggle | off by default | Adds `count-in bars` bars of click before a recording starts, and starts the take exactly on the bar. | `set g.countIn` | state `countIn`, `/ldbeat` handler |
 | **RHYTHM** | toggle + two steppers | `on` · kit 1–16 · pattern 1–200 | The drum engine: four **synthesised** voices (kick, snare, hat, perc) stepped by a 16th-note clock at the current bpm. `kit` picks the voice parameters (pitch, decay, drive); `pattern` picks one of 200 rows built from 5 kick × 5 snare × 4 hat × 2 perc. No samples, so there is no sample licence to carry. | `cfg rhythm.on/kit/pattern` | `\ld_rhythm`, `~rhythmSet` |
+| **bus A/B/C** | 3 knobs (footer) | 0–1.2, default 1 | Output mixer: one level per stereo bus, applied on the master. Bus A is the main mix (and carries reverb, click and drums); B and C are for tracks you route away. | `set g.busA/busB/busC` | `\ld_master` `gA/gB/gC` |
 | master fader | fader | 0–1.2, default 0.8 | Master volume (post-limiter). Silences everything, click included. | `set g.masterVol` | `\ld_master` `vol` |
 
 ## 2. Track column (one per track, 1–N)

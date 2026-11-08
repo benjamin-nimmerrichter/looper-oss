@@ -87,6 +87,8 @@ s.latency = 0.02;
 	// metronome defaults OFF: it is a click in your ears until you ask for it
 	metro: 0, countIn: ~cfg[\clock][\countInBars].asInteger,
 	masterVol: 0.8, clickVol: ~cfg[\clock][\clickVol].asFloat,
+	// output mixer: one level per stereo bus
+	busA: 1, busB: 1, busC: 1,
 	sel: 0, revMix: ~cfg[\loop][\revMix].asFloat, room: ~cfg[\loop][\room].asFloat,
 	xfadeMs: (~cfg[\loop][\crossfadeMs] ? 2.0).asFloat,
 	recordOffset: ~cfg[\loop][\recordOffset].asInteger,
@@ -914,6 +916,9 @@ if (~hasVST) {
 			},
 			"quantizeStart", { ~state[\quantizeStart] = v.asInteger },
 			"overdubMode", { ~state[\overdubMode] = v.asInteger.clip(0, 1) },
+			"busA", { ~state[\busA] = v; ~busGains[0] = v; ~master !? { |m| m.set(\gA, v) } },
+			"busB", { ~state[\busB] = v; ~busGains[1] = v; ~master !? { |m| m.set(\gB, v) } },
+			"busC", { ~state[\busC] = v; ~busGains[2] = v; ~master !? { |m| m.set(\gC, v) } },
 			"rhythmOn",      { ~rhythmSet.value(v, ~state[\rhythmKit], ~state[\rhythmPattern]) },
 			"rhythmKit",      { ~rhythmSet.value(~state[\rhythmOn], v, ~state[\rhythmPattern]) },
 			"rhythmPattern",  { ~rhythmSet.value(~state[\rhythmOn], ~state[\rhythmKit], v) },
@@ -1627,7 +1632,8 @@ if (~hasVST) {
 			~state[\recordOffset], ~state[\dubDecay], ~state[\autoClose],
 			~state[\masterHp], ~state[\masterLp], ~state[\version],
 			~state[\inL], ~state[\inR], ~state[\masterL], ~state[\masterR],
-			~state[\phase]
+			~state[\phase],
+			~state[\busA], ~state[\busB], ~state[\busC]
 		];
 		~tracks.do { |t|
 			a = a ++ [

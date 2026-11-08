@@ -519,7 +519,23 @@ function buildMaster() {
   const exportBtn = Button({ label: "export", cls: "tiny" });
   exportBtn.addEventListener("pointerup", () => svc("export", [30]));
 
-  root.append(inWrap, vol, out, session, exportBtn);
+  // output mixer: an independent level per stereo bus
+  const busRow = el("div");
+  busRow.style.display = "flex";
+  busRow.style.gap = "0.4rem";
+  const busKnobs = [0, 1, 2].map((idx) => {
+    const name = "ABC"[idx];
+    const k = Knob({
+      label: `bus ${name}`, min: 0, max: 1.2, value: 1,
+      format: (v) => `${Math.round(v * 100)}`,
+      onInput: (v) => set(`g.bus${name}`, v),
+    });
+    busRow.append(k);
+    return k;
+  });
+
+  root.append(inWrap, vol, out, busRow, session, exportBtn);
+  ui.buses = busKnobs;
   ui.master = { inL, inR, out, vol };
 }
 
@@ -1254,6 +1270,11 @@ function onState(s) {
   ui.transport.countIn.classList.toggle("on", !!s.countIn);
   if (!ui.transport.masterFader.classList.contains("active")) {
     ui.transport.masterFader.setValue(s.masterVol);
+    if (ui.buses) {
+      [s.busA, s.busB, s.busC].forEach((v, k) => {
+        if (!ui.buses[k].classList.contains("active")) ui.buses[k].setValue(v);
+      });
+    }
     ui.master.vol.setValue(s.masterVol);
   }
 

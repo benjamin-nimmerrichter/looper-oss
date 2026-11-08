@@ -51,6 +51,7 @@ GLOBAL_FIELDS = [
     "sel", "cpu", "revMix", "room", "xfadeMs", "recordOffset", "dubDecay",
     "autoClose", "masterHp", "masterLp", "version",
     "inL", "inR", "masterL", "masterR", "phase",
+    "busA", "busB", "busC",
 ]
 TRACK_FIELDS = [
     "state", "vol", "pan", "muted", "meter", "input", "layers",
