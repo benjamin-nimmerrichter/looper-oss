@@ -132,6 +132,8 @@ Per track paths: `t<N>.<field>` for every per-track state field above.
 | `probe` | track (diagnostic) |
 | `rhythm` | — ; replies `/ldrhythm on, kit, pattern` |
 | `import` | track, file name in `sessions/import/` ; replies `/ldimport track, name, frames` |
+| `seq` | track, eight comma-separated values 0–1 (the step sequence) |
+| `inputGains` | — ; replies `/ldinputs g0,g1,…` |
 | `midiAdd` | type, num, target, gesture (test hook) |
 | `midiSim` | num, gesture (test hook) |
 
@@ -141,6 +143,7 @@ Browser-only ops (the bridge does the work, no engine traffic):
 | --- | --- |
 | `backup` | zips `sessions/` → `sessions/backups/looper-<stamp>.zip`, replies `{"t":"backup","ok":1,"path":…}` |
 | `restore` | extracts the newest backup (or `name`) over `sessions/`, refusing members outside it; replies `{"t":"restored","ok":1,"name":…}` |
+| `/ldinputs` (engine → bridge) | `g0,g1,…` — one gain per physical input channel |
 | `/ldvstbanks` (engine → bridge) | `track:bank:key>key>key>key;…` — the bridge persists it as `vst.banks` |
 | `backups` | replies `{"t":"backups","csv":"a.zip;b.zip"}` |
 | `importList` | replies `{"t":"imports","csv":"a.wav;b.wav"}` from `sessions/import/` |
