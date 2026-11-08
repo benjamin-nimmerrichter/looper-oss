@@ -83,7 +83,11 @@ switch (~driver,
 block {
 	["scsynth.exe", "scsynth"].do { |name|
 		var p = Platform.resourceDir +/+ name;
-		if (File.exists(p)) { Server.program = p };
+		// SC assembles the server command as a plain string, so a path with a
+		// space in it -- "C:\...\Programs\Looper OSS\..." -- was split at the
+		// space and cmd answered "'C:\...\Programs\Looper' is not recognized".
+		// Quote it; on Linux this is the same no-op it always was.
+		if (File.exists(p)) { Server.program = "\"" ++ p ++ "\"" };
 	};
 	if (File.exists(Platform.userAppSupportDir +/+ "synthdefs").not) {
 		File.mkdir(Platform.userAppSupportDir +/+ "synthdefs");
