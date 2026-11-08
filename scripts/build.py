@@ -206,7 +206,11 @@ def bundle_supercollider(appdir: pathlib.Path, allow_download: bool = True) -> N
         return
     dest = appdir / "sc"
     if dest.exists():
-        shutil.rmtree(dest, ignore_errors=True)
+        try:
+            shutil.rmtree(dest)
+        except OSError as exc:
+            print(f"   could not clear {dest}: {exc}")
+            return
     skip = {"scide.exe", "HelpSource", "examples", "sounds", "supernova.exe"}
     copied = 0
     for path in src.rglob("*"):
