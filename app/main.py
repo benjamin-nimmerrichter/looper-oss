@@ -361,7 +361,7 @@ def start_static_server(root: pathlib.Path, port: int) -> None:
     threading.Thread(target=httpd.serve_forever, name="ui-http", daemon=True).start()
 
 
-def wait_for_ui(bridge, url: str | None = None, timeout: float = 180.0,
+def wait_for_ui(bridge, url: str | None = None, timeout: float = 60.0,
                 grace: float = 6.0, fallback_after: float = 15.0) -> None:
     """Keep the app alive while a UI is attached, then leave.
 
