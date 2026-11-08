@@ -94,7 +94,7 @@ a bank is a list of plugin slots plus their parameters. The 49/53-effect
 libraries are the real cost and will be curated to what exists as free plugins,
 not invented.
 
-### D4 — mixer and routing — **partly done** (per-track input compressor, three output buses with per-track routing; input mixer, per-input EQ and cue open)
+### D4 — mixer and routing — **partly done** (per-track compressor, input strips with gain + EQ, three output buses with per-track routing; cue mix open)
 Independent input mixer (2 mic + 2 stereo pairs), input EQ and mic compressors,
 3 stereo output buses with per-track routing, a headphone/cue mix. The engine
 already sums per-track stereo buses; this is bus gymnastics plus UI.

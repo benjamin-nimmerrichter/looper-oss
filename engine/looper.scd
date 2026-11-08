@@ -44,6 +44,7 @@ if (File.exists(~cfgFile)) { ~cfgFile.load };
 
 // ------------------------------------------------------------- server setup --
 ~audio = ~cfg[\audio];
+~inGain = (~cfg[\audio][\inputGain] ? []);
 s = Server.default;
 s.options.numInputBusChannels  = ~audio[\in].asInteger.max(2);
 s.options.numOutputBusChannels = ~audio[\out].asInteger.max(2);
@@ -174,7 +175,7 @@ if (~hasVST) {
 	// compiled, so a wider interface is a config change and not a code change.
 	~inputChannels = {
 		var n   = (~audio[\in] ? 2).asInteger.clip(1, 16);
-		var ins = SoundIn.ar((0 .. (n - 1))).asArray;
+		var ins = In.ar(~inBus.index + (0 .. (n - 1)), 1).asArray;
 		var sum = if (n > 1) { (ins[0] + ins[1]) * 0.7071 } { ins[0] };
 		[sum] ++ ins
 	};
@@ -402,6 +403,17 @@ if (~hasVST) {
 		Out.ar(outBus, sig * amp);
 	}).add;
 
+	// ---- input mixer --------------------------------------------------------
+	// One strip per input channel, before any track: gain, high pass, low pass.
+	// Tracks read this bus instead of SoundIn, so the settings are shared by every
+	// track that selects the channel -- a microphone is trimmed once, not per track.
+	SynthDef(\ld_input, { |outBus = 0, inCh = 0, gain = 1, hp = 20, lp = 19000|
+		var sig = SoundIn.ar(inCh) * gain;
+		sig = BLowPass.ar(BHiPass.ar(sig, hp.clip(20, 2000), 0.707),
+			lp.clip(1000, 19000), 0.707);
+		Out.ar(outBus, sig);
+	}).add;
+
 	// ---- session capture ---------------------------------------------------
 	SynthDef(\ld_capture, { |masterBus, buf, doneId = -1|
 		var sig = In.ar(masterBus, 2);
@@ -420,6 +432,16 @@ if (~hasVST) {
 // which output bus a track writes into: 0 = A (main), 1 = B, 2 = C
 ~busGains = [1, 1, 1];
 ~busFor = { |route| [~busA, ~busB, ~busC][route.asInteger.clip(0, 2)].index };
+
+// input mixer: one gain per physical input channel, shared by the tracks
+~setInputGain = { |ch, v|
+	var i = ch.asInteger;
+	if ((i >= 0) && (i < (~inGain ? []).size + 16)) {
+		~inGain = (~inGain ? []).extend(i + 1, 1);
+		~inGain[i] = v.asFloat;
+		if (~inputSynths.notNil) { ~inputSynths[i] !? { |sy| sy.set(\gain, v) } };
+	};
+};
 
 ~pushAll = { |t, keys|
 	keys.do { |k| t[\synth].set(k.asSymbol, t[k.asSymbol]) };
@@ -508,6 +530,10 @@ if (~hasVST) {
 	};
 
 	~boot = {
+		// the track SynthDefs read this bus, so it must exist before they compile
+		~inCount = (~cfg[\audio][\in] ? 2).asInteger.clip(1, 16);
+		~inGain  = Array.fill(~inCount, { |ch| ((~cfg[\audio][\inputGain] ? [])[ch]) ? 1 });
+		~inBus   = Bus.audio(s, ~inCount);
 		~addDefs.value;
 		s.sync;
 
@@ -592,6 +618,10 @@ if (~hasVST) {
 
 	~makeBuffers.value;
 
+	~inputSynths = Array.fill(~inCount, { |ch|
+		Synth(\ld_input, [\outBus, ~inBus.index + ch, \inCh, ch,
+			\gain, (~inGain ? [])[ch] ? 1], ~grpTracks, \addToTail)
+	});
 	~tracks.do { |t, i| ~makeTrackSynth.value(t, i) };
 	s.sync;
 
@@ -1438,6 +1468,8 @@ if (~hasVST) {
 			"stats",     { ~sendStats.value },
 			"probe",     { ~probeTrack.value((msg[2] ? 0).asInteger) },
 			"midiAdd",   { ~midiAdd.value(msg[2], msg[3], msg[4], msg[5]) },
+			"inputGains", { ~bridge.sendMsg('/ldinputs',
+				(~inGain ? []).collect { |g| g ? 1 }.join(",").asString) },
 			"rhythm",    { ~bridge.sendMsg('/ldrhythm', ~state[\rhythmOn],
 				~state[\rhythmKit], ~state[\rhythmPattern]) },
 			"import",    { ~importWAV.value(msg[2].asInteger, msg[3]) },

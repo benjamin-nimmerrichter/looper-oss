@@ -133,6 +133,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | SAMPLE RATE | stepper | 0 = default, or 44.1k…192k | Server sample rate. **Restart required.** | `cfg audio.sampleRate` | `s.options.sampleRate` |
 | BLOCK SIZE | stepper | 16–2048, step 16, default 64 | SC control block. **Restart required.** | `cfg audio.blockSize` | `s.options.blockSize` |
 | HW BUFFER | stepper | 32–4096, step 32, default 256 | Hardware buffer / latency. **Restart required.** | `cfg audio.hardwareBufferSize` | `s.options.hardwareBufferSize` |
+| INPUT MIXER | read-out | one gain per input channel | Each physical input has its own strip (gain, high pass, low pass) on a shared input bus; every track that selects that channel reads the strip, so a microphone is trimmed once rather than per track. `svc inputGains` reports the gains. | `svc inputGains` | `\ld_input`, `~inBus` |
 | INPUTS / OUTPUTS | stepper | 1–16, default 2 | Channel counts on that one duplex device. **Restart required.** | `cfg audio.in` / `audio.out` | `s.options.numInput/OutputBusChannels` |
 | engine stats line | read-out | — | cpu, sample rate, block, hw buffer, computed latency, VST count. | — | `svc stats` |
 | **restart** | button | — | Restarts the engine so audio settings apply (the launcher restarts `sclang`). | `{op:"restart"}` | `s.quit` + exit 42 |

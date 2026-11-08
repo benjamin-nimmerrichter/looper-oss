@@ -314,6 +314,13 @@ async def run_tests(c: Client) -> None:
           f"route={st['tracks'][0]['route'] if st else '?'}")
     await c.set("t0.route", 0)
 
+    # D4: the input mixer -- one gain per physical input, shared by the tracks
+    await c.svc("inputGains", [])
+    st = await c.wait(lambda m: m.get("t") == "inputs", 8)
+    check("input mixer reports a gain per channel",
+          st is not None and len((st.get("csv") or "").split(",")) >= 2,
+          (st or {}).get("csv", ""))
+
     # ---- record -> auto-close -> overdub -> undo -> redo -> stop -> resume ----
     await c.act("press", 0)
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 1, 6)

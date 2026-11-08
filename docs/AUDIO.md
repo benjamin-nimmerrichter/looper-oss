@@ -88,6 +88,20 @@ scope. The seam window is computed from `pos`, so it still zeroes at both ends o
 the buffer and a wrap cannot click. `loopRatio` stays what it was: a grid-locked
 subdivision (½ and ¼ loop) that does not free-run.
 
+## Input mixer
+
+Each physical input channel has its own strip before any track sees it:
+
+```text
+SoundIn(ch) ─▶ gain ─▶ high pass ─▶ low pass ─▶ input bus (channel ch)
+```
+
+`\ld_input` is one synth per channel, created before the tracks in the same
+group, writing channel `ch` of `~inBus`. `~inputChannels` then reads that bus
+instead of `SoundIn`, so the gain and filters are **shared** by every track that
+selects the channel — trim a microphone once, not once per track. The strips run
+before the track synths in `~grpTracks`, so the bus is written before it is read.
+
 ## Input routing
 
 `audio.in` decides how many input channels the server opens
