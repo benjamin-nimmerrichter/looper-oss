@@ -225,16 +225,40 @@ track when it first records) versus the live grid length is what makes a tempo
 change a free varispeed instead of a re-record. Details and gain staging in
 `docs/AUDIO.md`.
 
+## More than one take
+
+| control | where | what it does |
+| --- | --- | --- |
+| **speed** | fx → loop | Varispeed per track, ½ / 1 / 2 / 4 and continuously 0.25–4. At 1 the track reads the master phase and stays locked; anything else free-runs and **re-pitches**, like the hardware's SPEED knob (not time-stretch). |
+| **mark / mark back** | fx → loop | Bookmark the current layer count, then jump straight back to it — no stepping down one layer at a time. The layers above are muted but kept, so redo still walks them back. |
+| **overdub replaces** | setup → loop | A new take mutes the layers it covers instead of layering on top. Their audio is untouched, so **undo** brings them back. |
+| **bounce** | setup → session | Sums every track that has layers into track 1 as a single layer, in one loop pass, then clears the sources. |
+| **clear all** | transport | Wipes every track *and* the autosave — a clean slate that cannot come back on restart. Tap twice. |
+
+## Drums
+
+The transport has a **rhythm** group: `drums` on/off, `kit 1–16`, `pat 1–200`.
+Four **synthesised** voices (kick, snare, hat, perc) step on a 16th-note clock at
+the current tempo and are summed after the track mix, so they keep playing when
+the tracks are empty. Nothing is sampled — a shipped drum kit would drag a
+licence along — so the 200 patterns are combinations of kick/snare/hat/perc rows
+and the 16 kits are parameter sets. Pick a pattern, press play, loop over it.
+
 ## Sessions
 
 - **save slot** (footer or setup → session) writes `sessions/slotN/`: one WAV per
   layer, `session.json` with the whole UI state, `vst.txt` + `vst_*.bin` for
-  plugin state.
+  plugin state. Slots run **1–99**.
 - **load** restores layers, plugin chain and plugin state.
 - **autosave** writes `sessions/autosave/` whenever the layer structure changes
   and nothing is recording; a cold start recovers it automatically. A crash
   costs at most one layer.
 - **export** bounces 30 s of the master bus to `sessions/exports/`.
+- **backup** zips the whole `sessions/` tree to `sessions/backups/looper-<stamp>.zip`
+  (one file to carry to another machine); **restore** extracts the newest one
+  back, and refuses any entry that would land outside `sessions/`.
+- **import a wav** — drop a file in `sessions/import/`, pick it in setup → session,
+  and it becomes the selected track's layer (channel 0, trimmed to loop length).
 
 ## The setup screen, explained
 

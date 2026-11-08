@@ -113,6 +113,9 @@ async def shoot(cdp: CDP) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     print("main screen")
     await cdp.shot(OUT / "ui-main.png")
+    if os.environ.get("SHOTS_ONLY") == "main":
+        return   # the drawers cannot be rasterised here; see the docstring
+
 
     print("settings tabs")
     await cdp.js(f"({tap})([...document.querySelectorAll('#transport button')]"
