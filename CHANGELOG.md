@@ -65,7 +65,10 @@ The RC-505mkII round (issue #3) plus the tooling that keeps the docs honest.
 - **Windows support is the 0.3.0 milestone.** 0.2.0 contains the PyInstaller and
   Inno Setup *files* and the `driver = asio` branch, and nothing else: no Windows
   build has been produced, installed or run, so Windows is not a supported
-  platform and no Windows artefact is published. 0.3.0 is
+  platform and no Windows artefact is published. The build pipeline exists so
+  0.3.0 has somewhere to start: `.github/workflows/windows-experimental.yml`
+  produces `-experimental` artefacts on demand and attaches them to an existing
+  release without ever creating one. 0.3.0 is
   WASAPI/ASIO device handling, the engine's Windows paths, a verified installer,
   and the same test evidence the Linux build has.
 

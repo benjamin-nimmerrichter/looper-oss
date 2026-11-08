@@ -173,13 +173,17 @@ what puts scsynth on the PipeWire graph like any other client; if you keep
 `jack` (jack2) instead, choose driver **alsa** in setup → audio and pick your
 interface there.
 
-**Windows — available as an experiment, and the next milestone.** The
-PyInstaller/Inno Setup recipe and the `driver = asio` code path are in the tree,
-but no Windows host has run them yet, so a Windows build is not a supported
-release. If you would like to try one: `looper-oss-<version>-setup.exe` installs
-per-user (no administrator password), and
-[SuperCollider for Windows](https://supercollider.github.io/) is a prerequisite —
-without it the app opens a window that says so rather than failing quietly.
+**Windows — an experiment, and the next milestone.** The PyInstaller/Inno Setup
+recipe and the `driver = asio` code path are in the tree, but **nothing has been
+built, installed or run on Windows**, so there is no supported Windows release
+and no Windows artefact is published with 0.2.0.
+
+If you want to try it anyway, the pipeline is there and produces an artefact
+labelled `-experimental`: run **Actions → windows-experimental → Run workflow**
+and download `windows-experimental-<version>`, or build it yourself with
+`packaging/windows/build.ps1` (see `packaging/windows/README.md`).
+[SuperCollider for Windows](https://supercollider.github.io/) is a prerequisite,
+and the app says so in its own window rather than failing quietly.
 
 **Full Windows support is planned for 0.3.0**: WASAPI and ASIO device handling,
 the engine's audio-backend paths, a verified installer, and testing on real

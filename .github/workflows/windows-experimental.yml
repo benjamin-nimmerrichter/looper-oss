@@ -1,0 +1,87 @@
+name: windows-experimental
+
+# The Windows build is an experiment, not a supported release: no Windows host
+# has built, installed or run it. This workflow exists for two reasons — so
+# 0.3.0 has a pipeline to iterate on, and so anyone can download the artefact
+# and report what breaks on real hardware.
+#
+# Everything it produces is named *-experimental. It never publishes a Release
+# on its own; on a tag it only *attaches* to one that already exists, and
+# failing to do so is not an error.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content VERSION -Raw).Trim()
+          "value=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "building $v for windows (experimental)"
+
+      # Inno Setup 6 ships on windows-latest; build.ps1 looks on PATH and in
+      # %ProgramFiles(x86)%\Inno Setup 6.
+      - name: build exe (+ installer if iscc is present)
+        shell: pwsh
+        run: ./packaging/windows/build.ps1
+
+      - name: rename artefacts as experimental
+        shell: pwsh
+        env:
+          # through env, never interpolated into the shell
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          $v = $env:VERSION
+          $portable = "dist/looper-oss-$v-windows-x64-portable.zip"
+          $setup = "dist/looper-oss-$v-setup.exe"
+          if (Test-Path $portable) {
+            Move-Item $portable `
+              "dist/looper-oss-$v-windows-x64-portable-experimental.zip"
+          }
+          if (Test-Path $setup) {
+            Move-Item $setup `
+              "dist/looper-oss-$v-windows-x64-setup-experimental.exe"
+          }
+          Get-ChildItem dist | Select-Object Name, Length | Format-Table
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-experimental-${{ steps.version.outputs.value }}
+          if-no-files-found: error
+          path: |
+            dist/LooperOSS/**
+            dist/*-experimental.zip
+            dist/*-experimental.exe
+
+      # On a tag, attach to the release if one exists. Never create one: a
+      # Windows artefact must not turn a Linux release into an implied
+      # "Windows is supported" claim.
+      - name: attach to an existing release
+        if: startsWith(github.ref, 'refs/tags/')
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if (gh release view $env:TAG) {
+            gh release upload $env:TAG `
+              dist/*-experimental.zip dist/*-experimental.exe --clobber
+          } else {
+            Write-Host "no release for $env:TAG yet; artefact stays in Actions"
+          }

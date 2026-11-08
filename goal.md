@@ -189,7 +189,7 @@ release of their own, and D5 depends on a sample licence that does not exist yet
 
 ---
 
-# Next: v0.3.0 — Windows
+## Next: v0.3.0 — Windows
 
 Linux is the supported platform in 0.2.0. Windows is the next release, and the
 bar is not "it compiles" but the same evidence the Linux build carries.
@@ -204,7 +204,10 @@ separators, `sessions/`, the staged home), and `Engine.stop()`'s `pkill` fallbac
 which is Unix-only today — a Windows build must not depend on it.
 
 **Packaging.** PyInstaller onedir plus the Inno Setup per-user installer, verified
-by installing on a clean machine, recording a loop, exporting a mixdown.
+by installing on a clean machine, recording a loop, exporting a mixdown. The
+pipeline already exists — `.github/workflows/windows-experimental.yml` builds on
+`windows-latest` and uploads `-experimental` artefacts — so 0.3.0 starts from a
+working build step, not from an empty workflow.
 
 **Evidence.** `scripts/smoke.py` and `scripts/uicheck.mjs` run on Windows, or a
 documented subset with the reason each check is excluded. The "unverified"

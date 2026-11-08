@@ -41,6 +41,10 @@ Set-Content -Path dist\LooperOSS\BUILD -Value $stamp -NoNewline -Encoding ascii
 Write-Host "   build stamp $stamp"
 
 $iscc = Get-Command iscc.exe -ErrorAction SilentlyContinue
+if (-not $iscc) {
+    $default = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+    if (Test-Path $default) { $iscc = Get-Item $default }
+}
 if ($iscc) {
     Write-Host "== installer (Inno Setup)"
     & $iscc.Source "/DAppVersion=$version" packaging\windows\looper-oss.iss
@@ -49,3 +53,9 @@ if ($iscc) {
     Write-Host "== installer skipped (Inno Setup's iscc.exe not on PATH)"
     Write-Host "   dist\LooperOSS\ is a complete portable build: copy it anywhere and run LooperOSS.exe"
 }
+
+Write-Host "== portable zip"
+$zip = "dist\looper-oss-$version-windows-x64-portable.zip"
+if (Test-Path $zip) { Remove-Item $zip }
+Compress-Archive -Path dist\LooperOSS -DestinationPath $zip
+Write-Host "   $zip"
