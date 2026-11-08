@@ -396,6 +396,23 @@ timing are not this bench. What it does mean is that the buffer-pair rewrite
 cannot be justified by these numbers, and the next step is to reproduce the
 sound with the user's own recording rather than with synthesised clicks.
 
+
+## M4 result: the Windows kill path works, and stop() now uses it
+
+`sweep_stale` (taskkill /F on scsynth.exe and sclang.exe) was verified rather
+than assumed: with a lone scsynth.exe running in the Wine prefix, `wine tasklist`
+reports 1 before and **0 after** the sweep.
+
+The first attempt at that test was invalid and worth recording: running
+`sweep_stale` from the *host* Python cannot work, because `taskkill` does not
+exist on Linux -- the 1-to-1 result was my own mistake, not the code. It has to
+run inside the prefix (`wine python.exe -c ...`), which is how the app runs on
+Windows.
+
+`Engine.stop()` only pkilled on POSIX and did nothing on Windows, so a stray
+`scsynth.exe` could keep the WASAPI device open until the next start swept it --
+invariants 19 and 22. The Windows branch now calls the same `sweep_stale`.
+
 ## M4 under Wine (partial)
 
 `act reboot` returns the engine to `engine ready (5 tracks)` and state frames

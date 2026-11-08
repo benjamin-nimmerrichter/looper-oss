@@ -426,6 +426,11 @@ class Engine:
             for name in ("sclang", "scsynth"):
                 subprocess.run(["pkill", "-x", name], check=False,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            # a stray scsynth.exe keeps the WASAPI device open, so the next start
+            # dies with "could not initialize audio" (invariants 19 and 22). This
+            # is the same reason the POSIX branch pkills, not an extra nicety.
+            sweep_stale(self.home)
 
 
 # --------------------------------------------------------------------- main --
