@@ -86,6 +86,27 @@ def build_stamp(root: pathlib.Path) -> str:
         return "src-0"
 
 
+def breadcrumb(step: str) -> None:
+    """A launch that dies before its log exists still has to say where.
+
+    On Windows the app is windowed, so a crash in early startup (staging 230 MB,
+    an unreadable payload, a locked file) writes nothing anywhere and the user
+    sees a double-click that does nothing. This goes to a fixed path, before any
+    of the state directories are known.
+    """
+    try:
+        if os.name == "nt":
+            base = pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home()))
+        else:
+            base = pathlib.Path(os.environ.get("XDG_DATA_HOME", pathlib.Path.home() / ".local" / "share"))
+        path = base / "looper-oss" / "launch.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%H:%M:%S')} {step}\n")
+    except OSError:
+        pass
+
+
 def resolve_home(bundled: bool) -> pathlib.Path:
     """The directory the app runs from: the source tree, or a staged copy."""
     root = bundled_root()
@@ -544,7 +565,9 @@ def main(argv: list[str] | None = None) -> int:
         return deps.install()
 
     bundled = getattr(sys, "frozen", False) or bool(os.environ.get("APPDIR"))
+    breadcrumb("main: enter")
     home = resolve_home(bundled)
+    breadcrumb(f"home: {home}")
     os.chdir(home)
     # from here on, everything leaves a trace in logs/app.log
     capture_output(home)
@@ -599,6 +622,7 @@ def main(argv: list[str] | None = None) -> int:
     write_config = load_module("looper_write_config", home / "bridge" / "write_config.py")
     write_config.write_from(home / "ui" / "config.json", home / "engine" / "_config.scd")
 
+    breadcrumb("ui server: starting")
     start_static_server(home, port)
     # Prove the UI is reachable from this machine before blaming the browser: a
     # bound socket that Windows Firewall drops and a server that never started
@@ -622,7 +646,9 @@ def main(argv: list[str] | None = None) -> int:
             _time.sleep(0.1)
     if last_error is not None:
         print(f"ui: NOT reachable at {url} ({last_error})", file=sys.stderr, flush=True)
+    breadcrumb("bridge: starting")
     bridge_module = start_bridge(home, logs / "bridge.log")
+    breadcrumb("bridge: up")
     # Serve the page from the SAME port as the socket, and open the window there:
     # one origin, so a Chromium "local network access" prompt cannot strand the UI
     # with a loaded page and a socket that never opens.
