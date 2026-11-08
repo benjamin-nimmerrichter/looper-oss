@@ -215,7 +215,21 @@ async def run_tests(c: Client) -> None:
           globals_ == 26 and fields == 32 and len(st["tracks"]) == N,
           f"{globals_}/{fields}/{len(st['tracks'])}")
 
-    # meters + playhead live inside the state frame (no separate OSC paths)
+    # meters + playhead live inside the state frame (no separate OSC paths).
+    # Wait for the stream to become continuous first: the engine sends an early
+    # frame, then goes quiet for several seconds while the boot routines run
+    # (autosave, VST scan, metering), and sampling inside that gap reads as "the
+    # clock never moves" even though it does.
+    last, streaming = None, False
+    ready_by = time.monotonic() + 30
+    while time.monotonic() < ready_by and not streaming:
+        try:
+            m = json.loads(await asyncio.wait_for(c.ws.recv(), 0.5))
+        except (TimeoutError, ValueError):
+            continue
+        if m.get("t") == "s":
+            streaming = last is not None and (time.monotonic() - last) < 1.0
+            last = time.monotonic()
     phases = set()
     deadline = time.monotonic() + 5.0        # a 4-bar loop at 120 bpm = 8 s
     while time.monotonic() < deadline:

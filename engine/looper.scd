@@ -153,7 +153,7 @@ if (~hasVST) {
 ~addDefs = {
 
 	// ---- master clock: the shared grid -------------------------------------
-	SynthDef(\ld_transport, { |phaseBus, clickBus, rate = 0.001,
+	SynthDef(\ld_transport, { |clockBuf = 0, phaseBus, clickBus, rate = 0.001,
 			beatsPerBar = 4, bars = 4, metro = 1, countIn = 0,
 			clickAmp = 0.3, accentHz = 1580, clickHz = 1050, reportRate = 15|
 		var ph, phKr, beats, beatTr, isBarTop, freq, click, wrap, playClick;
@@ -167,6 +167,8 @@ if (~hasVST) {
 		wrap     = Changed.kr(phKr < 0.5) * (phKr < 0.5);
 		playClick = (metro + countIn).clip(0, 1) * clickAmp;
 		Out.ar(phaseBus, ph);
+		// the pollable copy of the clock: SendReply is not delivered everywhere
+		BufWr.kr(beats, clockBuf, 0);
 		Out.ar(clickBus, (click * playClick) ! 2);
 
 		SendReply.kr(beatTr, '/ldbeat', [(beats.floor % beatsPerBar)]);
@@ -597,6 +599,7 @@ if (~hasVST) {
 	~maxFrames = (~maxSeconds * s.sampleRate).round.asInteger;
 	~scratch   = Buffer.alloc(s, ~maxFrames, 1);
 	~meterBuf  = Buffer.alloc(s, 64, 1);
+	~clockBuf  = Buffer.alloc(s, 8, 1);
 	~patternBuf = Buffer.alloc(s, 64, 1);   // 4 voices x 16 steps
 	// explicit order: clock -> tracks -> master. Synth() defaults to \addToHead,
 	// so a group target alone would run the master BEFORE the tracks it sums.
@@ -609,8 +612,13 @@ if (~hasVST) {
 		\rate, ~phaseRate.value,
 		\beatsPerBar, ~state[\beatsPerBar], \bars, ~state[\bars],
 		\metro, ~state[\metro], \countIn, 0, \clickAmp, 1,
-		\accentHz, ~cfg[\clock][\accentHz], \clickHz, ~cfg[\clock][\clickHz]
+		\accentHz, ~cfg[\clock][\accentHz], \clickHz, ~cfg[\clock][\clickHz],
+		\clockBuf, ~clockBuf
 	], ~grpClock, \addToTail);
+
+	// poll the clock only once the transport exists: polling from file load sent
+	// /b_getn at a booting server and stalled the state loop
+	~clockWatch !? { ~clockWatch.play };
 
 	~rhythmSynth = Synth(\ld_rhythm, [
 		\outBus, ~rhythmBus, \patBuf, ~patternBuf.bufnum,
@@ -1592,8 +1600,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		};
 	}, '/b_setn');
 
-	OSCdef(\ldBeat, { |msg|
-		var beat = (msg[4] ? 0).asInteger;
+	~fireBeat = { |beat|
 		var beatsPerLoop = (~state[\bars] * ~state[\beatsPerBar]).max(1);
 		// beat index inside the loop, counted here: a second SendReply value in the
 		// same def does not survive the trip, the beat itself does
@@ -1615,6 +1622,10 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 				};
 			};
 		};
+	};
+	OSCdef(\ldBeat, { |msg|
+		~clockReplies = Main.elapsedTime;
+		~fireBeat.value((msg[4] ? 0).asInteger);
 	}, '/ldbeat');
 
 	OSCdef(\ldAuto, { |msg|
@@ -1631,7 +1642,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		};
 	}, '/ldauto');
 
-	OSCdef(\ldWrap, {
+	~fireWrap = {
 		~beatInLoop = -1;
 		if (~pending.notNil && ~countInLeft.isNil) {
 			var p = ~pending;
@@ -1655,7 +1666,47 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			~dubPass.value;
 		};
 		~bridge.sendMsg('/ldwrap');
+	};
+	OSCdef(\ldWrap, {
+		~clockReplies = Main.elapsedTime;
+		~fireWrap.value;
 	}, '/ldwrap');
+
+	// Clock fallback. On Windows/Wine the server's SendReply never reaches sclang
+	// (even /synced is lost) while /b_setn and /status.reply do arrive, which froze
+	// the playhead and stopped takes ever closing. The transport writes its beat
+	// count into a buffer, so the same /b_getn poll the meters use can carry the
+	// clock. Replies win when they exist; this only acts after a second of silence.
+	~pollBeats = nil;
+	~clockWatch = Routine {
+		loop {
+			0.04.wait;
+			// the routine starts when the file is read, before the buffers exist
+			if (~clockBuf.notNil) {
+				s.sendMsg('/b_getn', ~clockBuf.bufnum, 0, 1);
+			};
+		};
+	};   // started with the transport, not at file load
+
+	OSCdef(\ldClockData, { |msg|
+		var beats, settled;
+		if (~clockBuf.notNil && (msg[1] == ~clockBuf.bufnum) && (msg[2] == 0)) {
+			settled = (Main.elapsedTime - (~clockReplies ? -10)) > 1.0;
+			if (settled) {
+				beats = (msg[4] ? 0).asFloat;
+				if (~pollBeats.notNil) {
+					if ((beats < ~pollBeats) && (beats < 0.5) && (~pollBeats > 0.5)) {
+						~fireWrap.value;
+					} {
+						if (beats.floor != ~pollBeats.floor) {
+							~fireBeat.value(beats.floor.asInteger % ~state[\beatsPerBar]);
+						};
+					};
+				};
+				~pollBeats = beats;
+			};
+		};
+	}, '/b_setn');
 
 	// diagnostic: how much audio is actually in a track's first layer buffer?
 	~probeTrack = { |i|
