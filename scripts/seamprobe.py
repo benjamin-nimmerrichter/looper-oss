@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import os
 import pathlib
 import subprocess
 import sys
@@ -152,6 +153,10 @@ async def drive() -> pathlib.Path:
         await send(op="set", path="t0.gateOn", v=0)
         await send(op="set", path="t0.hp", v=20)
         await send(op="set", path="t0.lp", v=19000)
+        xfade = os.environ.get("SEAM_XFADE")     # experiment: is the fade the artefact?
+        if xfade:
+            await send(op="set", path="g.xfadeMs", v=float(xfade))
+            print(f"seam fade set to {xfade} ms")
         await send(op="svc", what="testTone", args=[220, 0.25, 90])
         await send(op="act", a="clear", t=0)
         await asyncio.sleep(0.6)

@@ -312,6 +312,39 @@ time (MME), so the phase crawls (0.20 beat-steps/s); MIDI inputs cannot be
 opened; `audio.device` enumeration reports 0 nodes because the bridge asks
 `pactl`/`pw-*`, which do not exist on Windows.
 
+
+## M3 measurement log (the seam is not solved)
+
+`scripts/seamprobe.py`, one take of a 220 Hz tone, auto-dub hand-off, export:
+
+| condition | worst 5-15 kHz window | biggest step |
+| --- | --- | --- |
+| seam fade 2 ms (default) | **8.5x** the take's median | 0.065 (19x) |
+| seam fade 0.1 ms | **4.6x** | 0.066 (19x) |
+| after removing the idle write-back | **19.3x**, take truncated | -- |
+
+Two things that are now established rather than assumed:
+
+1. **The artefact is not the seam fade.** Cutting it from 2 ms to 0.1 ms moves the
+   band energy from 8.5x to 4.6x -- it contributes, it is not the cause.
+2. **It sits 150-250 ms AFTER each loop point**, and repeats exactly with the loop
+   period. That is the window in which a new take opens, not the wrap itself.
+3. **The idle write-back is load-bearing.** Removing it (writing to the scratch
+   buffer instead of reading a layer back to rewrite it) truncated the take and
+   pushed the band energy to 19.3x. Reverted. The suite was green for that
+   change; only the measurement caught it.
+
+So the buffer pair is still to build, and the next attempt must start by
+isolating which layer's playback the burst belongs to (per-layer export or a
+solo'd layer), not by rewriting the write path again.
+
+## M4 under Wine (partial)
+
+`act reboot` returns the engine to `engine ready (5 tracks)` and state frames
+resume, so the restart path survives on Windows/Wine. `s.quit -> exit` versus
+`taskkill` still needs a real Windows run: Wine hides the difference because the
+process tree is the same.
+
 ## Carried into 0.3.0 (decided with the user)
 
 0.2.0 ships with these known and documented rather than fixed:
