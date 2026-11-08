@@ -1,205 +1,190 @@
 #!/usr/bin/env python3
-"""Regenerate the documentation screenshots without Playwright.
+"""Regenerate the documentation screenshots — automatically.
 
-uicheck.mjs is the real UI test, but it needs a Playwright install. The
-documentation still has to be re-shot every time the UI changes, so this drives
-the same Chromium that Playwright cached, over the DevTools protocol, using the
-`websockets` client the bridge already depends on.
+    python3 scripts/shots.py             # start the stack if needed, shoot, stop it
+    python3 scripts/shots.py --keep      # leave a stack you started running
+    python3 scripts/shots.py main loop   # only these shots
 
-    python3 -m app.main --window none &        # the stack the page talks to
-    python3 scripts/shots.py                   # docs/img/*.png
+Why WebKit and not a headless browser: in a container without a GPU, Chromium
+rasterises the settings drawer's text as the wrong glyphs — every label comes
+out gibberish — while the same page in WebKit (the engine the app itself draws
+with) is correct. A screenshot tool whose output cannot be trusted is worse than
+no tool, so this one asks WebKit for the pixels through its own snapshot API.
+
+Needs PyGObject and WebKit2 for *some* interpreter on the box, the same ones the
+app window uses; the venv python usually lacks them, so it looks for a system
+python that has them.
 """
 from __future__ import annotations
 
-import asyncio
-import base64
+import argparse
 import contextlib
-import json
 import os
 import pathlib
-import shutil
+import socket
 import subprocess
 import sys
-import tempfile
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "img"
 URL = os.environ.get("UI_URL", "http://127.0.0.1:8181/")
-TABS = ("audio", "loop", "clock", "ui", "midi", "session", "505")
-try:
-    PORT = int(os.environ.get("CDP_PORT", "9333"))
-except ValueError:
-    PORT = 9333
 SIZE = (1280, 800)
 
+TAP = ("el => el.dispatchEvent(new PointerEvent('pointerup', "
+       "{bubbles: true, cancelable: true}))")
 
-def find_chrome() -> str | None:
-    for name in ("chrome-headless-shell", "chromium", "chromium-browser",
-                 "google-chrome-stable", "brave"):
-        found = shutil.which(name)
-        if found:
-            return found
-    cache = pathlib.Path.home() / ".cache" / "ms-playwright"
-    for shell in sorted(cache.glob("chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell")):
-        if shell.is_file():
-            return str(shell)
+TABS = ("audio", "loop", "clock", "ui", "midi", "session", "505")
+
+# name -> JavaScript that puts the page into the state to photograph
+SHOTS: list[tuple[str, str]] = [("ui-main", "true")]
+for tab in TABS:
+    SHOTS.append((f"setup-{tab}", f"""
+        const tap = {TAP};
+        const setupBtn = [...document.querySelectorAll('#transport button')]
+            .find(b => b.textContent.trim().toLowerCase() === 'setup');
+        if (setupBtn) tap(setupBtn);
+        setTimeout(() => {{
+            const t = document.querySelector('#settings .tabs button[data-tab="{tab}"]');
+            if (t) tap(t);
+        }}, 700);
+        true
+    """))
+SHOTS.append(("ui-fx", f"""
+    const tap = {TAP};
+    const track = document.querySelector('.track');
+    const fx = track && [...track.querySelectorAll('button')]
+        .find(b => b.textContent.trim() === 'fx');
+    if (fx) tap(fx);
+    true
+"""))
+
+# Runs under an interpreter that has gi. argv: url, js, out, width, height
+SNAPSHOT = r'''
+import sys, gi
+gi.require_version("Gtk", "3.0")
+try:
+    gi.require_version("WebKit2", "4.1")
+except ValueError:
+    gi.require_version("WebKit2", "4.0")
+from gi.repository import Gtk, WebKit2, GLib
+
+url, js, out = sys.argv[1], sys.argv[2], sys.argv[3]
+width, height = int(sys.argv[4]), int(sys.argv[5])
+
+win = Gtk.Window()
+win.set_default_size(width, height)
+win.set_decorated(False)
+view = WebKit2.WebView()
+win.add(view)
+win.show_all()
+
+def done(v, res, _):
+    surface = v.get_snapshot_finish(res)
+    surface.write_to_png(out)
+    Gtk.main_quit()
+
+def shoot(v):
+    v.get_snapshot(WebKit2.SnapshotRegion.VISIBLE,
+                   WebKit2.SnapshotOptions.NONE, None, done, None)
+    return False
+
+def loaded(v, event):
+    if event == WebKit2.LoadEvent.FINISHED:
+        GLib.timeout_add(2200, lambda: (v.run_javascript(js, None, None, None), False)[1])
+        GLib.timeout_add(5200, lambda: shoot(v))
+    return False
+
+view.connect("load-changed", loaded)
+view.load_uri(url)
+GLib.timeout_add(25000, lambda: (print("timeout", file=sys.stderr), Gtk.main_quit(), False)[2])
+Gtk.main()
+'''
+
+
+def gi_python() -> str | None:
+    """An interpreter that can import gi + WebKit2 (the venv usually cannot)."""
+    candidates = [os.environ.get("PYGI_PYTHON"), "/usr/bin/python3", sys.executable]
+    for cand in candidates:
+        if not cand or not pathlib.Path(cand).exists():
+            continue
+        try:
+            ok = subprocess.run(
+                [cand, "-c", "import gi; gi.require_version('Gtk','3.0')"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20,
+            ).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if ok:
+            return cand
     return None
 
 
-class CDP:
-    """One page, request/response by id, five methods is all this needs."""
-
-    def __init__(self, ws):
-        self.ws = ws
-        self.n = 0
-
-    async def call(self, method: str, **params):
-        self.n += 1
-        mid = self.n
-        await self.ws.send(json.dumps({"id": mid, "method": method, "params": params}))
-        while True:
-            raw = await self.ws.recv()
-            try:
-                msg = json.loads(raw)
-            except ValueError:          # an event we do not care about
-                continue
-            if msg.get("id") == mid:
-                if "error" in msg:
-                    raise RuntimeError(f"{method}: {msg['error']}")
-                return msg.get("result", {})
-
-    async def js(self, expression: str, await_promise: bool = False):
-        res = await self.call("Runtime.evaluate", expression=expression,
-                              returnByValue=True, awaitPromise=await_promise)
-        return res.get("result", {}).get("value")
-
-    async def shot(self, path: pathlib.Path) -> None:
-        res = await self.call("Page.captureScreenshot", format="png")
-        path.write_bytes(base64.b64decode(res["data"]))
-        print(f"  {path.relative_to(ROOT)}  {path.stat().st_size // 1024} kB")
+def port_open(port: int) -> bool:
+    with contextlib.suppress(OSError), \
+            socket.create_connection(("127.0.0.1", port), timeout=1):
+        return True
+    return False
 
 
-async def wait_for(cdp: CDP, expression: str, seconds: float = 30.0) -> None:
+def wait_for_port(port: int, seconds: float = 45.0) -> bool:
     end = time.monotonic() + seconds
     while time.monotonic() < end:
-        if await cdp.js(expression):
-            return
-        await asyncio.sleep(0.3)
-    raise TimeoutError(f"timed out waiting for: {expression}")
+        if port_open(port):
+            return True
+        time.sleep(0.5)
+    return False
 
 
-async def shoot(cdp: CDP) -> None:
-    tap = ("el => el.dispatchEvent(new PointerEvent('pointerup', "
-           "{bubbles: true, cancelable: true}))")
-    await wait_for(cdp, "!!(window.__ld && window.__ld.state && window.__ld.state())")
+def main() -> int:
+    ap = argparse.ArgumentParser(description="regenerate docs/img screenshots")
+    ap.add_argument("only", nargs="*", help="shot names to take (default: all)")
+    ap.add_argument("--keep", action="store_true", help="do not stop a stack we started")
+    args = ap.parse_args()
 
-    # silent: the screenshots must not depend on a live microphone
-    await cdp.js("window.__ld.set('g.masterVol', 0); window.__ld.set('g.metro', 0); true")
-    # Chromium's software rasteriser renders text inside a transformed layer with
-    # a broken font atlas, and the drawers slide in with `transform`. The result
-    # is a screenshot full of garbage glyphs. Drop the slide (it is a 0.22 s
-    # animation, invisible in a still) and hide the closed drawers so only the
-    # one being photographed is painted.
-    await cdp.js(
-        "document.head.insertAdjacentHTML('beforeend', '<style>'"
-        " + '.drawer.open{transform:none!important;transition:none!important}'"
-        " + '.drawer:not(.open){display:none!important}'"
-        " + '.drawer .tabs,.drawer .body{overflow:visible!important}'"
-        " + '.cfgrow .lbl,.cfgrow .hint{overflow:visible!important;text-overflow:clip!important}'"
-        " + '</style>');true")
-    await asyncio.sleep(0.8)
-
-    OUT.mkdir(parents=True, exist_ok=True)
-    print("main screen")
-    await cdp.shot(OUT / "ui-main.png")
-    if os.environ.get("SHOTS_ONLY") == "main":
-        return   # the drawers cannot be rasterised here; see the docstring
-
-
-    print("settings tabs")
-    await cdp.js(f"({tap})([...document.querySelectorAll('#transport button')]"
-                 f".find(b => b.textContent.trim().toLowerCase() === 'setup')); true")
-    await asyncio.sleep(0.6)
-    # The drawer is `position: fixed` in the app (it slides over the tracks). A
-    # fixed, transformed, full-screen layer is exactly what this rasteriser
-    # mangles, so for the stills it is laid out in normal flow and the app is
-    # hidden behind it -- same pixels, ordinary stacking.
-    for tab in TABS:
-        await cdp.js(f"({tap})(document.querySelector('#settings .tabs button[data-tab=\"{tab}\"]')); true")
-        await asyncio.sleep(0.5)
-        await cdp.shot(OUT / f"setup-{tab}.png")
-    await cdp.js(f"({tap})(document.getElementById('settings-close')); true")
-    await asyncio.sleep(0.5)
-
-    print("fx drawer")
-    await cdp.js(
-        "(() => { const t = document.querySelector('.track');"
-        " const b = [...t.querySelectorAll('button')].find(x => x.textContent.trim() === 'fx');"
-        f" if (b) ({tap})(b); return !!b; }})()")
-    await asyncio.sleep(0.6)
-    await cdp.shot(OUT / "ui-fx.png")
-    await cdp.js(f"({tap})(document.getElementById('fx-close')); true")
-
-
-async def main() -> int:
-    chrome = find_chrome()
-    if not chrome:
-        print("no Chromium found (chrome-headless-shell, chromium, brave)", file=sys.stderr)
+    py = gi_python()
+    if not py:
+        print("no interpreter with PyGObject + WebKit2 found (set PYGI_PYTHON)",
+              file=sys.stderr)
         return 1
-    import websockets  # noqa: PLC0415 - optional dependency of this tool only
 
-    profile = pathlib.Path(tempfile.mkdtemp(prefix="looper-shots-"))
-    proc = subprocess.Popen(
-        [chrome, "--headless=new", "--no-sandbox", "--hide-scrollbars",
-         # a real (software) GL path: --disable-gpu makes Chromium rasterise
-         # transformed layers with a broken font atlas
-         "--enable-unsafe-swiftshader", "--use-gl=angle", "--use-angle=swiftshader",
-         f"--remote-debugging-port={PORT}", f"--user-data-dir={profile}",
-         f"--window-size={SIZE[0]},{SIZE[1]}", "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    try:
-        target = None
-        for _ in range(100):
-            try:
-                import urllib.request
-                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json", timeout=1) as fh:
-                    for t in json.load(fh):
-                        if t.get("type") == "page":
-                            target = t["webSocketDebuggerUrl"]
-                            break
-                if target:
-                    break
-            except OSError:
-                pass
-            await asyncio.sleep(0.2)
-        if not target:
-            print("Chromium did not expose a debugging target", file=sys.stderr)
+    started: subprocess.Popen[bytes] | None = None
+    if not port_open(8181):
+        print("starting the stack…")
+        env = dict(os.environ, LOOPER_OSS_KEEP_ALIVE="1")
+        started = subprocess.Popen(
+            [sys.executable, "-m", "app.main", "--window", "none"],
+            cwd=str(ROOT), env=env, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True,
+        )
+        if not wait_for_port(8181):
+            print("the UI did not come up", file=sys.stderr)
+            started.terminate()
             return 1
 
-        async with websockets.connect(target, max_size=64 * 1024 * 1024) as ws:
-            cdp = CDP(ws)
-            await cdp.call("Page.enable")
-            await cdp.call("Runtime.enable")
-            await cdp.call("Emulation.setDeviceMetricsOverride",
-                           width=SIZE[0], height=SIZE[1], deviceScaleFactor=1,
-                           mobile=False)
-            await cdp.call("Page.navigate", url=URL)
-            await asyncio.sleep(1.0)
-            await shoot(cdp)
-        print("\nscreenshots written to docs/img/")
-        return 0
-    finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-        # a leftover browser profile in /tmp is harmless
-        with contextlib.suppress(OSError):
-            shutil.rmtree(profile)
+    chosen = [s for s in SHOTS if not args.only or s[0] in args.only]
+    OUT.mkdir(parents=True, exist_ok=True)
+    failed = 0
+    for name, js in chosen:
+        path = OUT / f"{name}.png"
+        done = subprocess.run([py, "-c", SNAPSHOT, URL, js, str(path),
+                               str(SIZE[0]), str(SIZE[1])])
+        if done.returncode == 0 and path.is_file() and path.stat().st_size > 0:
+            print(f"  docs/img/{name}.png  {path.stat().st_size // 1024} kB")
+        else:
+            print(f"  FAILED {name}", file=sys.stderr)
+            failed += 1
+
+    if started is not None and not args.keep:
+        started.terminate()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            started.wait(timeout=10)
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "sweep.py")],
+                       check=False, stdout=subprocess.DEVNULL)
+
+    print(f"\n{len(chosen) - failed}/{len(chosen)} screenshots written to docs/img/")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    sys.exit(main())

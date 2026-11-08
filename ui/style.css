@@ -527,6 +527,11 @@ body.no-master #master { display: none; }
   font-weight: 600;
 }
 .cfgrow select {
+  /* a native <select> paints as an unstyled system widget -- it also comes out
+     blank in a WebKit snapshot, so the settings screenshots showed white boxes */
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 1.6rem;
   min-height: var(--tap);
   max-width: 14rem;
   background: var(--panel-2);

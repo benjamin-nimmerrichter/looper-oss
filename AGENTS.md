@@ -73,6 +73,7 @@ python3 scripts/sweep.py          # kill leftovers (do this after any test run)
 ./scripts/smoke.py                # 62 checks, spawns its own stack
 ./scripts/smoke.py --attach       # ...against a stack you started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules node scripts/uicheck.mjs
+python3 scripts/shots.py          # docs/img screenshots (starts/stops the stack itself)
 sclang /tmp/probe.scd             # boots the engine alone (write your own probes)
 ./scripts/release.py --check      # required files present, no runtime state in the tree
 ./scripts/release.py              # build dist/ archives (byte-identical on rebuild)

@@ -407,6 +407,7 @@ have the UI outline each target and count any that fall below that floor.
 ./scripts/smoke.py                    # starts its own engine: 62 end-to-end checks
 ./scripts/smoke.py --attach            # run against a stack you already started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules ./scripts/uicheck.mjs
+python3 scripts/shots.py              # regenerate docs/img (auto: starts and stops the stack)
 ./scripts/release.py --check           # is the tree shippable? builds nothing
 ./packaging/linux/build-appimage.sh    # dist/looper-oss-<ver>-<arch>.AppImage
 ```
