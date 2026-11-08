@@ -4,7 +4,24 @@ All notable changes to Looper OSS. Format: [Keep a Changelog](https://keepachang
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The single
 source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
-## [Unreleased]
+## [0.2.0] — 2026-11-08
+
+The RC-505mkII round (issue #3) plus the tooling that keeps the docs honest.
+
+- **D1** per-track varispeed 0.25–4× (`speed`, grid-locked at 1)
+- **D2** Mark Back, replace-overdub, Bounce In
+- **D3** four VST insert slots, four recallable banks, an eight-step sequencer
+  on the low pass, toggle or momentary per slot
+- **D4** per-track input compressor, a mixer strip per input channel (gain +
+  HP/LP on a shared bus), three stereo output buses with per-track routing that
+  fold down to the device, cue send, a level per bus
+- **D5** a synthesised drum engine: 16 kits, 200 patterns, no samples
+- **D6** MIDI note gestures (press / hold / double), learned by performing them
+- **D7** 99 memories, one-file backup/restore, WAV import
+- **D8** audited rather than rebuilt — per-track playback settings, stems and
+  the master mixdown already existed
+- `scripts/shots.py` regenerates the documentation screenshots through WebKit's
+  own snapshot: no browser, no interaction, starts and stops the stack itself
 
 ### Added
 

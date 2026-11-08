@@ -261,6 +261,23 @@ async def run_tests(c: Client) -> None:
                     and cfg["loop"]["autoDub"] == 1
                     and cfg["version"] == 3)
         check("update keeps settings and music", kept)
+
+        # a new version is a new staged home: it must inherit the old one
+        with tempfile.TemporaryDirectory() as td:
+            home = pathlib.Path(td) / "app"
+            old = home / "0.1.0"
+            (old / "sessions" / "autosave").mkdir(parents=True)
+            (old / "sessions" / "autosave" / "take.wav").write_bytes(b"RIFF")
+            (old / "ui").mkdir(parents=True)
+            (old / "ui" / "config.json").write_text(json.dumps(
+                {"version": 3, "bpm": 137, "loop": {"autoDub": 1}}))
+            (old / "engine").mkdir(parents=True)
+            (old / "engine" / "looper.scd").write_text("// marker")
+            new = home / "0.2.0"
+            stage(ROOT, new)
+            kept2 = ((new / "sessions" / "autosave" / "take.wav").is_file()
+                     and json.loads((new / "ui" / "config.json").read_text()).get("bpm") == 137)
+        check("version bump keeps the music", kept2)
     except Exception as exc:                       # noqa: BLE001 - report, don't crash
         check("update keeps settings and music", False, repr(exc))
 

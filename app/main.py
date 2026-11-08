@@ -151,6 +151,22 @@ def stage(src: pathlib.Path, dst: pathlib.Path) -> None:
         )
     except (shutil.Error, OSError) as exc:
         fatal(f"cannot prepare the application directory\n{exc}\n\ntarget: {tmp}")
+    # The staged home is per version, so a new version would start empty and the
+    # player would think their loops were gone. On a fresh install, carry the
+    # sessions and settings over from the newest earlier version.
+    if not dst.exists():
+        older = [d for d in sorted(dst.parent.glob("*"), reverse=True)
+                 if d != dst and not d.name.endswith(".staging")
+                 and (d / "engine" / "looper.scd").is_file()]
+        for old in older:
+            if (old / "sessions").is_dir() and not (tmp / "sessions").is_dir():
+                with contextlib.suppress(OSError):
+                    shutil.copytree(old / "sessions", tmp / "sessions")
+            cfg_old = old / "ui" / "config.json"
+            if cfg_old.is_file():
+                with contextlib.suppress(OSError):
+                    shutil.copy2(cfg_old, tmp / "ui" / "config.json")
+                break
     if keep.is_dir():  # never lose the user's music
         with contextlib.suppress(OSError):
             shutil.copytree(keep, tmp / "sessions", dirs_exist_ok=True)
