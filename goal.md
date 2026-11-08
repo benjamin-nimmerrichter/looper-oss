@@ -87,7 +87,7 @@ time-stretch, which stays a non-goal.
 - **Auto Rec:** the engine already has `\ld_autodetect`; it needs to be exposed
   as a binding (see D6).
 
-### D3 — FX banks — **partly done** (four insert slots; banks and step sequence open)
+### D3 — FX banks — **partly done** (four insert slots and four recallable banks; toggle/momentary and the step sequence open)
 4 simultaneous effects per track-bank, four banks, toggle/momentary, and a step
 sequence for parameters. The VST slot path (VSTPlugin) is the natural carrier:
 a bank is a list of plugin slots plus their parameters. The 49/53-effect

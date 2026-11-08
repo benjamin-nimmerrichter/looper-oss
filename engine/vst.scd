@@ -49,6 +49,64 @@
 		};
 	};
 
+	// ---- four FX banks per track --------------------------------------------
+	// A bank is the set of keys in the four slots, nothing more: recall closes
+	// whatever is loaded and opens the saved ones. Persisted by the bridge in
+	// ui/config.json under vst.banks, so a bank survives a restart.
+	~vstBanksInit = {
+		~tracks.do { |t, i|
+			var saved = (~cfg[\vst][\banks] ? [])[i];
+			t[\vstBanks] = Array.fill(4, { [nil, nil, nil, nil] });
+			if (saved.isKindOf(Array)) {
+				saved.do { |row, b|
+					if ((b < 4) && row.isKindOf(Array)) {
+						t[\vstBanks][b] = Array.fill(4, { |sl|
+							var k = row[sl];
+							if (k.notNil && (k.asString.size > 0), { k.asString }, { nil })
+						});
+					};
+				};
+			};
+		};
+	};
+
+	~sendVSTBanks = {
+		var csv = ~tracks.collect { |t|
+			(0..3).collect { |b|
+				(t[\vstBanks][b] ? []).collect { |x| x ? "" }.join(">")
+			}.join(":")
+		}.join(";");
+		~bridge.sendMsg('/ldvstbanks', csv.asString);
+	};
+
+	~vstBankSave = { |trackIdx, bank|
+		var t = ~tracks[trackIdx];
+		if (t.notNil && t[\vstBanks].notNil && (bank >= 0) && (bank < 4)) {
+			t[\vstBanks][bank] = ~vstIds.collect { |id, sl|
+				var k = ~vstKey.value(t, sl);
+				if (k.asString.size > 0, { k.asString }, { nil })
+			};
+			~sendVSTBanks.value;
+		};
+	};
+
+	~vstBankLoad = { |trackIdx, bank|
+		var t = ~tracks[trackIdx];
+		var row;
+		if (t.notNil && t[\vstBanks].notNil && (bank >= 0) && (bank < 4)) {
+			row = t[\vstBanks][bank];
+			~vstIds.do { |id, sl| ~vstClose.value(trackIdx, sl) };
+			if (row.notNil) {
+				row.do { |key, sl|
+					if (key.notNil && (key.asString.size > 0)) {
+						~vstOpen.value(trackIdx, sl, key);
+					};
+				};
+			};
+			~sendVSTBanks.value;
+		};
+	};
+
 	// ---- per slot queries ---------------------------------------------------
 	// The controller is the source of truth: a cached name array went stale in
 	// practice. The *key* is what open() wants ("mda Delay.vst3"); the name is

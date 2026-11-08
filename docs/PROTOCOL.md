@@ -121,6 +121,7 @@ Per track paths: `t<N>.<field>` for every per-track state field above.
 | `vstOpen` | track, slot, plugin key |
 | `vstClose` | track, slot |
 | `vstBypass` | track, slot, 0 or 1 |
+| `vstBankSave` / `vstBankLoad` | track, bank 0–3 |
 | `vstEditor` | track, slot |
 | `midiLearn` | target, e.g. `t0.press` |
 | `midiMap` / `midiClear` | — |
@@ -139,6 +140,7 @@ Browser-only ops (the bridge does the work, no engine traffic):
 | --- | --- |
 | `backup` | zips `sessions/` → `sessions/backups/looper-<stamp>.zip`, replies `{"t":"backup","ok":1,"path":…}` |
 | `restore` | extracts the newest backup (or `name`) over `sessions/`, refusing members outside it; replies `{"t":"restored","ok":1,"name":…}` |
+| `/ldvstbanks` (engine → bridge) | `track:bank:key>key>key>key;…` — the bridge persists it as `vst.banks` |
 | `backups` | replies `{"t":"backups","csv":"a.zip;b.zip"}` |
 | `importList` | replies `{"t":"imports","csv":"a.wav;b.wav"}` from `sessions/import/` |
 

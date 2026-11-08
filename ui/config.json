@@ -62,7 +62,8 @@
     "#e6e6e6"
   ],
   "vst": {
-    "dirs": null
+    "dirs": null,
+    "banks": []
   },
   "session": {
     "slot": 1

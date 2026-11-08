@@ -549,6 +549,16 @@ async def run_tests(c: Client) -> None:
             )
             check("fourth plugin slot loads", st is not None)
             await c.svc("vstClose", [0, 3])
+            # D3: four banks. Store what is loaded, empty the slots, recall it.
+            await c.svc("vstBankSave", [0, 0])
+            await asyncio.sleep(0.4)
+            await c.svc("vstClose", [0, 0])
+            await asyncio.sleep(0.6)
+            await c.svc("vstBankLoad", [0, 0])
+            st = await c.wait(
+                lambda m: m.get("t") == "vst"
+                and m["csv"].split(";")[0].split(",")[0].split("|")[1], 25)
+            check("fx bank recalls the slot", st is not None)
             await c.svc("vstClose", [0, 0])
         else:
             check("VST3 plugin available", False, "catalog empty")

@@ -566,6 +566,7 @@ if (~hasVST) {
 	s.sync;
 
 	~initVST.value;
+	if (~hasVST) { ~vstBanksInit.value };   // four FX banks per track
 	~initMIDI.value;
 
 	"--- Looper OSS ------------------------------------------".postln;
@@ -1383,6 +1384,8 @@ if (~hasVST) {
 			"vstOpen",   { ~vstOpen.value(msg[2].asInteger, msg[3].asInteger, msg[4].asString) },
 			"vstClose",  { ~vstClose.value(msg[2].asInteger, msg[3].asInteger) },
 			"vstBypass", { ~vstBypass.value(msg[2].asInteger, msg[3].asInteger, msg[4].asInteger) },
+			"vstBankSave", { ~vstBankSave.value(msg[2].asInteger, msg[3].asInteger) },
+			"vstBankLoad", { ~vstBankLoad.value(msg[2].asInteger, msg[3].asInteger) },
 			"vstEditor", { ~vstEditor.value(msg[2].asInteger, msg[3].asInteger) },
 			"midiLearn", { ~learnTarget = msg[2].asString },
 			"midiMap",   { ~sendMIDIMap.value },

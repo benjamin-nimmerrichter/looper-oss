@@ -734,6 +734,16 @@ function openFx(i) {
       list.append(row);
     }
     c.append(list);
+    // Four FX banks: s1..s4 store the current slots, l1..l4 recall them.
+    const bankRow = el("div", "row2");
+    for (let b = 0; b < 4; b++) {
+      const sv = Button({ label: `s${b + 1}`, cls: "tiny" });
+      sv.addEventListener("pointerup", () => svc("vstBankSave", [i, b]));
+      const ld = Button({ label: `l${b + 1}`, cls: "tiny" });
+      ld.addEventListener("pointerup", () => svc("vstBankLoad", [i, b]));
+      bankRow.append(sv, ld);
+    }
+    c.append(bankRow, el("div", "caption", "banks: s = store, l = recall"));
     if (STATS.vst !== 1) {
       c.append(el("div", "caption", "VSTPlugin extension not loaded"));
     } else if (!VSTCATALOG.length) {
