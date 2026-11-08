@@ -146,7 +146,47 @@ def sign(path: pathlib.Path) -> None:
     print(f"   signed {path.name}")
 
 
-def bundle_supercollider(appdir: pathlib.Path) -> None:
+SC_VERSION = "3.13.0"
+SC_ZIP = f"https://github.com/supercollider/supercollider/releases/download/Version-{SC_VERSION}/SuperCollider-{SC_VERSION}-win64.zip"
+SC_CACHE = ROOT / "build" / "supercollider"
+
+
+def fetch_supercollider() -> pathlib.Path:
+    """Download the official Windows build once, into build/supercollider/.
+
+    The CI runner has no SuperCollider, and a release built without it would be
+    the one thing this application must never be: something the user has to
+    finish installing by hand. Cached, so repeated builds cost nothing.
+    """
+    # the archive extracts to a plain "SuperCollider" directory, not a versioned
+    # one -- find sclang.exe rather than trusting the layout
+    for found in SC_CACHE.rglob("sclang.exe"):
+        return found.parent
+    target = SC_CACHE / "SuperCollider"
+    SC_CACHE.mkdir(parents=True, exist_ok=True)
+    archive = SC_CACHE / f"sc-{SC_VERSION}.zip"
+    if not archive.exists():
+        print(f"   downloading SuperCollider {SC_VERSION} (92 MB, once)")
+        import urllib.request
+        try:
+            urllib.request.urlretrieve(SC_ZIP, archive)
+        except OSError as exc:
+            print(f"   download failed: {exc}")
+            return target
+    print("   extracting")
+    import zipfile
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            zf.extractall(SC_CACHE)
+    except (OSError, zipfile.BadZipFile) as exc:
+        print(f"   cannot unpack {archive.name}: {exc}")
+        return target
+    for found in SC_CACHE.rglob("sclang.exe"):
+        return found.parent
+    return target
+
+
+def bundle_supercollider(appdir: pathlib.Path, allow_download: bool = True) -> None:
     """Copy SuperCollider next to the app so Windows needs no separate install.
 
     SuperCollider is GPL-3.0 and so is Looper OSS, so shipping the unmodified
@@ -157,8 +197,10 @@ def bundle_supercollider(appdir: pathlib.Path) -> None:
     """
     src = pathlib.Path(os.environ.get("LOOPER_OSS_SC_DIR", r"C:\SC\SuperCollider"))
     # a Linux host path also works, which is how the Wine builds are made here
-    if not src.exists():
+    if not (src / "sclang.exe").exists():
         src = WIN_PREFIX / "drive_c" / "SC" / "SuperCollider"
+    if not (src / "sclang.exe").exists() and allow_download:
+        src = fetch_supercollider()
     if not (src / "sclang.exe").exists():
         print(f"   SuperCollider not found at {src} — the build will need it installed")
         return
@@ -168,7 +210,10 @@ def bundle_supercollider(appdir: pathlib.Path) -> None:
     skip = {"scide.exe", "HelpSource", "examples", "sounds", "supernova.exe"}
     copied = 0
     for path in src.rglob("*"):
-        rel = path.relative_to(src)
+        try:
+            rel = path.relative_to(src)
+        except ValueError:
+            continue
         if rel.parts[0] in skip:
             continue
         target = dest / rel
@@ -252,7 +297,7 @@ def build_windows() -> list[pathlib.Path]:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="build Looper OSS")
     ap.add_argument("targets", nargs="*", default=[],
-                    choices=["linux", "windows"])
+                    help="linux | windows | bundle-sc <dir>")
     ap.add_argument("--check", action="store_true", help="report, build nothing")
     args = ap.parse_args(argv[1:])
     DIST.mkdir(exist_ok=True)
@@ -265,6 +310,13 @@ def main(argv: list[str]) -> int:
         print(f"  appimagetool  {'yes' if (ROOT / 'build' / 'appimagetool.runtime').exists() else 'no'}")
         print(f"  inno setup    {'yes' if any((WIN_PREFIX / 'drive_c' / p.replace('C:\\', '').replace('\\', '/')).exists() for p in ISCC_CANDIDATES) else 'no'}")
         print(f"  signing       {'configured' if os.environ.get('LOOPER_OSS_PFX') else 'not configured (SmartScreen will warn on .exe)'}")
+        return 0
+
+    if args.targets and args.targets[0] == "bundle-sc":
+        # used by packaging/windows/build.ps1 on a real Windows machine, so the
+        # bundle logic exists exactly once and is tested here
+        dest = pathlib.Path(args.targets[1]) if len(args.targets) > 1 else DIST / "LooperOSS"
+        bundle_supercollider(dest, allow_download="--no-download" not in argv)
         return 0
 
     targets = args.targets or (["linux"] + (["windows"] if (WIN_PREFIX / "drive_c").exists() else []))

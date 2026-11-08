@@ -209,8 +209,8 @@ prebuilt release zip from `github.com/Spacechild1/vstplugin` unpacked into
 `~/.local/share/SuperCollider/Extensions/`). The engine detects it at startup and
 shows `VST yes` in the log; without it the slots are simply absent.
 
-**Windows 10.** Two downloads, and SuperCollider is installed separately (the
-app tells you in its own window if it is missing):
+**Windows 10.** Two downloads, both complete: SuperCollider is inside the
+package, so there is nothing else to install.
 
 - **`looper-oss-<version>-windows-x64.zip`** — portable, no installer, no
   administrator. Extract anywhere and run `LooperOSS.exe`. **Recommended**: an
@@ -221,8 +221,8 @@ app tells you in its own window if it is missing):
   an uninstaller. It is unsigned, so Windows may ask before running it:
   *More info* → *Run anyway*.
 
-Neither bundles SuperCollider: install [SuperCollider 3.13](https://supercollider.github.io/download)
-first. Your sessions live in `%LOCALAPPDATA%\looper-oss\app\<version>\sessions`,
+The download is ~100 MB and installs ~230 MB on disk, most of it the audio
+engine that comes with it. Your sessions live in `%LOCALAPPDATA%\looper-oss\app\<version>\sessions`,
 which the installer never touches — uninstalling removes the program, not the music.
 
 ## Run

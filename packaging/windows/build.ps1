@@ -33,6 +33,16 @@ if (Test-Path dist\LooperOSS\LooperOSS.exe) {
     throw "PyInstaller did not produce dist\LooperOSS\LooperOSS.exe"
 }
 
+# SuperCollider ships inside the package: the user must not have to install
+# anything. The logic lives in scripts/build.py so it is the same code the Wine
+# build uses (and so it is tested on Linux before it runs here).
+Write-Host "== supercollider bundle"
+python scripts\build.py bundle-sc dist\LooperOSS
+if (-not (Test-Path dist\LooperOSS\sc\sclang.exe)) {
+    throw "SuperCollider did not make it into dist\LooperOSS\sc - refusing to ship a package that needs a manual install"
+}
+Write-Host "   dist\LooperOSS\sc\sclang.exe"
+
 # content-based build stamp: a rebuilt exe with the same VERSION must still
 # refresh the payload the launcher stages into %LOCALAPPDATA%
 $hash = (Get-FileHash dist\LooperOSS\LooperOSS.exe -Algorithm SHA256).Hash.Substring(0, 16).ToLower()
