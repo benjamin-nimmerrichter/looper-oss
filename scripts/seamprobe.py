@@ -248,10 +248,27 @@ def main(argv: list[str]) -> int:
     try:
         if "--measure" in argv:
             path = pathlib.Path(argv[argv.index("--measure") + 1])
-        else:
+            return 0 if report(analyse(path)) else 1
+        # a single export is dominated by wherever it starts relative to the loop:
+        # the same settings measured 1.5x to 8.5x. Take a median over repeats and
+        # only then is the number worth quoting.
+        repeats = 1
+        if "--repeat" in argv:
+            repeats = max(1, int(argv[argv.index("--repeat") + 1]))
+        tops, peaks = [], []
+        for n in range(repeats):
             path = asyncio.run(drive())
-        ok = report(analyse(path))
-        return 0 if ok else 1
+            r = analyse(path)
+            report(r)
+            tops.append(r["worst"][0]["ratio"] if r["worst"] else 0.0)
+            peaks.append(r["peak"])
+            if n + 1 < repeats:
+                time.sleep(1.0)
+        tops.sort()
+        median = tops[len(tops) // 2] if tops else 0.0
+        print(f"\n{repeats} export(s): worst-window ratios "
+              f"{', '.join(f'{t:.1f}' for t in tops)} -> median {median:.1f}x")
+        return 0 if median < 4.0 else 1
     finally:
         if started is not None:
             started.terminate()

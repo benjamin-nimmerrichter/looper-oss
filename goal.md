@@ -354,7 +354,13 @@ gave 1.5x, while separate runs of the same configuration measured 2.2x, 3.6x,
 4.6x and 8.5x. The spread across identical settings is larger than any effect
 currently being chased.
 
-**Conclusion: `seamprobe` cannot gate M3 yet.** The worst-window statistic is a
+**Fixed by taking a median.** `seamprobe --repeat 3` in one session reports
+1.1, 1.1, 2.0 -> **median 1.1x**, i.e. consistently below the 4x threshold. The
+8.5x reading was an outlier, not a state. So with a steady tone the current
+engine does **not** exhibit the burst, and the earlier "got worse / got better"
+comparisons were noise.
+
+**Still true:** the instrument needed the median before it could gate anything. The worst-window statistic is a
 maximum over ~80 windows, so it is dominated by where the export happens to start
 relative to the loop and by the tone switching on or off inside the take. Before
 the buffer pair is built the instrument needs: several exports per configuration
