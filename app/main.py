@@ -629,9 +629,14 @@ def main(argv: list[str] | None = None) -> int:
     # Serve the page from the SAME port as the socket, and open the window there:
     # one origin, so a Chromium "local network access" prompt cannot strand the UI
     # with a loaded page and a socket that never opens.
-    bridge_module.UI_ROOT = home / "ui"
-    ws_port = int(getattr(bridge_module, "WS_PORT", 8182))
-    ui_url = f"http://127.0.0.1:{ws_port}/"
+    ui_url = url
+    if bridge_module is not None:
+        bridge_module.UI_ROOT = home / "ui"
+        try:
+            ws_port = int(getattr(bridge_module, "WS_PORT", 8182))
+        except (TypeError, ValueError):
+            ws_port = 8182
+        ui_url = f"http://127.0.0.1:{ws_port}/"
 
     engine: Engine | None = None
     if sclang:
