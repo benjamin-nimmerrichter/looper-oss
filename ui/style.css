@@ -131,7 +131,20 @@ body.no-master #master { display: none; }
   z-index: 5;
   pointer-events: none;
 }
+/* beat marks faint, bar marks stronger: the playhead reads as a ruler */
+.playhead .ticks {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(to right,
+      rgba(231, 235, 240, 0.30) 0 1px,
+      transparent 1px calc(100% / var(--beats, 16))),
+    repeating-linear-gradient(to right,
+      rgba(231, 235, 240, 0.65) 0 2px,
+      transparent 2px calc(100% / var(--bars, 4)));
+}
 .playhead > i {
+  position: relative;
   display: block;
   height: 100%;
   width: 0;

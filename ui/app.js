@@ -436,8 +436,11 @@ function buildTracks(n) {
   root.replaceChildren();
 
   const playhead = el("div", "playhead");
+  // bar and beat marks along the line, so it reads as a ruler and not only as a
+  // dot travelling across the screen
+  const playheadTicks = el("div", "ticks");
   const playheadFill = el("i");
-  playhead.append(playheadFill);
+  playhead.append(playheadTicks, playheadFill);
   root.append(playhead);
 
   ui.tracks = [];
@@ -493,6 +496,7 @@ function buildTracks(n) {
     ui.tracks.push({ col, pad, vol, meter, layers, insrc, clear, stateKey: -1 });
   }
   ui.playheadFill = playheadFill;
+  ui.playheadTicks = playheadTicks;
 }
 
 /* ----------------------------------------------------------------- master -- */
@@ -1340,6 +1344,11 @@ function tick() {
     d = ((d + 0.5) % 1) - 0.5;
     playPos = d > -0.0005 && d < 0.0005 ? phase.value : ((playPos + d * 0.14) % 1 + 1) % 1;
     ui.playheadFill.style.width = `${(playPos * 100).toFixed(2)}%`;
+    if (ui.playheadTicks) {
+      const per = S.beatsPerBar || 4;
+      ui.playheadTicks.style.setProperty("--bars", String(Math.max(1, S.bars || 4)));
+      ui.playheadTicks.style.setProperty("--beats", String(Math.max(1, (S.bars || 4) * per)));
+    }
     if (ui.transport?.posVal) {
       const per = S.beatsPerBar || 4;
       const total = Math.max(1, (S.bars || 4) * per);
