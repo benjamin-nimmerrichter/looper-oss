@@ -460,6 +460,39 @@ Logs are in `logs/`, rotated at 5 MB. Closing the window stops the engine,
 the bridge and the interface server together — if a crash ever leaves an
 `scsynth` behind, the next start clears it.
 
+## About
+
+Looper OSS is built by **Ing. Benjamin Nimmerrichter** — an audio engineer by
+trade, and a beatboxer and producer, which is the less well-known half.
+
+**Why it exists.** I wanted to try looping. A hardware loop station costs more
+than most people are willing to spend to find out whether looping is for them at
+all, and that price is what stops you trying. A cheap touchscreen from AliExpress
+plus this app gets you close enough to train on — and, with a decent audio
+interface, close enough to perform. It will never *be* the hardware: a real pedal
+has the buttons under your fingers and nothing to look at. But it is a way in,
+and that is the point.
+
+**How it was made, honestly.** The code was written with an AI assistant in the
+editor — vibecoded — but under the supervision of someone who works with DSP and
+audio programming for a living. The signal chain, the gain staging, the seam at
+the loop point and the latency budget are engineering decisions, not
+autocomplete; when something sounded wrong it was measured (`scripts/wavcheck.py`)
+rather than guessed at. Every claim in these docs has a test behind it, because
+"it looked fine" is exactly how a looper ends up clicking at the loop point.
+
+**What it is not.** It imitates the Boss RC-505; it does not replace one. No
+time-stretch (speed re-pitches, like the hardware's SPEED knob), no sampled drum
+kits (the kits are synthesised), four layers per track. Those limits are written
+down in `goal.md` rather than hidden.
+
+**The Beardyman reference.** The other touch-driven loop rig worth knowing is
+Beardyman's (Darren Foreman) *Beardytron 5000 mkII* — by his own description an
+Ableton Live session with Max for Live devices of his own making, played from
+custom iPad apps and controllers. Same idea, completely different scale. What I
+wanted was the *trying* part of it: small, touch-first, and something a person can
+pick up without a week of configuration.
+
 ## Credits
 
 Looper OSS is a thin skin over other people's work, and says so in

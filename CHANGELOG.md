@@ -60,6 +60,10 @@ The RC-505mkII round (issue #3) plus the tooling that keeps the docs honest.
 
 ### Changed — docs
 
+- README gained an **About** section: who made it, why (hardware loopers cost
+  too much to try), how (vibecoded, but supervised by an audio engineer who works
+  in DSP), what it is not, and the Beardyman/Beardytron reference.
+
 - README now states plainly what was only implicit before: the track count is
   **parametric (1–16)** rather than a fixed layout, audio in/out are likewise
   1–16 channels, and the UI is built for touch (48 px floor, pointer events,
