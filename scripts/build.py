@@ -146,6 +146,53 @@ def sign(path: pathlib.Path) -> None:
     print(f"   signed {path.name}")
 
 
+def bundle_supercollider(appdir: pathlib.Path) -> None:
+    """Copy SuperCollider next to the app so Windows needs no separate install.
+
+    SuperCollider is GPL-3.0 and so is Looper OSS, so shipping the unmodified
+    binaries together is allowed; the runtime keeps its own COPYING and AUTHORS,
+    and sc/VERSION.txt records the exact upstream version and where its source
+    lives. Only the IDE is left out (scide.exe, HelpSource, examples, sounds) --
+    sclang.exe links Qt5WebEngineWidgets, so the Qt runtime has to stay.
+    """
+    src = pathlib.Path(os.environ.get("LOOPER_OSS_SC_DIR", r"C:\SC\SuperCollider"))
+    # a Linux host path also works, which is how the Wine builds are made here
+    if not src.exists():
+        src = WIN_PREFIX / "drive_c" / "SC" / "SuperCollider"
+    if not (src / "sclang.exe").exists():
+        print(f"   SuperCollider not found at {src} — the build will need it installed")
+        return
+    dest = appdir / "sc"
+    if dest.exists():
+        shutil.rmtree(dest, ignore_errors=True)
+    skip = {"scide.exe", "HelpSource", "examples", "sounds", "supernova.exe"}
+    copied = 0
+    for path in src.rglob("*"):
+        rel = path.relative_to(src)
+        if rel.parts[0] in skip:
+            continue
+        target = dest / rel
+        try:
+            if path.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
+                copied += 1
+        except OSError as exc:
+            # a locked file in the source install must not lose the whole build
+            print(f"   skipped {rel}: {exc}")
+    version = "3.13.0"
+    (dest / "VERSION.txt").write_text(
+        f"SuperCollider {version} for Windows (unmodified upstream build).\n"
+        f"Licence: GPL-3.0-or-later — see COPYING in this directory.\n"
+        f"Source: https://github.com/supercollider/supercollider/releases/tag/Version-{version}\n"
+        "Bundled with Looper OSS so the application needs no separate install.\n",
+        newline="\n")
+    size = sum(f.stat().st_size for f in dest.rglob("*") if f.is_file())
+    print(f"   bundled SuperCollider: {copied} files, {size / 1048576:.0f} MB")
+
+
 def build_windows() -> list[pathlib.Path]:
     print("== windows (through Wine)")
     if not (WIN_PREFIX / "drive_c").exists():
@@ -169,6 +216,8 @@ def build_windows() -> list[pathlib.Path]:
     if not (appdir / "LooperOSS.exe").exists():
         print("   dist/LooperOSS/LooperOSS.exe missing after the build — FAILED")
         return []
+
+    bundle_supercollider(appdir)
 
     out: list[pathlib.Path] = []
     zipath = DIST / f"looper-oss-{ver}-windows-x64.zip"

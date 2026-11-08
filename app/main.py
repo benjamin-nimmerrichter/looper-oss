@@ -255,6 +255,12 @@ def find_sclang() -> str | None:
     override = os.environ.get("SCLANG")
     if override and pathlib.Path(override).is_file():
         return override
+    # A packaged build carries SuperCollider with it (sc/sclang.exe beside the
+    # application): no separate install, nothing to find on PATH.
+    here = pathlib.Path(sys.executable).resolve().parent
+    for bundled in (here / "sc" / "sclang.exe", here.parent / "sc" / "sclang.exe"):
+        if bundled.is_file():
+            return str(bundled)
     # On Windows never resolve a bare "sclang": PATH there can hold a foreign
     # binary. Inside Wine it found the HOST's /usr/bin/sclang and spawned that
     # silently, so the app booted an engine it could not talk to.

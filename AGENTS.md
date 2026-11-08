@@ -281,3 +281,57 @@ Before you call a change done:
   Everything else is verified on CachyOS + PipeWire. Full support: 0.3.0.
 - Meters/latency: PipeWire quantum governs round-trip (~21 ms at 1024, ~6.7 ms at
   256); `loop.recordOffset` compensates the grid alignment.
+
+## 11. Windows
+
+Built and run under Wine; **not yet on real Windows 10**. Wine exposes MME only,
+so WASAPI/ASIO, latency, MIDI input and install/uninstall are still open, and
+`goal.md` gates the 0.3.0 tag on a run on hardware. Never claim Windows works
+from a Wine result.
+
+**Build:** `python3 scripts/build.py windows` (or `linux`, or no argument for
+both). It drives PyInstaller, the icon, the SuperCollider bundle, the zip and
+Inno Setup through the Wine prefix. `--check` reports what is available.
+`packaging/windows/README.md` has the detail.
+
+**SuperCollider ships inside the application**, in `sc/` beside `LooperOSS.exe`:
+`app/main.py:find_sclang()` looks there after `SCLANG` and before anywhere else,
+and `engine/looper.scd` takes `scsynth.exe` from `Platform.resourceDir`, which is
+that same directory. Unmodified upstream binaries, GPL-3.0 like us, with
+`COPYING`, `AUTHORS` and `sc/VERSION.txt` naming the source URL. ~213 MB of
+runtime becomes a ~71 MB installer; the Qt DLLs cannot be dropped because
+`sclang.exe` links `Qt5WebEngineWidgets`.
+
+**The Windows corners that bite, all already paid for:**
+
+- `scsynth` is not on `PATH` and SC boots it by bare name — set `Server.program`
+  (done in `engine/looper.scd`), or the engine dies three times with
+  `Can't recognize 'scsynth.exe'`.
+- SuperCollider's `synthdefs` cache does not exist on a fresh install; create it.
+- `MIDIIn.connectAll` **throws** when PortMidi cannot open an input, and the
+  primitive unwinds whatever thread it is in — it took the whole boot routine
+  with it and the app was silent for a MIDI reason. Anything that can throw
+  during boot runs in its own thread behind `protect`.
+- The server's `SendReply` may never reach sclang while `/b_setn` and
+  `/status.reply` do. The clock is therefore **polled** from a buffer, and the
+  choice is sticky. Do not move it back to `SendReply` alone.
+- `Path.write_text` translates newlines; JSON is written with `newline="\n"` or
+  a Windows run rewrites `ui/config.json` with CRLF.
+- `Engine.stop()` sweeps `scsynth.exe`/`sclang.exe` with `taskkill`, because a
+  stray server holds the WASAPI device (invariants 19 and 22).
+- `taskkill` obviously does not exist on the host: to test the Windows branch,
+  run it **inside** the prefix (`wine 'C:\Python311\python.exe' -c …`), or you
+  will conclude, wrongly, that it does not work.
+- The installer targets `%LOCALAPPDATA%\Programs\Looper OSS`, never
+  `%LOCALAPPDATA%\looper-oss\app`, which is the per-version staging directory
+  that also holds `sessions/`.
+
+**Testing:** `scripts/wincheck.py` is the functional pass (state contract, clock,
+record, overdub, stop/play, export above zero, session, backup) with generous
+timeouts, because `smoke.py` assumes native timing and fails under Wine while the
+features work. Wine also runs the audio clock ~25x slower than wall time.
+
+**Artefacts and signing:** a portable zip and an Inno Setup `.exe`. An unsigned
+`.exe` can always raise SmartScreen — reputation is only earned by signed
+binaries — so the zip is the recommended download. Signing is wired through
+`LOOPER_OSS_SIGNTOOL` / `LOOPER_OSS_PFX` / `LOOPER_OSS_PFX_PASS`.

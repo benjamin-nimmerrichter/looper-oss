@@ -74,6 +74,24 @@ no extra patent or DRM terms). If you build an appliance that ships Looper OSS,
 the GPL-3.0 obligation to provide source travels with the device — the fact that
 SuperCollider is also GPL-3.0 does not create an exemption.
 
+
+## 5a. The bundled SuperCollider on Windows
+
+The Windows build ships SuperCollider **inside the application**
+(`sc/` beside `LooperOSS.exe`), so a user installs nothing else.
+
+- SuperCollider 3.13.0 is GPL-3.0-or-later; Looper OSS is GPL-3.0. The two are
+  compatible and are distributed together under the same terms.
+- The binaries are **unmodified**. The bundle keeps upstream's `COPYING` and
+  `AUTHORS`, and `sc/VERSION.txt` records the exact version and the source URL
+  (`https://github.com/supercollider/supercollider/releases/tag/Version-3.13.0`).
+  Anyone who redistributes Looper OSS must keep those files.
+- If the bundled binaries are ever patched, the corresponding source has to be
+  made available as well — that is the one thing "we just copy the folder" does
+  not cover.
+- The excluded IDE (`scide.exe`) is not redistributed. The Qt runtime is, because
+  `sclang.exe` links it.
+
 ## 6. Reporting a licensing problem
 
 If something in this repository turns out to be mis-attributed, that is a bug and

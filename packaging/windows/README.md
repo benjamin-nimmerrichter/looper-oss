@@ -1,58 +1,116 @@
-# Windows build — experimental
+# Windows build
 
-**Nothing here has been built, installed or run on Windows.** The recipe is
-written; that is the whole state of it. It is the starting point for 0.3.0 (see
-`goal.md`), and any artefact it produces is an experiment.
+Built and run **under Wine** on this repository: the packaged application starts,
+serves the UI, boots SuperCollider, opens an MME device and passes
+`scripts/wincheck.py` 12/12. It has **not yet been run on real Windows 10** —
+Wine exposes MME only, so WASAPI/ASIO, real latency and MIDI input are still
+open. Windows support is claimed in 0.3.0, after a run on hardware.
 
-The words matter: Windows is **untested**, not "unverified" — the second one
-suggests somebody had a go and it nearly worked.
-
-## Build it on Windows
-
-Python 3.9+ on the build machine:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1
-```
-
-Produces:
-
-- `dist\LooperOSS\LooperOSS.exe` — the app, onedir (onefile would unpack on every
-  start, which is a visible delay on a pedal)
-- `dist\looper-oss-<version>-windows-x64-portable.zip`
-- `dist\looper-oss-<version>-setup.exe`, if Inno Setup's `iscc.exe` is found —
-  on `PATH` or in `%ProgramFiles(x86)%\Inno Setup 6`
-
-SuperCollider is **not** bundled. It is a separate install on Windows, exactly
-like the audio driver, and the app says so in its own window when it is missing.
-
-## Build it in CI
-
-`.github/workflows/windows-experimental.yml` — manual dispatch, or a `v*` tag.
-It runs the same script on a `windows-latest` runner and uploads
-`windows-experimental-<version>` as a workflow artefact. On a tag it attaches to
-an existing Release; it never creates one.
-
-## Build it under Wine
+## One command
 
 ```bash
-wineboot -u                      # create the prefix
-# then install a Windows CPython into the prefix, and from the repo root:
-wine python.exe packaging/windows/build.ps1
+python3 scripts/build.py windows     # everything below, through Wine
+python3 scripts/build.py             # Linux + Windows
+python3 scripts/build.py --check     # what is available, builds nothing
 ```
 
-Untested: no Windows CPython has been installed in the prefix here, and
-PyInstaller's bootloader has never been exercised under Wine.
+What it does, in order:
 
-## What is known to be missing
+1. `pip install pyinstaller -r requirements.txt` into the Wine prefix's Windows
+   CPython (`C:\Python311\python.exe`), skipping if already importable.
+2. `magick` converts `packaging/linux/looper-oss.svg` to `looper-oss.ico`
+   (optional — the build continues without an icon).
+3. `PyInstaller --clean --noconfirm packaging\windows\looper_oss.spec` → onedir
+   build in `dist/LooperOSS/`. Onedir, not onefile: onefile unpacks ~30 MB to
+   `%TEMP%` on every start, which is a visible delay on a pedal.
+4. `bundle_supercollider()` copies the SuperCollider runtime into
+   `dist/LooperOSS/sc/` (see below).
+5. Zips `dist/LooperOSS/` → `dist/looper-oss-<ver>-windows-x64.zip`.
+6. `ISCC.exe /DAppVersion=<ver> packaging/windows/looper-oss.iss` → the
+   installer, if Inno Setup 6 is installed in the prefix.
+7. Signs both, if `LOOPER_OSS_SIGNTOOL`, `LOOPER_OSS_PFX` and
+   `LOOPER_OSS_PFX_PASS` are set.
 
-- WASAPI and ASIO device enumeration. The engine has a `driver = asio` branch and
-  it has never run.
-- `Engine.stop()` calls `pkill`, which is Unix-only.
-- scsynth/sclang discovery, and the staged home under `%LOCALAPPDATA%`.
-- No `looper-oss.ico` in the tree, so the build ships without an icon.
+## Artefacts, and the SmartScreen truth
 
-## Do not
+| file | what it is |
+| --- | --- |
+| `looper-oss-<ver>-windows-x64.zip` | portable, no installer, no admin. **Recommended download.** |
+| `looper-oss-<ver>-setup.exe` | per-user installer into `%LOCALAPPDATA%\Programs\Looper OSS`, Start-menu entry, uninstaller. |
 
-- Do not publish an artefact from here as a release.
-- Do not describe Windows as supported, and not as "unverified" either.
+An unsigned `.exe` can always raise "Windows protected your PC". That is not a
+bug to work around: SmartScreen warns low-reputation binaries, and reputation is
+only earned by **signed** ones, so an unsigned installer starts at zero on every
+machine. The zip avoids the prompt; a code-signing certificate (OV ~€200/yr,
+EV ~€400/yr) is the only thing that removes it from the `.exe`.
+
+## SuperCollider is bundled
+
+Windows needs no separate SuperCollider install: `scripts/build.py` copies the
+runtime into `dist/LooperOSS/sc/` and `app/main.py:find_sclang()` looks for
+`sc/sclang.exe` beside the executable **before** anywhere else on the machine.
+`engine/looper.scd` then finds `scsynth.exe` from `Platform.resourceDir`, which
+is the same directory, so the server boots from the bundle too.
+
+Verified by inspecting the running processes: the packaged app executes
+`…\LooperOSS\sc\sclang.exe` and `…\LooperOSS\sc\scsynth.exe`.
+
+Costs and constraints:
+
+- **Size**: ~213 MB of runtime → ~71 MB installer. The IDE is excluded
+  (`scide.exe`, `HelpSource`, `examples`, `sounds`, `supernova.exe`), but the Qt
+  DLLs cannot be: `sclang.exe` links `Qt5WebEngineWidgets`, so most of that
+  weight is WebEngine whether we use it or not.
+- **Licence**: SuperCollider is GPL-3.0-or-later and so is Looper OSS, so
+  shipping the unmodified binaries together is allowed. The bundle keeps its own
+  `COPYING` and `AUTHORS`, and `sc/VERSION.txt` names the exact upstream version
+  and the source URL. Do not modify the bundled binaries; if you ever do, the
+  source you ship has to match.
+- Set `LOOPER_OSS_SC_DIR` to build from a different SuperCollider install.
+
+## Inno Setup
+
+The installer script needs `ISCC.exe` in the prefix. Install it once:
+
+```bash
+curl -LO https://github.com/jrsoftware/issrc/releases/download/is-6_4_0/innosetup-6.4.0.exe
+WINEPREFIX=~/.wine-looper wine innosetup-6.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+```
+
+Without it the build still produces the portable zip and says so.
+
+`DefaultDirName` is `%LOCALAPPDATA%\Programs\Looper OSS` **on purpose**: the app
+stages itself into `%LOCALAPPDATA%\looper-oss\app\<version>\` and keeps
+`sessions/` there, so installing into that tree would let an uninstall take the
+user's music.
+
+## Testing it here
+
+```bash
+# source tree, with the Wine prefix's Python
+SCLANG='C:\SC\SuperCollider\sclang.exe' WINEPREFIX=~/.wine-looper \
+  wine 'C:\Python311\python.exe' -u -m app.main --window none
+
+# the packaged build (finds its own bundled SuperCollider)
+WINEPREFIX=~/.wine-looper wine dist/LooperOSS/LooperOSS.exe --window none
+
+.venv/bin/python scripts/wincheck.py     # 12/12, generous timeouts
+```
+
+`wincheck.py` exists because `scripts/smoke.py` is tuned for native timing:
+under Wine a round trip can take hundreds of milliseconds and every timing
+assertion fails while the feature works. Wine also runs the audio clock ~25×
+slower than wall time, so the playhead crawls — that is the environment, not a
+regression.
+
+## What Wine cannot tell you
+
+- **WASAPI / ASIO**: Wine offers MME only. `scsynth` prints the backends it has;
+  on Wine the list contains nothing else.
+- **Latency**: the audio clock above makes any measurement meaningless.
+- **MIDI input**: PortMidi cannot open an input under Wine ("Host error"). The
+  app degrades — MIDI setup runs in its own thread behind `protect` so a failure
+  there cannot stop the engine — but MIDI must be checked on hardware.
+- **Install/uninstall**: needs a real Windows account.
+- **`Engine.stop()`**: `sclang` exit code 42 and `taskkill` are exercised, but
+  whether the WASAPI device is really released can only be seen on Windows.
