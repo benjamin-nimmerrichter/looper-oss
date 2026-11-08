@@ -58,7 +58,8 @@ let MIDIMAP = [];
 let MIDIDEVS = [];
 let selected = 0;
 let phase = { value: 0, at: performance.now() };
-let IMPORTS = [];   // *.wav sitting in sessions/import/
+let IMPORTS = [];
+let SEQ = [];       // per-track step-sequence patterns (eight values 0..1)   // *.wav sitting in sessions/import/
 // The bar eases toward the engine's loop points and stops when they stop moving.
 // (It used to add elapsed time itself, so it kept moving even with the engine off.)
 let playPos = 0;
@@ -641,7 +642,7 @@ function openFx(i) {
 
   // ---- filter ----
   {
-    const [c] = card("filter");
+    const [c, h] = card("filter");
     const k = knobs(c);
     k.append(Knob({
       label: "high pass", min: 20, max: 2000, value: t ? t.hp : 40, curve: 2.4,
@@ -652,6 +653,25 @@ function openFx(i) {
       format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`),
       onInput: (v) => set(`t${i}.lp`, Math.round(v)),
     }));
+    // step sequence: eight eighth-notes stepping the low pass upward. Tap a cell
+    // to cycle it 0 -> 0.25 -> 0.5 -> 0.75 -> 1; the bar is its height.
+    toggle(h, t && t.seqOn, "seq", `t${i}.seqOn`);
+    const seqRow = el("div", "steprow");
+    const steps = SEQ[i] || (SEQ[i] = [0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25]);
+    for (let st = 0; st < 8; st++) {
+      const cell = el("button", "stepcell");
+      cell.type = "button";
+      cell.style.setProperty("--h", String(steps[st]));
+      if (steps[st] > 0) cell.classList.add("on");
+      cell.addEventListener("pointerup", () => {
+        steps[st] = steps[st] >= 1 ? 0 : Math.round((steps[st] + 0.25) * 100) / 100;
+        cell.style.setProperty("--h", String(steps[st]));
+        cell.classList.toggle("on", steps[st] > 0);
+        svc("seq", [i, steps.join(",")]);
+      });
+      seqRow.append(cell);
+    }
+    c.append(seqRow);
   }
 
   // ---- loop ----

@@ -363,6 +363,19 @@ body.no-master #master { display: none; }
   gap: 0.4rem;
   min-height: 2rem;
 }
+/* step sequence: eight cells, each a height bar you tap to cycle */
+.steprow { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.2rem; }
+.stepcell {
+  min-height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(to top, var(--accent) calc(var(--h, 0) * 100%),
+    var(--panel-2) 0);
+  touch-action: none;
+  cursor: pointer;
+}
+.stepcell.on { border-color: var(--accent); }
+
 .knobs { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.4rem, 1fr)); gap: 0.3rem; }
 
 .knobwrap {

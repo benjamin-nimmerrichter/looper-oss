@@ -71,7 +71,7 @@ those packages actually has to run it.
 | | |
 | --- | --- |
 | D1 speed · D2 layer tricks · D4 mixer/routing · D5 rhythm · D6 MIDI · D7 memories · D8 rest | **done**, each verified in `scripts/smoke.py` |
-| D3 FX banks | 4 insert slots and 4 recallable banks **done**; **toggle/momentary** and the **parameter step-sequence** open — both need an editor in the drawer before they are usable, not just engine plumbing |
+| D3 FX banks | 4 insert slots, 4 recallable banks and an eight-step sequencer **done**; **toggle/momentary** open |
 | Phase E drawer screenshots | blocked: this sandbox's rasteriser turns text inside composited layers into wrong glyphs; `scripts/shots.py` is ready for a GPU machine |
 
 
@@ -94,7 +94,7 @@ time-stretch, which stays a non-goal.
 - **Auto Rec:** the engine already has `\ld_autodetect`; it needs to be exposed
   as a binding (see D6).
 
-### D3 — FX banks — **partly done** (four insert slots and four recallable banks; toggle/momentary and the step sequence open)
+### D3 — FX banks — **partly done** (four insert slots, four recallable banks, an eight-step sequencer; toggle/momentary open)
 4 simultaneous effects per track-bank, four banks, toggle/momentary, and a step
 sequence for parameters. The VST slot path (VSTPlugin) is the natural carrier:
 a bank is a list of plugin slots plus their parameters. The 49/53-effect

@@ -56,7 +56,7 @@ GLOBAL_FIELDS = [
 TRACK_FIELDS = [
     "state", "vol", "pan", "muted", "meter", "input", "layers",
     "gateOn", "gateThr", "hp", "lp",
-    "compOn", "compThr", "compRatio", "route", "cueOn", "cueSend",
+    "compOn", "compThr", "compRatio", "route", "cueOn", "cueSend", "seqOn",
     "delayOn", "delayBeats", "delayDecay", "delayMix",
     "revSend", "gain", "recGain", "reverse", "fadeIn", "fadeOut",
     "loopRatio", "speed", "layerPeak", "undoDepth",

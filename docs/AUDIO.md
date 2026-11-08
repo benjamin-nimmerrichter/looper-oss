@@ -73,6 +73,14 @@ licence along, and every voice here is a stock UGen. The step clock is
 `bpm / 60 * 4`, so it follows a tempo change through `~applyRate`, and it keeps
 running when every track is cleared.
 
+## Step sequence
+
+`\ld_track` carries an eight-step sequencer on its low pass: a `Stepper` clocked
+at eighth notes (`2 / beatLen`) reads an 8-frame buffer per track and adds up to
+9 kHz to the cutoff. The pattern is one `setn`, so editing it costs a buffer
+write, and `seqOn` gates the whole thing. It is clocked from the track's own
+`beatLen`, so it follows a tempo change without extra plumbing.
+
 ## Speed (varispeed)
 
 `tph` — the track's read position — is normally `(masterPhase × loopRatio) % 1`,

@@ -211,8 +211,8 @@ async def run_tests(c: Client) -> None:
         return
     globals_ = len(st) - 2
     fields = len(st["tracks"][0])
-    check("state shape (26 globals / 31 track fields)",
-          globals_ == 26 and fields == 31 and len(st["tracks"]) == N,
+    check("state shape (26 globals / 32 track fields)",
+          globals_ == 26 and fields == 32 and len(st["tracks"]) == N,
           f"{globals_}/{fields}/{len(st['tracks'])}")
 
     # meters + playhead live inside the state frame (no separate OSC paths)
@@ -325,6 +325,14 @@ async def run_tests(c: Client) -> None:
     check("output bus level reaches the master", st is not None,
           f"busB={st['busB'] if st else '?'}")
     await c.set("g.busB", 1)
+
+    # D3: an eight-step sequence on the track's low pass
+    await c.svc("seq", [0, "0,0.25,0.5,0.75,1,0.75,0.5,0.25"])
+    await c.set("t0.seqOn", 1)
+    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["seqOn"] == 1, 6)
+    check("step sequence toggles per track", st is not None,
+          f"seqOn={st['tracks'][0]['seqOn'] if st else '?'}")
+    await c.set("t0.seqOn", 0)
 
     # D4: the input mixer -- one gain per physical input, shared by the tracks
     await c.svc("inputGains", [])
