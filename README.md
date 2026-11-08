@@ -462,9 +462,10 @@ the bridge and the interface server together — if a crash ever leaves an
 
 ## About
 
-Hi — I'm Benjamin (Ing. Benjamin Nimmerrichter if you want the formal version). I
-work as an audio engineer, and I beatbox and produce music, which most people who
-only know me from work don't know about me.
+Hi — I'm Benjamin Nimmerrichter. I have a master's in audio engineering (the
+"Ing." in front of my name) and I'm doing a Ph.D. at BUT Brno. I also beatbox and
+produce music, which people who only know me from the faculty probably don't know
+about me.
 
 This started because I wanted to try looping and couldn't justify what a hardware
 loop station costs just to find out whether I'd even like it. That's really the
@@ -475,7 +476,7 @@ to look at — but it's a way in, and that seemed worth building.
 
 It's a passion project, and it was made in a slightly odd way: I built it with an
 AI assistant in the editor, vibecoded, whatever you want to call it. But I'm the
-one standing behind it, and I work with DSP and audio programming for a living, so
+one standing behind it, and DSP and audio programming are what I actually study, so
 when something sounded wrong I measured it (`scripts/wavcheck.py`) instead of
 trusting that it looked fine. That's also why the docs make claims the tests can
 back up.
