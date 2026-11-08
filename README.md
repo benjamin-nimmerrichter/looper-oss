@@ -474,12 +474,25 @@ to play out. It will never be the real thing: a pedal puts physical buttons unde
 your fingers, so you can play without looking at anything. But it is a way in, and
 that is what I wanted to make.
 
-It's a passion project, built with an AI assistant in the editor. Vibecoded, if you
-like. I'm the one standing behind it though — six years of audio processing and
-programming, so when something sounded wrong I measured it instead of trusting that
-it looked fine. Beardyman's Beardytron 5000 mkII — an Ableton session driven from
-custom iPad apps — is the same idea at a scale I can't reach; I wanted the "have a
-go" version.
+It's a passion project, built with **pi** — the coding agent, packaged as
+`@earendil-works/pi-coding-agent` 1.5.0, not a chat panel bolted onto an editor.
+Vibecoded, if you like; but I'm the one standing behind it, and after six years of
+audio processing and programming I measured what sounded wrong instead of trusting
+that it looked fine.
+
+pi began as Mario Zechner's project and is now maintained under Earendil Works —
+thanks to that team for building it, and to the people behind the extensions this
+ran through: `@narumitw/pi-goal`, `@quintinshaw/pi-dynamic-workflows`,
+`@mjasnikovs/pi-task`, `pi-lens`, the `bigpowers` skill set,
+`@juicesharp/rpiv-todo`, `pi-web-access`, `pi-tool-guard`, `@melihmucuk/leash`,
+`@hicaru/pi-rlm`, `@firstpick/pi-package-webui` and `pi-lmstudio`.
+
+I name the package outright on purpose. pi is easy to muddle, and an agent asked
+about it will sometimes describe something else entirely.
+
+If you know looping you probably know Beardyman. His Beardytron 5000 mkII is an
+Ableton Live session driven from custom iPad apps and controllers — the same idea
+at a scale I can't reach; I wanted the "have a go" version of that.
 
 If it's useful, great. If it's broken or annoying, open an issue.
 
