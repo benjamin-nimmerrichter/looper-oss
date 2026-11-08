@@ -33,6 +33,7 @@ from write_config import write_from  # noqa: E402  (same directory)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONFIG_JSON = ROOT / "ui" / "config.json"
+ENGINE_LOG = ROOT / "logs" / "engine.log"
 CONFIG_SCD = ROOT / "engine" / "_config.scd"
 
 try:
@@ -249,8 +250,45 @@ def list_audio_devices() -> dict:
 
     for key in ("inputs", "outputs"):
         out["links"][key] = sorted(set(out["links"][key]))
+
+    # Windows (and any machine without PipeWire): there is no pw-dump to ask, so
+    # report what the engine actually opened. scsynth prints the backend and the
+    # endpoint names when it boots, and that is the only truthful answer --
+    # enumerating devices we are not using would be a lie dressed as a list.
+    if not (out["sinks"] or out["sources"] or out["alsa"]):
+        opened = opened_from_log()
+        if opened:
+            out["links"]["inputs"] = [opened.get("in", "")]
+            out["links"]["outputs"] = [opened.get("out", "")]
+            if opened.get("out"):
+                out["alsa"].append({"id": opened["out"], "label": opened["out"]})
+
     out.update(read_clock())
     return out
+
+
+
+def opened_from_log() -> dict[str, str]:
+    """The device scsynth opened, from its own boot log.
+
+    `Booting with:` is followed by `  In: <backend> : <endpoint>` and
+    `  Out: ...`. On Linux the PipeWire graph answers this question properly;
+    on Windows there is nothing to interrogate, so the log is the source.
+    """
+    found: dict[str, str] = {}
+    if not ENGINE_LOG.exists():
+        return found
+    try:
+        text = ENGINE_LOG.read_text(errors="replace")
+    except OSError:
+        return found
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("In:") and "in" not in found:
+            found["in"] = stripped[3:].strip()
+        elif stripped.startswith("Out:") and "out" not in found:
+            found["out"] = stripped[4:].strip()
+    return found
 
 
 # --------------------------------------------------------------------- state --

@@ -544,6 +544,13 @@ def main(argv: list[str] | None = None) -> int:
     if sclang:
         sweep_stale(home)
         engine = Engine(home, sclang, logs / "engine.log")
+        # the bridge reads the engine's boot log to report which audio device was
+        # actually opened where there is no PipeWire graph to ask (Windows)
+        try:
+            import bridge.bridge as _bridge
+            _bridge.ENGINE_LOG = logs / "engine.log"
+        except ImportError:                       # pragma: no cover - packaged path
+            pass
         engine.start()
 
     stop = threading.Event()
