@@ -200,7 +200,7 @@ if (~hasVST) {
 				fadeIn = 0, fadeOut = 0, vB0 = 0, vB1 = 0, vB2 = 0, vB3 = 0|
 
 			var tph, tphFree, pos, wpos, raw, gateEnv, gate, sig, sigR, layers, src,
-			    wrapped, w0e, w1e, w2e, w3e, wraps,
+			    wraps,
 			    seqStep, seqVal,
 			    dl, wet, dst, fades, st, seam, xfd, rpos, playGain;
 
@@ -270,20 +270,10 @@ if (~hasVST) {
 			// write gate 30 ms later, so a take never ends in a step to zero. Steady
 			// state is recOn == 1, so the ramp does not touch the body of a take.
 			sigR = sig * LagUD.kr(recOn, 0.003, 0.003);
-			// A take writes exactly ONE pass and stops at the loop point by itself.
-			// /ldwrap reaches sclang a few ms after the wrap, and until it did the
-			// write head was still open at position 0 -- overwriting the start of
-			// the take that had just been committed (the drum downbeat). The gate
-			// therefore closes in the synth, sample-accurately, at the wrap.
-			wrapped = (Delay1.ar(tph) > 0.5) * (tph < 0.5);
-			w0e = w0 * SetResetFF.ar(K2A.ar(w0), wrapped);
-			w1e = w1 * SetResetFF.ar(K2A.ar(w1), wrapped);
-			w2e = w2 * SetResetFF.ar(K2A.ar(w2), wrapped);
-			w3e = w3 * SetResetFF.ar(K2A.ar(w3), wrapped);
-			BufWr.ar(Select.ar(K2A.ar(w0e), [BufRd.ar(1, b0, wpos, 1, 1), sigR]), b0, wpos);
-			BufWr.ar(Select.ar(K2A.ar(w1e), [BufRd.ar(1, b1, wpos, 1, 1), sigR]), b1, wpos);
-			BufWr.ar(Select.ar(K2A.ar(w2e), [BufRd.ar(1, b2, wpos, 1, 1), sigR]), b2, wpos);
-			BufWr.ar(Select.ar(K2A.ar(w3e), [BufRd.ar(1, b3, wpos, 1, 1), sigR]), b3, wpos);
+			BufWr.ar(Select.ar(K2A.ar(w0), [BufRd.ar(1, b0, wpos, 1, 1), sigR]), b0, wpos);
+			BufWr.ar(Select.ar(K2A.ar(w1), [BufRd.ar(1, b1, wpos, 1, 1), sigR]), b1, wpos);
+			BufWr.ar(Select.ar(K2A.ar(w2), [BufRd.ar(1, b2, wpos, 1, 1), sigR]), b2, wpos);
+			BufWr.ar(Select.ar(K2A.ar(w3), [BufRd.ar(1, b3, wpos, 1, 1), sigR]), b3, wpos);
 
 
 			src = (layers * seam) + (sig * monitor * LagUD.kr(recOn, 0.01, 0.01));
