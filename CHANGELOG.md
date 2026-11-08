@@ -23,6 +23,31 @@ The RC-505mkII round (issue #3) plus the tooling that keeps the docs honest.
 - `scripts/shots.py` regenerates the documentation screenshots through WebKit's
   own snapshot: no browser, no interaction, starts and stops the stack itself
 
+### Fixed
+
+- **The mixdown export wrote silence, and always had.** Audio buses are cleared
+  at the start of every block, so a synth in an earlier group reading a bus
+  written by a later one sees zeros for ever; `\ld_capture` ran in `~grpClock`
+  while the master writes in `~grpMaster`. It now runs there, after the master.
+  The suite had only ever asserted that the file existed.
+- **The layer being recorded is no longer played back.** The write head is
+  derived from the read head, so during a take the play path read the very
+  sample being written — a one-sample mismatch, audible as HF distortion at the
+  seam. The recording layer stays silent until it joins the loop on commit.
+- The playhead is a **ruler**: beat marks faint, bar marks stronger, driven from
+  `bars` / `beatsPerBar` instead of just a line travelling across the grid.
+- `stage()` no longer wipes `ui/config.json`; a version bump keeps the music.
+
+### Known issues
+
+- **A short metallic buzz at the auto-dub hand-off** (around 10 kHz, ~100 ms).
+  The recording layer no longer plays back while it records, which removes the
+  most likely cause; if it persists it is scheduled for 0.3.0.
+- **The first take can lose its opening ~100 ms** when it rolls straight into an
+  overdub, which eats a drum downbeat. Same neighbourhood, same milestone.
+- Windows: the packaging recipes ship, but nothing has been built, installed or
+  run on Windows. Support is claimed in 0.3.0, not here.
+
 ### Added
 
 - **The application.** `app/main.py` + `app/window.py`: one process that owns the

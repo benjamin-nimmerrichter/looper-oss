@@ -253,6 +253,23 @@ with `scripts/wavcheck.py` -- the step across the loop point and the HF energy i
 the 5-15 kHz band, layer 1 alone and the mix. Whichever number moves identifies
 the candidate.
 
+
+## Carried into 0.3.0 (decided with the user)
+
+0.2.0 ships with these known and documented rather than fixed:
+
+- **metallic buzz at the auto-dub hand-off** (~10 kHz, ~100 ms). The recording
+  layer is no longer played back while it records (2639b83), which removes the
+  most likely cause -- the write head is derived from the read head, so playback
+  read the sample being written. If it survives that, measure the seam.
+- **the first take can lose its opening ~100 ms** into an overdub (the drum
+  downbeat). Same neighbourhood.
+- **0.3.0 also adds Windows**: WASAPI/ASIO, the Windows paths in the engine
+  (`pkill` in `Engine.stop()`), an installer that has actually been run.
+- The longer-term shape both of these want is the user's design: **one record
+  buffer and one play buffer per layer, swapped at the loop point, mixed only
+  when it is safe** -- instead of reading a buffer that is being written.
+
 ## Next: v0.3.0 — Windows
 
 Linux is the supported platform in 0.2.0. Windows is the next release, and the
