@@ -311,7 +311,7 @@ def opened_from_log() -> dict[str, str]:
 # nothing in the log to show for it: the page loads, the socket never opens, the
 # boot screen waits for ever. One origin removes the question entirely.
 UI_ROOT: pathlib.Path | None = None
-_ui_seen = False
+_ui_seen: set[str] = set()
 _ws_seen = False
 
 
@@ -355,10 +355,10 @@ def process_request(connection: Any, request: Any) -> Any:
             _ws_seen = True
             log(f"ws handshake from {request.path}")
         return None
-    global _ui_seen
-    if not _ui_seen:
-        _ui_seen = True
-        log(f"served {request.path} to a browser")
+    seen = _ui_seen
+    if request.path not in seen:
+        seen.add(request.path)
+        log(f"served {request.path}")
     return _ui_response(request)
 
 
