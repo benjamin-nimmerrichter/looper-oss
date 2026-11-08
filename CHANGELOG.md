@@ -63,7 +63,8 @@ The RC-505mkII round (issue #3) plus the tooling that keeps the docs honest.
 - README gained an **About** section, written in the first person: why it
   exists (a hardware looper costs too much to find out whether you even like
   looping), how it was made (vibecoded, but what ships was measured by someone whose
-  degree and doctoral work are in audio and DSP), what it is not, and the
+  master's is in audio engineering and the doctorate in machine learning for
+  audio and visuals), what it is not, and the
   Beardyman/Beardytron reference.
 
 - README now states plainly what was only implicit before: the track count is
