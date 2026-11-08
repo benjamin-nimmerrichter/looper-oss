@@ -116,7 +116,8 @@ class Stack:
         logs.mkdir(exist_ok=True)
         # autosave recovery would otherwise restore layers from a previous run and
         # every layer count below would be off by one
-        for stale in ("sessions/autosave", "sessions/slot7", "sessions/exports"):
+        for stale in ("sessions/autosave", "sessions/slot7", "sessions/slot99",
+                  "sessions/backups", "sessions/import", "sessions/exports"):
             try:
                 shutil.rmtree(ROOT / stale)
             except OSError as exc:
