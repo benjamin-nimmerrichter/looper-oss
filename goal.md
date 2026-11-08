@@ -276,6 +276,42 @@ the 5-15 kHz band, layer 1 alone and the mix. Whichever number moves identifies
 the candidate.
 
 
+
+## M1/M2 result under Wine (measured)
+
+**M1 — boots end to end.** `:8181` serves, `sclang.exe` loads `engine/looper.scd`
+(SC 3.13.0), `scsynth.exe` opens an MME device, engine logs
+`tracks 5 | layers 4 | loop 8.0 s | max 16.0 s | VST no` (VST correctly absent).
+
+**M2 — the protocol works.** `scripts/wincheck.py` (functional pass with generous
+timeouts, because Wine is ~25x slower than real time) reports **12/12**:
+state contract 26/32/5, clock advances, press records, the take closes into an
+overdub, stop/play, mixdown export 88200 frames peak 0.0715 rms 0.0372, session
+manifest written, backup zip writes.
+
+Four defects fixed on the way, all real on Windows too:
+
+1. `Server.program` — scsynth is not on PATH and SC boots it by bare name.
+2. SuperCollider's `synthdefs` cache directory does not exist on a fresh install.
+3. `MIDIIn.connectAll` throws when PortMidi cannot open an input (Wine: "Host
+   error"), and it unwound the boot routine — the app was silent for a MIDI
+   reason. It now runs in its own thread behind `protect`.
+4. `Path.write_text` translated newlines, so a Windows run rewrote
+   `ui/config.json` with CRLF. JSON is written with `newline="\n"` now.
+
+And one architectural one: **the clock is polled, not pushed.** On Wine the
+server's `SendReply` never reaches sclang (even `/synced` is lost) while
+`/b_setn` and `/status.reply` arrive, which froze the playhead and stopped takes
+from closing. The transport now writes its beat count into a buffer and sclang
+polls it at 25 Hz -- the mechanism the meters already use (invariant 3). Replies
+win when they exist, and the choice is sticky so a stray reply cannot switch
+polling off mid-take.
+
+**Wine's residual limitations, not defects:** audio runs ~25x slower than wall
+time (MME), so the phase crawls (0.20 beat-steps/s); MIDI inputs cannot be
+opened; `audio.device` enumeration reports 0 nodes because the bridge asks
+`pactl`/`pw-*`, which do not exist on Windows.
+
 ## Carried into 0.3.0 (decided with the user)
 
 0.2.0 ships with these known and documented rather than fixed:

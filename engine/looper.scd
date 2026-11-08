@@ -1624,8 +1624,10 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		};
 	};
 	OSCdef(\ldBeat, { |msg|
-		~clockReplies = Main.elapsedTime;
-		~fireBeat.value((msg[4] ? 0).asInteger);
+		if (~clockPollMode != true) {
+			~clockReplies = Main.elapsedTime;
+			~fireBeat.value((msg[4] ? 0).asInteger);
+		};
 	}, '/ldbeat');
 
 	OSCdef(\ldAuto, { |msg|
@@ -1668,8 +1670,10 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		~bridge.sendMsg('/ldwrap');
 	};
 	OSCdef(\ldWrap, {
-		~clockReplies = Main.elapsedTime;
-		~fireWrap.value;
+		if (~clockPollMode != true) {
+			~clockReplies = Main.elapsedTime;
+			~fireWrap.value;
+		};
 	}, '/ldwrap');
 
 	// Clock fallback. On Windows/Wine the server's SendReply never reaches sclang
@@ -1691,8 +1695,12 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 	OSCdef(\ldClockData, { |msg|
 		var beats, settled;
 		if (~clockBuf.notNil && (msg[1] == ~clockBuf.bufnum) && (msg[2] == 0)) {
-			settled = (Main.elapsedTime - (~clockReplies ? -10)) > 1.0;
+			// sticky: a stray reply must not switch polling off again mid-take,
+			// which made the clock lurch (some replies arrive, most do not)
+			settled = (~clockPollMode == true)
+				|| ((Main.elapsedTime - (~clockReplies ? -100)) > 3.0);
 			if (settled) {
+				~clockPollMode = true;
 				beats = (msg[4] ? 0).asFloat;
 				if (~pollBeats.notNil) {
 					if ((beats < ~pollBeats) && (beats < 0.5) && (~pollBeats > 0.5)) {
