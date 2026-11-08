@@ -49,6 +49,17 @@
 		};
 	};
 
+	// toggle (0) or momentary (1) activation for each slot. Momentary means the
+	// effect is live only while the control is held, which is how the hardware's
+	// FX buttons work; the UI and a note mapping both read this.
+	~vstModeSet = { |trackIdx, slot, mode|
+		var t = ~tracks[trackIdx];
+		if (t.notNil && t[\vstMode].notNil && (slot >= 0) && (slot < ~vstIds.size)) {
+			t[\vstMode][slot] = mode.asInteger.clip(0, 1);
+			~sendVSTList.value;
+		};
+	};
+
 	// ---- four FX banks per track --------------------------------------------
 	// A bank is the set of keys in the four slots, nothing more: recall closes
 	// whatever is loaded and opens the saved ones. Persisted by the bridge in
@@ -142,8 +153,9 @@
 		if (~tracks.isNil) { ^this };
 		csv = ~tracks.collect { |t|
 			~vstIds.size.collect { |sl|
-				"%|%|%|%".format(sl, ~vstName.value(t, sl),
-					t[\vstBypass][sl] ? 0, ~vstWindowOpen.value(t, sl).asInteger)
+				"%|%|%|%|%".format(sl, ~vstName.value(t, sl),
+					t[\vstBypass][sl] ? 0, ~vstWindowOpen.value(t, sl).asInteger,
+					(t[\vstMode] ? [])[sl] ? 0)
 			}.join(",")
 		}.join(";");
 		~bridge.sendMsg('/ldvst', csv.asString);

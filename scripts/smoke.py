@@ -602,6 +602,13 @@ async def run_tests(c: Client) -> None:
                 lambda m: m.get("t") == "vst"
                 and m["csv"].split(";")[0].split(",")[0].split("|")[1], 25)
             check("fx bank recalls the slot", st is not None)
+            await c.svc("vstMode", [0, 0, 1])
+            st = await c.wait(
+                lambda m: m.get("t") == "vst"
+                and len(m["csv"].split(";")[0].split(",")[0].split("|")) >= 5
+                and m["csv"].split(";")[0].split(",")[0].split("|")[4] == "1", 12)
+            check("fx activation mode (toggle / momentary)", st is not None)
+            await c.svc("vstMode", [0, 0, 0])
             await c.svc("vstClose", [0, 0])
         else:
             check("VST3 plugin available", False, "catalog empty")

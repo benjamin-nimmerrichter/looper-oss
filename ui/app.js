@@ -776,11 +776,22 @@ function openFx(i) {
         ed.addEventListener("pointerup", () => svc("vstEditor", [i, s]));
         const by = Button({ label: "byp", cls: "tiny", toggle: true });
         if (bypassed) by.classList.add("on");
-        by.addEventListener("pointerup", () =>
-          svc("vstBypass", [i, s, by.classList.contains("on") ? 1 : 0]));
+        // toggle latches; momentary is live only while the button is held
+        const momentary = String((slots[s] && slots[s][4]) || "0") === "1";
+        if (momentary) {
+          by.addEventListener("pointerdown", () => svc("vstBypass", [i, s, 0]));
+          by.addEventListener("pointerup", () => svc("vstBypass", [i, s, 1]));
+        } else {
+          by.addEventListener("pointerup", () =>
+            svc("vstBypass", [i, s, by.classList.contains("on") ? 1 : 0]));
+        }
+        const md = Button({ label: "mom", cls: "tiny", toggle: true });
+        if (momentary) md.classList.add("on");
+        md.addEventListener("pointerup", () =>
+          svc("vstMode", [i, s, md.classList.contains("on") ? 1 : 0]));
         const rm = Button({ label: "x", cls: "tiny" });
         rm.addEventListener("pointerup", () => svc("vstClose", [i, s]));
-        acts.append(ed, by, rm);
+        acts.append(ed, by, md, rm);
       } else {
         const pick = Select({
           options: [{ label: "load…", value: "" }].concat(

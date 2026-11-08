@@ -104,6 +104,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 
 | control | type | range / default | what it does | wire | engine |
 | --- | --- | --- | --- | --- | --- |
+| **`mom`** | toggle per slot | off = toggle, on = momentary | How that slot's bypass behaves: **toggle** latches, **momentary** is live only while the bypass button is held — the hardware's two FX activation modes. The mode is reported in the fifth field of `/ldvst`. | `svc vstMode` | `~vstModeSet` |
 | **banks** `s1..s4` / `l1..l4` | tiny buttons | — | Store the current four slots into bank 1–4, or recall one: recall closes whatever is loaded and opens the saved keys. Banks persist in `ui/config.json` under `vst.banks`. | `svc vstBankSave` / `svc vstBankLoad` | `~vstBankSave`, `~vstBankLoad` |
 | slot 1–4 → `load…` | select | plugin catalog | Loads a plugin into that insert slot. | `svc vstOpen` | `VSTPluginController.open` |
 | **UI** | button | — | Opens the plugin's own editor, or VSTPlugin's generic parameter window when the plugin has none. | `svc vstEditor` | `editor` / `VSTPluginGui` |

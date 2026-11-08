@@ -618,6 +618,7 @@ if (~hasVST) {
 			vst: Array.fill(~vstIds.size, nil),
 			vstNames: Array.fill(~vstIds.size, ""),
 			vstBypass: Array.fill(~vstIds.size, 0),
+			vstMode: Array.fill(~vstIds.size, 0),   // 0 = toggle, 1 = momentary
 			vstGui: Array.fill(~vstIds.size, nil),
 			synth: nil
 		)
@@ -1481,6 +1482,7 @@ if (~hasVST) {
 			"vstOpen",   { ~vstOpen.value(msg[2].asInteger, msg[3].asInteger, msg[4].asString) },
 			"vstClose",  { ~vstClose.value(msg[2].asInteger, msg[3].asInteger) },
 			"vstBypass", { ~vstBypass.value(msg[2].asInteger, msg[3].asInteger, msg[4].asInteger) },
+			"vstMode",   { ~vstModeSet.value(msg[2].asInteger, msg[3].asInteger, msg[4].asInteger) },
 			"vstBankSave", { ~vstBankSave.value(msg[2].asInteger, msg[3].asInteger) },
 			"vstBankLoad", { ~vstBankLoad.value(msg[2].asInteger, msg[3].asInteger) },
 			"vstEditor", { ~vstEditor.value(msg[2].asInteger, msg[3].asInteger) },

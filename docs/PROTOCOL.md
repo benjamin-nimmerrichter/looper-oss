@@ -122,6 +122,7 @@ Per track paths: `t<N>.<field>` for every per-track state field above.
 | `vstClose` | track, slot |
 | `vstBypass` | track, slot, 0 or 1 |
 | `vstBankSave` / `vstBankLoad` | track, bank 0–3 |
+| `vstMode` | track, slot, 0 = toggle / 1 = momentary |
 | `vstEditor` | track, slot |
 | `midiLearn` | target, e.g. `t0.press` |
 | `midiMap` / `midiClear` | — |
