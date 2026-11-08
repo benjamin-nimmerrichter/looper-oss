@@ -250,11 +250,20 @@ def load_module(name: str, path: pathlib.Path) -> Any:
 
 
 def find_sclang() -> str | None:
-    found = shutil.which("sclang")
+    # An explicit override wins everywhere: it lets Wine (or an install in an
+    # unusual place) point at the engine without teaching find_sclang about it.
+    override = os.environ.get("SCLANG")
+    if override and pathlib.Path(override).is_file():
+        return override
+    # On Windows never resolve a bare "sclang": PATH there can hold a foreign
+    # binary. Inside Wine it found the HOST's /usr/bin/sclang and spawned that
+    # silently, so the app booted an engine it could not talk to.
+    found = shutil.which("sclang.exe" if os.name == "nt" else "sclang")
     if found:
         return found
-    candidates = ["/usr/bin/sclang", "/usr/local/bin/sclang",
-                  "/Applications/SuperCollider.app/Contents/MacOS/sclang"]
+    candidates = [] if os.name == "nt" else [
+        "/usr/bin/sclang", "/usr/local/bin/sclang",
+        "/Applications/SuperCollider.app/Contents/MacOS/sclang"]
     if os.name == "nt":
         # Windows environment variables are case-insensitive, so the upper-case
         # spellings work on a real machine and keep linters happy here.
