@@ -110,7 +110,12 @@ fi
 
 echo "== building $OUT/$NAME"
 # --no-appstream: do not fail the build on a missing metainfo file
-ARCH="$ARCH" VERSION="$VERSION" "$TOOL" --no-appstream "$APPDIR" "$OUT/$NAME"
+# GitHub's runtime download 504s often enough to matter; if we already have one
+# (extracted from a previous AppImage), use it instead of fetching again.
+RUNTIME="$TOOL.runtime"
+RUNTIME_ARG=""
+[ -f "$RUNTIME" ] && RUNTIME_ARG="--runtime-file $RUNTIME"
+ARCH="$ARCH" VERSION="$VERSION" "$TOOL" --no-appstream $RUNTIME_ARG "$APPDIR" "$OUT/$NAME"
 
 (cd "$OUT" && sha256sum "$NAME" > "$NAME.sha256")
 echo

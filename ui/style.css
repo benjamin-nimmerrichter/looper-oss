@@ -25,6 +25,9 @@
 }
 
 html {
+  /* native widgets -- above all the <select> popup list, which CSS cannot
+     style -- follow this instead of the light default */
+  color-scheme: dark;
   /* the single scaling knob for the entire UI (settings -> UI -> scale) */
   font-size: calc(clamp(9px, min(1.62vh, 1.05vw), 26px) * var(--scale));
   height: 100%;
@@ -581,10 +584,33 @@ body.no-master #master { display: none; }
 .slot .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot .acts { display: flex; gap: 0.25rem; flex: 0 0 auto; }
 
+/* every <select> is themed, wherever it is used. A <select> without
+   appearance: none paints as a white system widget, and the app has them in
+   settings rows, the VST slot picker and the WAV import row alike. */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: inherit;
+  min-height: var(--tap);
+  padding: 0 1.4rem 0 0.5rem;
+  touch-action: none;
+}
+select option { background: var(--panel-2); color: var(--text); }
+
 /* native select used outside a settings row (VST slot picker) */
 select.sel {
+  /* same native-widget problem as .cfgrow select: without appearance: none a
+     <select> outside a settings row (VST slot picker, WAV import) paints as a
+     white system control on a dark drawer */
+  -webkit-appearance: none;
+  appearance: none;
   min-height: var(--tap);
   min-width: var(--tap);
+  padding-right: 1.4rem;
   background: var(--panel-2);
   color: var(--text);
   border: 1px solid var(--line);
