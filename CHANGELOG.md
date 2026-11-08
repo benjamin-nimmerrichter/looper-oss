@@ -258,5 +258,5 @@ First release. A working touchscreen loop station: record, overdub, undo, save.
 - Windows launcher ships but WASAPI boot is **unverified**.
 - VST inserts need the `VSTPlugin` extension; without it the slots are absent.
 
-[Unreleased]: https://github.com/USER/looper-oss/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/USER/looper-oss/releases/tag/v0.1.0
+[0.2.0]: https://github.com/benjamin-nimmerrichter/looper-oss/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/benjamin-nimmerrichter/looper-oss/releases/tag/v0.1.0

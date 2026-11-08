@@ -464,8 +464,8 @@ the bridge and the interface server together — if a crash ever leaves an
 
 Hi — I'm Benjamin Nimmerrichter. I have a master's in audio engineering (the
 "Ing." in front of my name), and at BUT Brno I'm doing a Ph.D. in machine learning
-for audio and visuals. I also beatbox and produce music, which people who only know
-me from the faculty probably don't know about me.
+— audio, visuals and cybersecurity. I also beatbox and produce music, which people
+who only know me from the faculty probably don't know about me.
 
 This started because I wanted to try looping and couldn't justify what a hardware
 loop station costs just to find out whether I'd even like it. That's really the
