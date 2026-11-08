@@ -597,6 +597,15 @@ def main(argv: list[str] | None = None) -> int:
     write_config.write_from(home / "ui" / "config.json", home / "engine" / "_config.scd")
 
     start_static_server(home, port)
+    # Prove the UI is reachable from this machine before blaming the browser: a
+    # bound socket that Windows Firewall drops and a server that never started
+    # look identical from the outside ("nothing loads").
+    try:
+        import urllib.request  # noqa: PLC0415
+        with urllib.request.urlopen(url, timeout=5) as probe:
+            print(f"ui: serving at {url} (HTTP {probe.status})", flush=True)
+    except OSError as exc:
+        print(f"ui: NOT reachable at {url} ({exc})", file=sys.stderr, flush=True)
     bridge_module = start_bridge(home, logs / "bridge.log")
 
     engine: Engine | None = None
