@@ -3,7 +3,8 @@
 A touchscreen loop station in the spirit of the Boss RC-505, built as a thin
 skin over **SuperCollider**. Layers per track, tempo-locked loops, per-track
 gate / filter / delay / reverb send, MIDI footswitch, VST3 inserts, and session
-recording with autosave. Runs fully offline on Linux and Windows.
+recording with autosave. Runs fully offline; Linux is the supported platform
+today, and full Windows support is the 0.3.0 milestone.
 
 Nothing in this repo implements audio DSP. Audio is stock SuperCollider UGens;
 the UI is a browser page; the only Python translates OSC to JSON.
@@ -95,7 +96,7 @@ FEATURES.md    feature inventory: shipped / planned / backlog
 | **SuperCollider 3.13+** (`sclang`, `scsynth`; tested on 3.14.1) | the entire audio engine | your OS package manager |
 | **sc3-plugins** | the per-track filter (`BLowPass` / `BHiPass`) | your OS package manager |
 | **Python 3.9+** + PyGObject | the bridge, the tests, and the app window | your OS package manager (already there on any GTK desktop) |
-| an audio server | PipeWire on Linux, WASAPI on Windows | already on your desktop |
+| an audio server | PipeWire on Linux; WASAPI/ASIO arrive with 0.3.0 | already on your desktop |
 | *optional* **VSTPlugin** | VST3 / VST2 insert slots | see [Install](#install) |
 | *optional* **chromium / firefox** | `--browser` and `--kiosk` app window | already installed |
 
@@ -172,17 +173,19 @@ what puts scsynth on the PipeWire graph like any other client; if you keep
 `jack` (jack2) instead, choose driver **alsa** in setup → audio and pick your
 interface there.
 
-**Windows.** Run `looper-oss-<version>-setup.exe` — a per-user install, so no
-administrator password — or unzip the portable build and double-click
-`LooperOSS.exe`. Install [SuperCollider for Windows](https://supercollider.github.io/)
-once; without it the app opens a window that says exactly that, instead of
-dying quietly.
+**Windows — available as an experiment, and the next milestone.** The
+PyInstaller/Inno Setup recipe and the `driver = asio` code path are in the tree,
+but no Windows host has run them yet, so a Windows build is not a supported
+release. If you would like to try one: `looper-oss-<version>-setup.exe` installs
+per-user (no administrator password), and
+[SuperCollider for Windows](https://supercollider.github.io/) is a prerequisite —
+without it the app opens a window that says so rather than failing quietly.
 
-**Windows is not supported yet.** The PyInstaller/Inno Setup recipe and the
-`driver = asio` code path exist, but no Windows host has run them, so a Windows
-build is an experiment rather than a release. Windows becomes its own task:
-verify under Wine first, then on real hardware. Everything else in this document
-was verified on CachyOS + PipeWire.
+**Full Windows support is planned for 0.3.0**: WASAPI and ASIO device handling,
+the engine's audio-backend paths, a verified installer, and testing on real
+hardware — under Wine first, then on a Windows machine. Everything described in
+this document was verified on CachyOS + PipeWire, and the Windows claims will
+carry the same kind of evidence when they are made.
 
 **From source** (development):
 

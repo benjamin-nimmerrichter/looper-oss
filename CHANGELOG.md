@@ -58,6 +58,14 @@ The RC-505mkII round (issue #3) plus the tooling that keeps the docs honest.
   Playwright, by driving the cached Chromium over the DevTools protocol with the
   `websockets` client the bridge already has.
 
+### Next
+
+- **Windows support is the 0.3.0 milestone.** 0.2.0 ships the PyInstaller/Inno
+  Setup recipe and the `driver = asio` path, but no Windows host has run them, so
+  a Windows build is an experiment rather than a supported release. 0.3.0 is
+  WASAPI/ASIO device handling, the engine's Windows paths, a verified installer,
+  and the same test evidence the Linux build has.
+
 ### Changed — docs
 
 - README gained an **About** section, first person and short: why it exists (a

@@ -185,4 +185,34 @@ release of their own, and D5 depends on a sample licence that does not exist yet
 
 - Time-stretch, timeline/arrangement, MIDI sequencing.
 - Bundling the audio server (see Phase C's numbers).
-- Windows support in this round (deferred as its own task).
+- Windows support **in this round** — it is the whole of 0.3.0, below.
+
+---
+
+# Next: v0.3.0 — Windows
+
+Linux is the supported platform in 0.2.0. Windows is the next release, and the
+bar is not "it compiles" but the same evidence the Linux build carries.
+
+**Audio backend.** WASAPI and ASIO device enumeration; `driver = asio` verified
+against PortAudio's actual device names (`ASIO : <name>`) rather than assumed;
+`hardwareBufferSize` mapped to the ASIO buffer; a device picker that offers only
+what scsynth will accept, instead of ALSA names on a Windows host.
+
+**Engine.** scsynth/sclang start-up and shutdown on Windows paths (`\`
+separators, `sessions/`, the staged home), and `Engine.stop()`'s `pkill` fallback,
+which is Unix-only today — a Windows build must not depend on it.
+
+**Packaging.** PyInstaller onedir plus the Inno Setup per-user installer, verified
+by installing on a clean machine, recording a loop, exporting a mixdown.
+
+**Evidence.** `scripts/smoke.py` and `scripts/uicheck.mjs` run on Windows, or a
+documented subset with the reason each check is excluded. The "unverified"
+caveat in the README is removed only when that exists.
+
+**Order.** Wine first — it is cheap and catches path and registry assumptions —
+then a real Windows host.
+
+**Acceptance.** A Windows user installs from the `.exe`, records and overdubs
+five tracks, saves a session, exports a mixdown, and the suite passes — with the
+evidence quoted in the release notes.
