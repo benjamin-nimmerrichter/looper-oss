@@ -189,20 +189,32 @@ release of their own, and D5 depends on a sample licence that does not exist yet
 
 ---
 
-## Open: the mixdown export is silent
+## Fixed: the mixdown export was silent
 
-Found while adding audio-truth tests: every `svc export` writes a correctly
-sized WAV of zeros, and always has — the suite only ever checked that the file
-existed.
+Every `svc export` wrote a correctly sized WAV of zeros, and always had — the
+suite only ever asserted the file existed. Two causes, both now fixed:
 
-- `RecordBuf` writes 0.0 for a signal that `BufWr` writes at 0.2 (verified with a
-  standalone sclang probe). `\ld_capture` now uses `BufWr` + a `Line`.
-- That alone did not fix it: the live export is still empty, so the remaining
-  suspects are the `In.ar(masterBus, 2)` read inside the capture synth and the
-  Bus/Buffer values passed as synth args.
-- Until it is fixed, the audio-truth checks (pitch under speed, routing to
-  buses B/C, bounce summing) cannot be written, because they read an exported
-  WAV. They were prototyped and removed rather than left red.
+1. **Group order.** Audio buses are cleared at the start of every block, so a
+   synth in an *earlier* group reading a bus written by a *later* one sees zeros
+   for ever. `\ld_capture` sat in `~grpClock`; `\ld_master` runs in `~grpMaster`.
+   The capture is now created in `~grpMaster` with `\addToTail`. `RecordBuf`
+   itself was never broken — the same code placed after the writer records at
+   full level (0.2 peak on a 0.2 tone).
+2. **Interleaving.** While chasing (1) the capture was rewritten with `BufWr`,
+   whose index is in frames and which interleaves by itself; scaling the index
+   by the channel count wrote one frame in two. Reverted to `RecordBuf`, which
+   handles it.
+
+Verified: an exported WAV now holds interleaved stereo at the recorded level.
+
+**Still open — the audio-truth tests.** They need a *known signal* recorded and
+then measured out of an exported WAV, and the suite must stay silent.
+`svc silence` (`s.mute`) silences the hardware *and* the captured bus (measured:
+export rms 0.0043 while the track meter read 0.13), so a muted run cannot
+measure anything. Pick one before writing them:
+- capture the pre-master sum (busA+busB+busC) instead of `masterBus`, which
+  `s.mute` does not touch, or
+- run the audio checks with `masterVol` around 0.08 and accept a quiet tone.
 
 ## Next: v0.3.0 — Windows
 

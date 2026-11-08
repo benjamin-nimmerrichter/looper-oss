@@ -437,16 +437,12 @@ if (~hasVST) {
 	}).add;
 
 	// ---- session capture ---------------------------------------------------
-	// RecordBuf records silence in this build (3.14.1): the same signal written
-	// with BufWr lands at full level, which is how the export was found to have
-	// been producing empty mixdowns. BufWr with a Line for position and Done for
-	// the reply is the version that actually works.
-	SynthDef(\ld_capture, { |masterBus, buf, doneId = -1, secs = 1.5|
-		var line = Line.ar(0, 1, secs.max(0.05));
-		var frames = BufFrames.kr(buf).max(1);
-		var pos = (line * frames).clip(0, frames - 1);
-		BufWr.ar(In.ar(masterBus, 2), buf, pos);
-		SendReply.kr(Done.kr(line), '/ldcaptured', [doneId]);
+	// The capture must run AFTER the master writes its bus -- see the note in
+	// ~exportMix. RecordBuf interleaves channels for us, so the index is frames.
+	SynthDef(\ld_capture, { |masterBus, buf, doneId = -1|
+		var sig = In.ar(masterBus, 2);
+		RecordBuf.ar(sig, buf, loop: 0, doneAction: 2);
+		SendReply.kr(Done.kr(Line.kr(0, 1, BufDur.kr(buf))), '/ldcaptured', [doneId]);
 	}).add;
 };
 
@@ -1210,8 +1206,12 @@ if (~hasVST) {
 		var frames = (seconds * s.sampleRate).round.asInteger;
 		File.mkdir(~sessionRoot);
 		~captureBuf = Buffer.alloc(s, frames, 2);
+		// The capture must run AFTER the master writes its bus. Audio buses are
+		// cleared at the start of every block, so a synth in an earlier group
+		// reads zeros -- which is why every mixdown was silent even though the
+		// hardware output was fine.
 		Synth(\ld_capture, [\masterBus, ~masterBus, \buf, ~captureBuf, \doneId, 1,
-			\secs, seconds], ~grpClock);
+			\secs, seconds], ~grpMaster, \addToTail);
 		~bridge.sendMsg('/ldcapturing', seconds);
 	};
 
