@@ -49,6 +49,12 @@ get a pair each, four gives A and (B+C) on 2/3, two folds everything into 0/1.
 The master compressor and limiter run per bus, so a hot mix on C cannot clip the
 main output.
 
+Bus **C** doubles as the cue bus: a track with `cueOn` writes its post-fader
+stereo pair into C *in addition to* its route, scaled by `cueSend`. On a device
+with six or more outputs that is a separate headphone pair; on a stereo device
+it folds into the main output like everything else. No extra bus, no extra
+group, and the master limiter still guards it.
+
 `\ld_rhythm` is a fourth source, on its own bus, summed by `\ld_master` after the
 track mix:
 

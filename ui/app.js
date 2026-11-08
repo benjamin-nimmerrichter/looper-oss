@@ -592,6 +592,22 @@ function openFx(i) {
     }));
   }
 
+  // ---- output ----
+  {
+    const [c, h] = card("output");
+    c.append(Segmented({
+      options: [{ label: "A", value: 0 }, { label: "B", value: 1 }, { label: "C", value: 2 }],
+      value: t ? t.route : 0,
+      onPick: (v) => set(`t${i}.route`, v),
+    }));
+    toggle(h, t && t.cueOn, "cue", `t${i}.cueOn`);
+    knobs(c).append(Knob({
+      label: "cue send", min: 0, max: 1.2, value: t ? t.cueSend : 0.6,
+      format: (v) => `${Math.round(v * 100)}%`,
+      onInput: (v) => set(`t${i}.cueSend`, v),
+    }));
+  }
+
   // ---- gate ----
   {
     const [c, h] = card("noise gate");

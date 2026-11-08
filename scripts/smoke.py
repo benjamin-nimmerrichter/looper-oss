@@ -211,8 +211,8 @@ async def run_tests(c: Client) -> None:
         return
     globals_ = len(st) - 2
     fields = len(st["tracks"][0])
-    check("state shape (23 globals / 29 track fields)",
-          globals_ == 23 and fields == 29 and len(st["tracks"]) == N,
+    check("state shape (23 globals / 31 track fields)",
+          globals_ == 23 and fields == 31 and len(st["tracks"]) == N,
           f"{globals_}/{fields}/{len(st['tracks'])}")
 
     # meters + playhead live inside the state frame (no separate OSC paths)
@@ -313,6 +313,11 @@ async def run_tests(c: Client) -> None:
     check("track routes to output bus C", st is not None,
           f"route={st['tracks'][0]['route'] if st else '?'}")
     await c.set("t0.route", 0)
+    await c.set("t0.cueOn", 1)
+    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["cueOn"] == 1, 6)
+    check("cue send is per track", st is not None,
+          f"cueOn={st['tracks'][0]['cueOn'] if st else '?'}")
+    await c.set("t0.cueOn", 0)
 
     # D4: the input mixer -- one gain per physical input, shared by the tracks
     await c.svc("inputGains", [])

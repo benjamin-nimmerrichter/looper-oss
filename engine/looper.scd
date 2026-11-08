@@ -191,6 +191,7 @@ if (~hasVST) {
 				input = 0, gain = 1.0, recGain = 1.0,
 				gateOn = 1, gateThr = 0.02, autoArm = 0, autoThresh = 0.02,
 				compOn = 0, compThr = 0.6, compRatio = 0.4,
+				cueBus = 0, cueOn = 0, cueSend = 0.6,
 				hp = 40, lp = 16000,
 				delayOn = 0, delayBeats = 0.75, delayDecay = 0.4, delayMix = 0.25,
 				revSend = 0.0, beatLen = 0.5, loopSec = 8,
@@ -291,6 +292,9 @@ if (~hasVST) {
 
 			Out.ar(outBus, st);
 			Out.ar(revBus, st.sum * LagUD.kr(revSend, 0.02, 0.02));
+			// cue: an independent send to the cue bus (output C), so a track
+			// can be monitored without being in the main mix
+			Out.ar(cueBus, st * LagUD.kr(cueOn * cueSend, 0.02, 0.02));
 		}).add;
 	};
 	~trackDef.value(~vstPost);
@@ -453,6 +457,7 @@ if (~hasVST) {
 	~makeTrackSynth = { |t, i|
 		var args = [
 			\outBus, ~busFor.value(t[\route]) + (i * 2), \revBus, ~revBus,
+			\cueBus, ~busC.index + (i * 2), \cueOn, t[\cueOn], \cueSend, t[\cueSend],
 			\phaseBus, ~phaseBus, \idx, i, \testBus, ~testBus,
 			\scratch, ~scratch.bufnum,
 			\loopLen, ~loopFrames.value, \loopRatio, t[\loopRatio],
@@ -597,7 +602,8 @@ if (~hasVST) {
 			hp: 40, lp: 16000,
 			delayOn: 0, delayBeats: 0.75, delayDecay: 0.4, delayMix: 0.25,
 			revSend: 0.0, reverse: 0, fadeIn: 0, fadeOut: 0,
-			route: 0, loopRatio: 1, speed: 1, mark: 1, contentLen: 0,
+			route: 0, cueOn: 0, cueSend: 0.6,
+			loopRatio: 1, speed: 1, mark: 1, contentLen: 0,
 			meterL: 0, meterR: 0, layerPeak: 0, meterPeak: 0, meterSum: 0, cpu: 0,
 			// sized from ~vstIds so adding an insert slot cannot leave these short
 			vst: Array.fill(~vstIds.size, nil),
@@ -1629,6 +1635,7 @@ if (~hasVST) {
 				t[\meterPeak], t[\input], t[\layerCount],
 				t[\gateOn], t[\gateThr], t[\hp], t[\lp],
 				t[\compOn], t[\compThr], t[\compRatio], t[\route],
+				t[\cueOn], t[\cueSend],
 				t[\delayOn], t[\delayBeats], t[\delayDecay], t[\delayMix],
 				t[\revSend], t[\gain], t[\recGain], t[\reverse],
 				t[\fadeIn], t[\fadeOut], t[\loopRatio], t[\speed], t[\meterSum],
