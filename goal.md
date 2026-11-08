@@ -104,7 +104,7 @@ already sums per-track stereo buses; this is bus gymnastics plus UI.
 a phasor to trigger against. It needs a sample source whose licence allows
 redistribution (see `docs/LICENSING.md`), or generated patterns from stock UGens.
 
-### D6 — MIDI depth — **partly done** (gestures; 16 targets were already learnable)
+### D6 — MIDI depth — **done**
 Press/hold/double-click per control, expression pedals, 16 assignable targets,
 save/recall of the map. The MIDI learn path exists; this is the mapping model and
 the UI to edit it.

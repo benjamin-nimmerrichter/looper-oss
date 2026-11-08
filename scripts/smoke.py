@@ -605,6 +605,24 @@ async def run_tests(c: Client) -> None:
     st = await c.wait(lambda m: m.get("t") == "s", 2)
     check("midi learn command accepted", "s" in c.seen)
 
+    # A note carries a gesture: press / hold / double are distinct, and learning
+    # captures whichever you performed. midiAdd/midiSim exercise that without
+    # hardware; the map is asserted first so a silent miss cannot look like a pass.
+    await c.svc("midiAdd", ["note", 60, "t2.press", "hold"])
+    await asyncio.sleep(0.6)
+    await c.svc("midiMap", [])
+    mp = await c.wait(lambda m: m.get("t") == "midimap" and "60" in (m.get("csv") or ""), 8)
+    check("midiAdd installs the mapping", mp is not None, (mp or {}).get("csv", ""))
+    before_gesture = c.track(2)["state"]
+    await c.svc("midiSim", [60, "press"])        # wrong gesture: must do nothing
+    await asyncio.sleep(0.8)
+    after_press = c.track(2)["state"]
+    await c.svc("midiSim", [60, "hold"])         # right gesture: acts
+    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][2]["state"] != after_press, 8)
+    check("a hold fires only its hold mapping",
+          st is not None and after_press == before_gesture,
+          f"before={before_gesture} after-press={after_press}")
+
     # Rhythm engine: 16 synthesised kits, 200 generated patterns, cfg-driven.
     await c.cfg("rhythm.kit", 5)
     await c.cfg("rhythm.pattern", 42)
