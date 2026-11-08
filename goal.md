@@ -114,9 +114,23 @@ the UI to edit it.
 rhythm), WAV import, backup/restore as one archive. `sessions/slotN` is the seed;
 `session.json` already serialises the UI state.
 
-### D8 — the rest
-Independent per-track playback settings, "bounce to DAW" style export, custom
-control layouts. Mostly falls out of D1/D3/D4.
+### D8 — the rest — **done (verified, not built)**
+
+All three bullets already hold, so they were audited rather than re-implemented:
+
+- **Independent per-track playback settings.** `CONTROLS.md` lists 21 per-track
+  controls, each sent as `set t<N>.<field>`: speed, loop ratio, reverse, fade
+  in/out, delay, high/low pass, gate, volume, pan, mute, reverb send, record
+  gain, and the record source.
+- **"Bounce to DAW" style export.** Two levels already exist: `save slot` writes
+  one WAV **per track per layer** (`sessions/slot1/t0_l0.wav`, `t0_l1.wav`, …),
+  which is stems; `export` bounces the master to
+  `sessions/exports/mixdown_*.wav`.
+- **Custom control assignments.** The MIDI map assigns any target (`t0.press`,
+  `g.stopAll`, …) to a CC or a note, and a note carries press/hold/double.
+  What does **not** exist is an on-screen button-layout editor — assignment is
+  through the map, not by dragging controls. That is the one gap, recorded here
+  rather than glossed over.
 
 **Scope honesty:** D1–D2 are reachable on the current engine. D3–D7 are each a
 release of their own, and D5 depends on a sample licence that does not exist yet.
