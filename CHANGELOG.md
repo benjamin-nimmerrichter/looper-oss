@@ -4,6 +4,56 @@ All notable changes to Looper OSS. Format: [Keep a Changelog](https://keepachang
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The single
 source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
+## [Unreleased]
+
+Windows support and the release tooling. Nothing here is released yet; the tag
+comes after the build has run on a real Windows 10 machine.
+
+### Added
+
+- **`scripts/build.py`** — one command builds everything: the Linux AppImage and
+  source archives, and the whole Windows pipeline through Wine (PyInstaller
+  onedir, an `.ico` from the SVG, the portable zip, the Inno Setup installer with
+  the version passed in). Signing is wired but off: set `LOOPER_OSS_SIGNTOOL`,
+  `LOOPER_OSS_PFX` and `LOOPER_OSS_PFX_PASS` and the artefacts are signed.
+- **`scripts/wincheck.py`** — a functional pass for slow platforms. The smoke
+  suite assumes native timings and fails on Wine while the features work; this
+  asks the functional questions with generous timeouts (12/12 under Wine).
+- **`scripts/seamprobe.py`** — measures the loop seam from an exported WAV:
+  5-15 kHz band energy per 100 ms window against the take, with `--repeat` for a
+  median. Fixed three ways before it was believed (see below).
+
+### Fixed
+
+- **The engine can start on Windows.** `Server.program` is set from the
+  SuperCollider install directory (scsynth is not on `PATH`, and SC boots the
+  server by bare name), and the compiled-SynthDef cache directory is created —
+  it does not exist on a fresh install.
+- **MIDI can no longer stop the engine.** `MIDIIn.connectAll` throws when
+  PortMidi cannot open an input (no interface attached, or Wine), and the
+  primitive unwound the whole boot routine: the app was silent for a MIDI
+  reason. The connect now runs in its own thread behind `protect`.
+- **The clock is polled, not pushed.** Where the server's `SendReply` never
+  reaches sclang (nothing arrives but `/b_setn` and `/status.reply`), the
+  playhead froze and takes never closed. The transport writes its beat into a
+  buffer and sclang polls it at 25 Hz, the mechanism the meters already use.
+  Replies still win when they work, and the choice is sticky.
+- **The mixdown export had a third cause of silence.** `Buffer.alloc` is
+  asynchronous and the capture synth was created in the same message, so
+  `BufDur.kr` read 0, `Done` fired on the first block and the file was written
+  with ~100 ms of audio. It now allocates, waits, then starts.
+- **JSON is written with LF**, not the platform newline: a Windows run was
+  rewriting `ui/config.json` with CRLF.
+- **Device selection reports what was opened.** Without `pw-dump` (Windows) the
+  bridge reads the engine's boot log for `In:`/`Out:` and offers that in the
+  picker, instead of showing an empty list.
+- **The installer targets `%LOCALAPPDATA%\Programs\Looper OSS`**, not the
+  per-version staging directory that also holds `sessions/` — an uninstall could
+  have taken the music with it.
+- **`scripts/sweep.py` kills stale `app.main` and packaged `LooperOSS.exe`
+  processes.** It only ever swept sclang/scsynth/bridge, so forgotten runs kept
+  holding :8181 and made the next run look broken.
+
 ## [0.2.0] — 2026-11-08
 
 The RC-505mkII round (issue #3) plus the tooling that keeps the docs honest.
