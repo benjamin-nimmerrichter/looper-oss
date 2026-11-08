@@ -462,36 +462,32 @@ the bridge and the interface server together — if a crash ever leaves an
 
 ## About
 
-Looper OSS is built by **Ing. Benjamin Nimmerrichter** — an audio engineer by
-trade, and a beatboxer and producer, which is the less well-known half.
+Hi — I'm Benjamin (Ing. Benjamin Nimmerrichter if you want the formal version). I
+work as an audio engineer, and I beatbox and produce music, which most people who
+only know me from work don't know about me.
 
-**Why it exists.** I wanted to try looping. A hardware loop station costs more
-than most people are willing to spend to find out whether looping is for them at
-all, and that price is what stops you trying. A cheap touchscreen from AliExpress
-plus this app gets you close enough to train on — and, with a decent audio
-interface, close enough to perform. It will never *be* the hardware: a real pedal
-has the buttons under your fingers and nothing to look at. But it is a way in,
-and that is the point.
+This started because I wanted to try looping and couldn't justify what a hardware
+loop station costs just to find out whether I'd even like it. That's really the
+whole reason it exists: a cheap touchscreen off AliExpress plus this app gets you
+close enough to train on, and with a decent interface close enough to play out. It
+will never be the real thing — a pedal has buttons under your fingers and nothing
+to look at — but it's a way in, and that seemed worth building.
 
-**How it was made, honestly.** The code was written with an AI assistant in the
-editor — vibecoded — but under the supervision of someone who works with DSP and
-audio programming for a living. The signal chain, the gain staging, the seam at
-the loop point and the latency budget are engineering decisions, not
-autocomplete; when something sounded wrong it was measured (`scripts/wavcheck.py`)
-rather than guessed at. Every claim in these docs has a test behind it, because
-"it looked fine" is exactly how a looper ends up clicking at the loop point.
+It's a passion project, and it was made in a slightly odd way: I built it with an
+AI assistant in the editor, vibecoded, whatever you want to call it. But I'm the
+one standing behind it, and I work with DSP and audio programming for a living, so
+when something sounded wrong I measured it (`scripts/wavcheck.py`) instead of
+trusting that it looked fine. That's also why the docs make claims the tests can
+back up.
 
-**What it is not.** It imitates the Boss RC-505; it does not replace one. No
-time-stretch (speed re-pitches, like the hardware's SPEED knob), no sampled drum
-kits (the kits are synthesised), four layers per track. Those limits are written
-down in `goal.md` rather than hidden.
+If you know looping you probably know Beardyman. His Beardytron 5000 mkII is an
+Ableton Live session driven from custom iPad apps and controllers — the same idea
+at a scale I can't touch. I wanted the "have a go" version of that: small,
+touch-first, and easy enough that you're making a sound within a minute instead of
+configuring for a week.
 
-**The Beardyman reference.** The other touch-driven loop rig worth knowing is
-Beardyman's (Darren Foreman) *Beardytron 5000 mkII* — by his own description an
-Ableton Live session with Max for Live devices of his own making, played from
-custom iPad apps and controllers. Same idea, completely different scale. What I
-wanted was the *trying* part of it: small, touch-first, and something a person can
-pick up without a week of configuration.
+If it's useful to you, great. If something's broken or annoying, open an issue —
+I'd rather hear about it.
 
 ## Credits
 
