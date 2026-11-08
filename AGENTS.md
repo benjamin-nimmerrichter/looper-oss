@@ -73,10 +73,27 @@ python3 scripts/sweep.py          # kill leftovers (do this after any test run)
 ./scripts/smoke.py                # 63 checks, spawns its own stack
 ./scripts/smoke.py --attach       # ...against a stack you started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules node scripts/uicheck.mjs
-python3 scripts/shots.py          # docs/img screenshots (starts/stops the stack itself)
+python3 scripts/shots.py          # docs/img screenshots: WebKit snapshot, starts/stops the stack
+/usr/lib/appimagelauncher/binfmt-bypass dist/<name>.AppImage --check
+                                  # run an AppImage without AppImageLauncher moving it
 sclang /tmp/probe.scd             # boots the engine alone (write your own probes)
 ./scripts/release.py --check      # required files present, no runtime state in the tree
 ./scripts/release.py              # build dist/ archives (byte-identical on rebuild)
+./packaging/linux/build-appimage.sh
+```
+
+**The AppImage build needs a runtime file, and GitHub 504s on that download often
+enough to matter.** `build-appimage.sh` reuses `build/appimagetool.runtime` when it
+exists. To make one, take the bytes of an existing good AppImage up to its
+squashfs — the **second** `hsqs` offset, not the first; the first sits inside the
+runtime itself and produces a stub that dies with exit code 11:
+
+```bash
+python3 - <<'EOF'
+import pathlib
+d = pathlib.Path("dist/looper-oss-<known-good>.AppImage").read_bytes()
+open("build/appimagetool.runtime", "wb").write(d[:d.find(b"hsqs", 200_000)])
+EOF
 ```
 
 **Always finish a test session with `python3 scripts/sweep.py`.** Leaving a
@@ -170,6 +187,21 @@ SuperCollider and its corners, in the order they bit us. Read before editing
     it. `app/main.py` compares `CLOCK_REALTIME` drift against `CLOCK_MONOTONIC`
     (monotonic stops during suspend) and restarts the engine on >5 s. The session
     comes back **stopped** from autosave — that is intended, not a bug.
+23. **`Buffer.readChannel`'s channel argument is an Integer, not an array.**
+    `readChannel(s, path, [0], start, num, action)` compiles and then never calls
+    the action: no error, no buffer, no reply. That is how WAV import silently
+    did nothing for a whole round. Pass `0`.
+24. **The staged app home is per version** —
+    `~/.local/share/looper-oss/app/<version>/` — so a new version starts empty
+    and the player thinks their loops are gone. `stage()` copies `sessions/` and
+    `ui/config.json` from the newest *earlier* version when the target does not
+    exist. Exclude `*.staging` from that search: the half-built directory matches
+    the same glob and wins the sort.
+25. **A native `<select>` paints as a white system widget.** `appearance: none`
+    is needed on every one, including the selects outside `.cfgrow`
+    (`select.sel`: the VST slot picker and the WAV import row), and
+    `color-scheme: dark` on `html` for the *opened* popup, which CSS cannot
+    reach. In a WebKit snapshot a native select comes out blank as well.
 
 ## 7. Change checklist
 
@@ -185,8 +217,24 @@ Before you call a change done:
 
 ## 8. Testing rules learned the hard way
 
+- **Back up `sessions/` before `smoke.py` and restore it afterwards.** The suite
+  deletes autosave, slot7, slot99, backups, import and exports so the run starts
+  clean; on a machine with real recordings that is destructive, and it has eaten
+  the author's takes more than once.
 - Tests must start from a **clean `sessions/`** — an autosave from a previous run
   restores layers and every layer count is off by one. `smoke.py` wipes it.
+- **A check that passes on a stale config is a false positive.** The MIDI gesture
+  test passed for two rounds because the persisted `midi.map` already contained
+  the note, so `midiAdd` was never exercised. Assert the precondition (here,
+  `svc midiMap`) before asserting the effect.
+- **Know which process owns :8181 before believing a rendering diagnosis.** A
+  leftover AppImage instance serves *its own* staged `ui/style.css`; editing the
+  repo's copy then changes nothing, which looks exactly like a font bug. Check
+  `pgrep -af app.main` and `ss -ltnp | grep 8181` first, and kill strays.
+- **Screenshots come from WebKit, not Chromium.** `scripts/shots.py` drives
+  `WebKitWebView.get_snapshot`. Chromium — headless or headful, any GPU flags —
+  rasterises text inside the drawers as the wrong glyphs in a container without a
+  GPU, and no CSS experiment fixes it.
 - Keep expectations **relative** (`layers > base`) rather than absolute; `autoDub`
   changes how many layers exist after the first pass.
 - Read **fresh** frames. Buffered websocket frames from before an action will make
