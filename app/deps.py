@@ -174,7 +174,10 @@ def missing_keys() -> list[str]:
     """
     keys = [str(row["key"]) for row in report() if not row["ok"]]
     if os.name == "nt":
-        keys = [k for k in keys if k not in ("gtk", "webkit", "plugins")]
+        # gtk/webkit are the Linux window, plugins is a Linux SC package, and sc
+        # ships inside the app -- the check looks for a system install and said
+        # "Missing: sc." on a machine where the engine was running from the bundle.
+        keys = [k for k in keys if k not in ("gtk", "webkit", "plugins", "sc")]
     return keys
 
 
