@@ -627,6 +627,12 @@ if (~hasVST) {
 	// poll the clock only once the transport exists: polling from file load sent
 	// /b_getn at a booting server and stalled the state loop
 	~clockWatch !? { ~clockWatch.play };
+	// The clock's own numbers, in every engine.log. Guessing at a rate that is
+	// 18x off cost several rounds; this line ends that.
+	("CLOCK rate=% sr=% loopSec=% loopFrames=% bars=% bpb=% bpm=% grid=%").format(
+		~phaseRate.value, s.sampleRate, ~loopSeconds.value, ~loopFrames.value,
+		~state[\bars], ~state[\beatsPerBar], ~state[\bpm], ~state[\gridOn] ?? 1
+	).postln;
 
 	~rhythmSynth = Synth(\ld_rhythm, [
 		\outBus, ~rhythmBus, \patBuf, ~patternBuf.bufnum,
