@@ -339,7 +339,6 @@ def _content_type(path: Any) -> str:
 
 
 def _ui_response(request: Any) -> Any:
-    import mimetypes
     from http import HTTPStatus
 
     from websockets.datastructures import Headers
