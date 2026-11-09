@@ -606,9 +606,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  deps    {'all present' if not missing else ', '.join(missing) + ' missing'}")
         return 0 if sclang or args.no_engine else 1
 
-    if not port_free(port):
-        # a second double-click should raise the running app, not fail on ports
-        open_window(url, kiosk=args.kiosk, mode=args.window)
+    # The single-instance guard must test the port the running app actually
+    # serves on. It used to test only ui.port (8181) while the UI is served from
+    # the bridge (8182), so a second launch sailed past it, started a second
+    # engine, and lost the audio device to the first one -- seen on Windows as two
+    # "ui connected" lines followed by "could not open the audio device".
+    try:
+        cfg_now = json.loads((home / "ui" / "config.json").read_text())
+        ws_probe = int((cfg_now.get("ui") or {}).get("wsPort", 8182))
+    except (OSError, ValueError, TypeError):
+        ws_probe = 8182
+    if not port_free(port) or not port_free(ws_probe):
+        # a second double-click should raise the running app, not fight it
+        open_window(f"http://127.0.0.1:{ws_probe}/", kiosk=args.kiosk,
+                    mode=args.window)
         return 0
 
     logs = log_dir(home)
