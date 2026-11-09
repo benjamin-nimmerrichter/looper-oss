@@ -620,6 +620,12 @@ def on_ready(_addr: str, *args: Any) -> None:
     engine_failed = None
     log(f"engine ready ({tracks} tracks)")
     push(engine_ready)
+    # The UI asks for devices when it connects, usually before scsynth has printed
+    # its PortAudio table, so the in/out pickers stayed empty. Resend now.
+    try:
+        asyncio.ensure_future(send_devices())
+    except RuntimeError:
+        pass
     engine.send_message("/ld/svc", ["stats"])
 
 
