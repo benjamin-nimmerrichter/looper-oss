@@ -75,6 +75,8 @@ switch (~driver,
 	"jack", {
 		s.options.device = nil;
 	},
+	"wasapi", { if (~audio[\device].notNil) { s.options.device = ~audio[\device] } },
+	"mme",    { if (~audio[\device].notNil) { s.options.device = ~audio[\device] } },
 	"asio", {
 		// Windows: PortAudio picks the backend from the device string's prefix.
 		// "ASIO : <name>" is the low-latency path (hardwareBufferSize becomes the

@@ -128,6 +128,9 @@ function setBoot(text, done = false, failed = false) {
 function handle(m) {
   switch (m.t) {
     case "hello":
+      // which platform we are on decides the driver list and how a device is
+      // named: jack/alsa on Linux, WASAPI/ASIO/MME on Windows
+      ui.platform = m.platform || "unix";
       if (m.config) CFG = m.config;
       applyUiConfig();
       buildTracks(m.tracks);
@@ -934,24 +937,43 @@ function renderSettings() {
     const dev = CFG.audio?.device ?? null;
 
     const c = card(body, "driver");
-    c.append(rowSelect("driver", "audio.driver", [
+    // The list follows the platform: jack/alsa do not exist on Windows, and
+    // wasapi/asio do not exist on Linux. Showing the wrong three was confusing.
+    const winDrivers = [
+      { label: "auto (system default)", value: "auto" },
+      { label: "WASAPI", value: "wasapi" },
+      { label: "ASIO", value: "asio" },
+      { label: "MME / DirectSound", value: "mme" },
+    ];
+    const unixDrivers = [
       { label: "auto (jack if present)", value: "auto" },
       { label: "jack / pipewire", value: "jack" },
       { label: "alsa (direct)", value: "alsa" },
-    ], { hint: "restart" }));
+    ];
+    c.append(rowSelect("driver", "audio.driver",
+      ui.platform === "windows" ? winDrivers : unixDrivers, { hint: "restart" }));
     c.append(el("div", "caption",
-      drv === "alsa"
-        ? "alsa talks to the hardware directly; nothing else can use it while running"
-        : "scsynth joins the PipeWire graph as a node — there is no device to choose"));
+      ui.platform === "windows"
+        ? (drv === "asio"
+            ? "ASIO takes the device exclusively: lowest latency, nothing else can play meanwhile"
+            : "WASAPI is the normal Windows path; the device below chooses the endpoint")
+        : (drv === "alsa"
+            ? "alsa talks to the hardware directly; nothing else can use it while running"
+            : "scsynth joins the PipeWire graph as a node — there is no device to choose")));
 
-    // A device is only meaningful for ALSA: it becomes scsynth's -H argument.
-    if (drv === "alsa") {
+    // A device is meaningful for ALSA on Linux, and for every Windows backend:
+    // there the string is the endpoint ("Windows WASAPI : Speakers ..."), which
+    // scsynth passes straight to PortAudio.
+    if (ui.platform === "windows" ? drv !== "auto" : drv === "alsa") {
+      const win = ui.platform === "windows";
+      const pool = win
+        ? [...(ui.devices?.sinks || []), ...(ui.devices?.sources || [])]
+        : (ui.devices?.alsa || []);
       const opts = [{ label: "(system default)", value: "" }].concat(
-        (ui.devices?.alsa || []).map((d) => ({
-          label: `${d.id} — ${d.label}`, value: d.id,
-        })),
+        pool.map((d) => ({ label: `${d.id} — ${d.label}`, value: d.id })),
       );
-      c.append(rowSelect("alsa device", "audio.device", opts, { hint: "hw:N,M · restart" }));
+      c.append(rowSelect("device", "audio.device", opts,
+        { hint: win ? "endpoint · restart" : "hw:N,M · restart" }));
     } else if (dev) {
       // never leave a PipeWire node name in audio.device: it would be handed to
       // ALSA on the next start and scsynth would die with "couldn't initialize audio"

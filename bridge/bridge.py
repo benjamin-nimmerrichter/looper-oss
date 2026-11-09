@@ -845,6 +845,7 @@ async def ws_handler(ws: Any) -> None:
                 {
                     "t": "hello",
                     "tracks": N,
+                    "platform": "windows" if os.name == "nt" else "unix",
                     "layers": CFG.get("maxLayers", 4),
                     "config": CFG,
                 }
