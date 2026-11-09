@@ -487,6 +487,11 @@ class Engine:
             self.restarts += 1
         self.stop(force=True)
         time.sleep(delay)  # let PipeWire/WASAPI release the device first
+        if os.name == "nt":
+            # Windows holds the endpoint until the server process is really gone;
+            # a fixed sleep was not enough and the restart failed to open it.
+            sweep_stale(self.home)
+            time.sleep(0.5)
         self.start()
 
     def stop(self, force: bool = False) -> None:

@@ -198,6 +198,17 @@ def list_audio_devices() -> dict:
     """
     out: dict[str, Any] = {"sinks": [], "sources": [], "alsa": [],
                            "links": {"inputs": [], "outputs": []}}
+    if os.name == "nt":
+        # pw-dump, pw-link and aplay are Linux tools; asking for them on Windows
+        # logged three failures per poll and buried the real messages.
+        opened = opened_from_log()
+        if opened:
+            out["links"]["inputs"] = [opened.get("in", "")]
+            out["links"]["outputs"] = [opened.get("out", "")]
+            if opened.get("out"):
+                out["alsa"].append({"id": opened["out"], "label": opened["out"]})
+        out.update(read_clock())
+        return out
 
     try:
         dump = subprocess.run(["pw-dump"], capture_output=True, text=True,
