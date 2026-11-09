@@ -4,7 +4,47 @@ All notable changes to Looper OSS. Format: [Keep a Changelog](https://keepachang
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The single
 source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
-## [Unreleased]
+## [0.3.0] — 2026-11-08
+
+**Windows 10 is supported.** Verified on a real machine, not only in Wine: the
+packaged installer runs the looper with its bundled SuperCollider, opens the
+device, records and plays, and the metronome keeps time. The path there found
+about a dozen defects that Wine could not show -- see below.
+
+### Fixed on real Windows
+
+- **Module scripts were served as `text/plain`**, so the browser refused to run
+  `app.js` and the page never opened its socket. `mimetypes` reads the Windows
+  registry, where `.js` is often `text/plain`; the UI files now have a fixed
+  table of content types.
+- **The install path had a space.** SuperCollider assembles the server command as
+  a plain string, so `Programs\Looper OSS` split at the space and `scsynth` never
+  started ("'C:\...\Programs\Looper' is not recognized"). The installer now
+  targets `Programs\LooperOSS`.
+- **PipeWire buffer settings were forced onto Windows.** MME reported a 64-frame
+  driver block while the config asked for 256; the server underran, the audio
+  granulated and the transport -- which advances per *sample* -- stretched in wall
+  time. Windows now keeps SC's own block size and leaves the buffer to the driver.
+- **SuperCollider was bundled beside the exe, not in `_internal/`**, so the staged
+  copy never had it and the app reported "Missing: sc" with an empty engine log.
+- **The single-instance guard checked the wrong port** (8181) after the UI moved to
+  the bridge (8182), so a second launch started a second engine and lost the audio
+  device to the first.
+- **Readiness was pushed as an event**, so a window that opened late waited for
+  ever on the boot screen; the bridge now replays it to every new client.
+- **A browser process was treated as the window.** Edge/Chrome hand the URL to a
+  running instance and exit at once, which the app read as "the user closed the
+  window" -- it shut down a fraction of a second after opening, and the fallback
+  chain opened more windows on the way out.
+- **The page and its socket are on one origin.** Chromium 142+/Edge 143+ ask
+  permission before a page may reach a local destination; a socket on a second
+  port was silently blocked.
+- **Driver choices now follow the platform** (WASAPI/ASIO/MME on Windows,
+  jack/alsa elsewhere) and are sent by the bridge instead of inferred by the UI.
+- The clock is **polled one request at a time** (queued `/b_getn` replies starved
+  sclang), and the UI-disconnect grace is 15 s so a browser repaint cannot restart
+  the engine.
+
 
 Windows support and the release tooling. Nothing here is released yet; the tag
 comes after the build has run on a real Windows 10 machine.

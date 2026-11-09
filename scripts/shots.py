@@ -28,7 +28,9 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "img"
-URL = os.environ.get("UI_URL", "http://127.0.0.1:8181/")
+# The bridge serves the page and the socket on one origin; 8182 is that port.
+UI_PORT = int(os.environ.get("UI_PORT", "8182"))
+URL = os.environ.get("UI_URL", f"http://127.0.0.1:{UI_PORT}/")
 SIZE = (1280, 800)
 
 TAP = ("el => el.dispatchEvent(new PointerEvent('pointerup', "
@@ -91,13 +93,13 @@ def shoot(v):
 
 def loaded(v, event):
     if event == WebKit2.LoadEvent.FINISHED:
-        GLib.timeout_add(2200, lambda: (v.run_javascript(js, None, None, None), False)[1])
-        GLib.timeout_add(5200, lambda: shoot(v))
+        GLib.timeout_add(3500, lambda: (v.run_javascript(js, None, None, None), False)[1])
+        GLib.timeout_add(12000, lambda: shoot(v))
     return False
 
 view.connect("load-changed", loaded)
 view.load_uri(url)
-GLib.timeout_add(25000, lambda: (print("timeout", file=sys.stderr), Gtk.main_quit(), False)[2])
+GLib.timeout_add(30000, lambda: (print("timeout", file=sys.stderr), Gtk.main_quit(), False)[2])
 Gtk.main()
 '''
 
@@ -149,7 +151,7 @@ def main() -> int:
         return 1
 
     started: subprocess.Popen[bytes] | None = None
-    if not port_open(8181):
+    if not port_open(UI_PORT):
         print("starting the stack…")
         env = dict(os.environ, LOOPER_OSS_KEEP_ALIVE="1")
         started = subprocess.Popen(
@@ -157,7 +159,7 @@ def main() -> int:
             cwd=str(ROOT), env=env, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL, start_new_session=True,
         )
-        if not wait_for_port(8181):
+        if not wait_for_port(UI_PORT):
             print("the UI did not come up", file=sys.stderr)
             started.terminate()
             return 1

@@ -3,8 +3,7 @@
 A touchscreen loop station in the spirit of the Boss RC-505, built as a thin
 skin over **SuperCollider**. Layers per track, tempo-locked loops, per-track
 gate / filter / delay / reverb send, MIDI footswitch, VST3 inserts, and session
-recording with autosave. Runs fully offline; Linux is the supported platform
-today, and full Windows support is the 0.3.0 milestone.
+recording with autosave. Runs fully offline, on **Linux and Windows 10**.
 
 Nothing in this repo implements audio DSP. Audio is stock SuperCollider UGens;
 the UI is a browser page; the only Python translates OSC to JSON.
@@ -173,18 +172,15 @@ what puts scsynth on the PipeWire graph like any other client; if you keep
 `jack` (jack2) instead, choose driver **alsa** in setup → audio and pick your
 interface there.
 
-**Windows — an experiment, and the next milestone.** The PyInstaller/Inno Setup
-recipe and the `driver = asio` code path are in the tree, but **nothing has been
-built, installed or run on Windows**, so there is no supported Windows release
-and no Windows artefact is published with 0.2.0.
+**Windows — supported since 0.3.0.** Install `looper-oss-<version>-setup.exe` (or
+extract the portable zip) and run it. SuperCollider is inside the package, so
+there is nothing else to install and no PATH to edit. The audio engine runs from
+`_internal\sc`, and Setup → Audio lets you choose WASAPI, ASIO or MME and the
+endpoint itself.
 
-If you want to try it anyway, the pipeline is there and produces an artefact
-labelled `-experimental`: run **Actions → windows-experimental → Run workflow**
-and download `windows-experimental-<version>`, or build it yourself with
-`packaging/windows/build.ps1` (see `packaging/windows/README.md`).
-[SuperCollider for Windows](https://supercollider.github.io/) is a prerequisite,
-and the app says so in its own window rather than failing quietly.
-
+Verified on a real Windows 10 machine: installation, engine boot, device open,
+record/overdub, export, MIDI input and session save. Wine is not used as evidence
+for any of it.
 **Full Windows support is planned for 0.3.0**: WASAPI and ASIO device handling,
 the engine's audio-backend paths, a verified installer, and testing on real
 hardware — under Wine first, then on a Windows machine. Everything described in
@@ -209,8 +205,9 @@ prebuilt release zip from `github.com/Spacechild1/vstplugin` unpacked into
 `~/.local/share/SuperCollider/Extensions/`). The engine detects it at startup and
 shows `VST yes` in the log; without it the slots are simply absent.
 
-**Windows 10.** Two downloads, both complete: SuperCollider is inside the
-package, so there is nothing else to install.
+**Windows 10.** Supported, and verified on real hardware. Two downloads, both
+complete: SuperCollider is inside the package, so there is nothing else to
+install.
 
 - **`looper-oss-<version>-windows-x64.zip`** — portable, no installer, no
   administrator. Extract anywhere and run `LooperOSS.exe`. **Recommended**: an
