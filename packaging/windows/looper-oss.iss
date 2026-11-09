@@ -21,7 +21,10 @@ AppPublisher=Looper OSS contributors
 ; Never %LOCALAPPDATA%\\looper-oss\\app: that is where the app stages a
 ; per-version copy AND keeps sessions/, so an uninstall could remove the
 ; user's music. Programs live under Programs, state lives under app/.
-DefaultDirName={localappdata}\Programs\Looper OSS
+; No space in the path: SuperCollider assembles the server command as a
+; plain string and Windows splits it at the space, so 'Programs\Looper OSS'
+; became 'Programs\Looper' + ' OSS' and scsynth never started.
+DefaultDirName={localappdata}\Programs\LooperOSS
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
