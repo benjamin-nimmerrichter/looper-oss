@@ -866,7 +866,11 @@ async def ws_handler(ws: Any) -> None:
         clients.discard(ws)
         log(f"ui disconnected ({len(clients)})")
         if not clients:
-            schedule_quit()
+            # Fifteen seconds, not four: a browser repainting, a tab reloading or
+            # a slow scheduler must not tear the engine down and reboot it. This
+            # is the grace for an accidental disconnect; an explicit quit still
+            # uses schedule_quit(1.0).
+            schedule_quit(15.0)
 
 
 async def main() -> None:

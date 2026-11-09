@@ -1692,6 +1692,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 	// clock. Replies win when they exist; this only acts after a second of silence.
 	~pollBeats = nil;
 	~clockPollBusy = false;
+	~clockPollSent = nil;      // explicit: the timeout guard compares against it
 	~clockWatch = Routine {
 		loop {
 			0.05.wait;
@@ -1712,6 +1713,8 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 
 	OSCdef(\ldClockData, { |msg|
 		var beats, settled;
+		// Any arithmetic error in this responder freezes the clock, so every
+		// value it compares is initialised before the routine starts (below).
 		if (~clockBuf.notNil && (msg[1] == ~clockBuf.bufnum) && (msg[2] == 0)) {
 			// sticky: a stray reply must not switch polling off again mid-take,
 			// which made the clock lurch (some replies arrive, most do not)
