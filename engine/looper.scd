@@ -48,8 +48,21 @@ if (File.exists(~cfgFile)) { ~cfgFile.load };
 s = Server.default;
 s.options.numInputBusChannels  = ~audio[\in].asInteger.max(2);
 s.options.numOutputBusChannels = ~audio[\out].asInteger.max(2);
-s.options.blockSize            = ~audio[\blockSize].asInteger.clip(16, 2048);
-s.options.hardwareBufferSize   = ~audio[\hardwareBufferSize].asInteger.clip(32, 8192);
+// The config's buffer numbers are tuned for PipeWire, where the quantum *is* the
+// hardware buffer (128) and a 64-frame block is normal. On Windows the driver
+// dictates the callback size -- MME reported "driver's block size = 64" while we
+// asked for 256 -- and the mismatch makes the server underrun: the audio sounds
+// granulated and, because the transport advances per SAMPLE, wall-clock timing
+// stretches by the same factor. That is the 20x-slow metronome.
+~isWindows = File.exists(Platform.resourceDir +/+ "scsynth.exe");
+s.options.blockSize = if (~isWindows) {
+	64                                  // SC's own default; safe with MME/WASAPI
+} {
+	~audio[\blockSize].asInteger.clip(16, 2048)
+};
+if (~isWindows.not) {
+	s.options.hardwareBufferSize = ~audio[\hardwareBufferSize].asInteger.clip(32, 8192);
+};
 if (~audio[\sampleRate].notNil) { s.options.sampleRate = ~audio[\sampleRate] };
 // "device" is an ALSA hardware name (scsynth -H). JACK/PipeWire has no device:
 // scsynth is simply a node in the graph. So: jack ignores it, alsa requires it.
@@ -629,9 +642,11 @@ if (~hasVST) {
 	~clockWatch !? { ~clockWatch.play };
 	// The clock's own numbers, in every engine.log. Guessing at a rate that is
 	// 18x off cost several rounds; this line ends that.
-	("CLOCK rate=% sr=% loopSec=% loopFrames=% bars=% bpb=% bpm=% grid=%").format(
+	("CLOCK rate=% sr=% loopSec=% loopFrames=% bars=% bpb=% bpm=% grid=% "
+		++ "block=% hwbuf=% win=%").format(
 		~phaseRate.value, s.sampleRate, ~loopSeconds.value, ~loopFrames.value,
-		~state[\bars], ~state[\beatsPerBar], ~state[\bpm], ~state[\gridOn] ?? 1
+		~state[\bars], ~state[\beatsPerBar], ~state[\bpm], ~state[\gridOn] ?? 1,
+		s.options.blockSize, s.options.hardwareBufferSize, ~isWindows
 	).postln;
 
 	~rhythmSynth = Synth(\ld_rhythm, [
