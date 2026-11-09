@@ -1691,11 +1691,20 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 	// count into a buffer, so the same /b_getn poll the meters use can carry the
 	// clock. Replies win when they exist; this only acts after a second of silence.
 	~pollBeats = nil;
+	~clockPollBusy = false;
 	~clockWatch = Routine {
 		loop {
-			0.04.wait;
+			0.05.wait;
 			// the routine starts when the file is read, before the buffers exist
-			if (~clockBuf.notNil) {
+			// Never have more than one poll outstanding: on Windows a round trip
+			// takes longer than the interval, and the queued replies starved
+			// sclang -- the playhead then crawls while everything looks idle.
+			if (~clockPollSent.notNil && (Main.elapsedTime - ~clockPollSent) > 0.5) {
+				~clockPollBusy = false;      // a dropped reply must not freeze the clock
+			};
+			if (~clockBuf.notNil && (~clockPollBusy != true)) {
+				~clockPollBusy = true;
+				~clockPollSent = Main.elapsedTime;
 				s.sendMsg('/b_getn', ~clockBuf.bufnum, 0, 1);
 			};
 		};
@@ -1708,6 +1717,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			// which made the clock lurch (some replies arrive, most do not)
 			settled = (~clockPollMode == true)
 				|| ((Main.elapsedTime - (~clockReplies ? -100)) > 3.0);
+			~clockPollBusy = false;
 			if (settled) {
 				~clockPollMode = true;
 				beats = (msg[4] ? 0).asFloat;
