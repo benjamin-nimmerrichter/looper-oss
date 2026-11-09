@@ -315,6 +315,29 @@ _ui_seen: set[str] = set()
 _ws_seen = False
 
 
+# Explicit, never from the registry: Python's mimetypes reads Windows' file
+# associations, where a .js file is commonly registered as "text/plain" -- and a
+# browser refuses to run an ES module served as text/plain ("Strict MIME type
+# checking is enforced for module scripts"). That one line cost several rounds of
+# debugging on a real Windows machine while Linux served text/javascript happily.
+CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
+    ".map": "application/json; charset=utf-8",
+}
+
+
+def _content_type(path: Any) -> str:
+    return CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream")
+
+
 def _ui_response(request: Any) -> Any:
     import mimetypes
     from http import HTTPStatus
@@ -336,7 +359,7 @@ def _ui_response(request: Any) -> Any:
         return Response(HTTPStatus.NOT_FOUND, "Not found", Headers(), b"")
     body = target.read_bytes()
     headers = Headers()
-    headers["Content-Type"] = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+    headers["Content-Type"] = _content_type(target)
     headers["Content-Length"] = str(len(body))
     headers["Cache-Control"] = "no-store"      # a rebuilt UI must apply on reload
     return Response(HTTPStatus.OK, "OK", headers, body)
