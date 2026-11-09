@@ -199,14 +199,16 @@ def list_audio_devices() -> dict:
     out: dict[str, Any] = {"sinks": [], "sources": [], "alsa": [],
                            "links": {"inputs": [], "outputs": []}}
     if os.name == "nt":
-        # pw-dump, pw-link and aplay are Linux tools; asking for them on Windows
-        # logged three failures per poll and buried the real messages.
+        # pw-dump, pw-link and aplay are Linux tools. The device table comes from
+        # scsynth's own boot log instead -- that is what the pickers need.
+        every = devices_from_log()
+        out["sinks"] = [d for d in every if d["outs"] > 0]
+        out["sources"] = [d for d in every if d["ins"] > 0]
+        out["alsa"] = list(every)
         opened = opened_from_log()
         if opened:
             out["links"]["inputs"] = [opened.get("in", "")]
             out["links"]["outputs"] = [opened.get("out", "")]
-            if opened.get("out"):
-                out["alsa"].append({"id": opened["out"], "label": opened["out"]})
         out.update(read_clock())
         return out
 
@@ -289,6 +291,40 @@ def list_audio_devices() -> dict:
     out.update(read_clock())
     return out
 
+
+
+
+def devices_from_log() -> list[dict[str, Any]]:
+    """Every endpoint scsynth listed, from its own boot log.
+
+    Windows has no pw-dump to ask, but scsynth prints its whole PortAudio device
+    table when it boots ("- Windows WASAPI : Speakers (Realtek(R) Audio) (device
+    #13 with 0 ins 2 outs)"). That is the authoritative list, and the string
+    before the parenthesised counters is exactly what goes into audio.device.
+    """
+    import re
+
+    found: list[dict[str, Any]] = []
+    if not ENGINE_LOG.exists():
+        return found
+    try:
+        text = ENGINE_LOG.read_text(errors="replace")
+    except OSError:
+        return found
+    pattern = re.compile(r"^\s+-\s+(?P<name>.+?)\s+\(device #(?P<idx>\d+) with "
+                         r"(?P<ins>\d+) ins (?P<outs>\d+) outs\)\s*$")
+    for line in text.splitlines():
+        m = pattern.match(line)
+        if not m:
+            continue
+        ins, outs = int(m.group("ins")), int(m.group("outs"))
+        if ins == 0 and outs == 0:
+            continue
+        name = m.group("name").strip()
+        backend = name.split(" : ", 1)[0] if " : " in name else ""
+        found.append({"id": name, "label": name, "backend": backend,
+                      "ins": ins, "outs": outs, "index": int(m.group("idx"))})
+    return found
 
 
 def opened_from_log() -> dict[str, str]:
