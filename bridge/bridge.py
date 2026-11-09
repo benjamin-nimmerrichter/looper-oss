@@ -87,6 +87,20 @@ CFG_TO_ENGINE = {
 }
 
 # config.json keys that need the engine to restart
+# What can be chosen where. Linux: scsynth is a node in the PipeWire graph, or it
+# talks to ALSA directly. Windows: PortAudio backends, and the device string names
+# the endpoint.
+DRIVER_CHOICES = (
+    [{"label": "auto (system default)", "value": "auto"},
+     {"label": "WASAPI", "value": "wasapi"},
+     {"label": "ASIO", "value": "asio"},
+     {"label": "MME / DirectSound", "value": "mme"}]
+    if os.name == "nt" else
+    [{"label": "auto (jack if present)", "value": "auto"},
+     {"label": "jack / pipewire", "value": "jack"},
+     {"label": "alsa (direct)", "value": "alsa"}]
+)
+
 CFG_NEEDS_RESTART = {
     "tracks", "maxLayers", "loop.maxSeconds", "audio.blockSize",
     "audio.hardwareBufferSize", "audio.device", "audio.in", "audio.out",
@@ -846,6 +860,9 @@ async def ws_handler(ws: Any) -> None:
                     "t": "hello",
                     "tracks": N,
                     "platform": "windows" if os.name == "nt" else "unix",
+                    # The drivers that exist here, as data: the UI should not have
+                    # to know which platform implies which backends.
+                    "drivers": DRIVER_CHOICES,
                     "layers": CFG.get("maxLayers", 4),
                     "config": CFG,
                 }

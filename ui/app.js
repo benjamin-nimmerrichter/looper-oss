@@ -131,6 +131,7 @@ function handle(m) {
       // which platform we are on decides the driver list and how a device is
       // named: jack/alsa on Linux, WASAPI/ASIO/MME on Windows
       ui.platform = m.platform || "unix";
+      if (Array.isArray(m.drivers) && m.drivers.length) ui.drivers = m.drivers;
       if (m.config) CFG = m.config;
       applyUiConfig();
       buildTracks(m.tracks);
@@ -937,21 +938,14 @@ function renderSettings() {
     const dev = CFG.audio?.device ?? null;
 
     const c = card(body, "driver");
-    // The list follows the platform: jack/alsa do not exist on Windows, and
-    // wasapi/asio do not exist on Linux. Showing the wrong three was confusing.
-    const winDrivers = [
-      { label: "auto (system default)", value: "auto" },
-      { label: "WASAPI", value: "wasapi" },
-      { label: "ASIO", value: "asio" },
-      { label: "MME / DirectSound", value: "mme" },
-    ];
-    const unixDrivers = [
+    // The bridge sends the drivers that exist on this machine; the fallback is
+    // the Linux set so an older bridge still renders something sane.
+    const drivers = ui.drivers || [
       { label: "auto (jack if present)", value: "auto" },
       { label: "jack / pipewire", value: "jack" },
       { label: "alsa (direct)", value: "alsa" },
     ];
-    c.append(rowSelect("driver", "audio.driver",
-      ui.platform === "windows" ? winDrivers : unixDrivers, { hint: "restart" }));
+    c.append(rowSelect("driver", "audio.driver", drivers, { hint: "restart" }));
     c.append(el("div", "caption",
       ui.platform === "windows"
         ? (drv === "asio"
