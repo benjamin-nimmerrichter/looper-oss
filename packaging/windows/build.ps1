@@ -38,10 +38,14 @@ if (Test-Path dist\LooperOSS\LooperOSS.exe) {
 # build uses (and so it is tested on Linux before it runs here).
 Write-Host "== supercollider bundle"
 python scripts\build.py bundle-sc dist\LooperOSS
-if (-not (Test-Path dist\LooperOSS\sc\sclang.exe)) {
+# The bundle lives where the staged payload comes from: _internal/ for a onedir
+# build (app/main.py stages _MEIPASS). Check both so the guard cannot pass on a
+# layout that does not ship.
+$scOk = (Test-Path dist\LooperOSS\_internal\sc\sclang.exe) -or (Test-Path dist\LooperOSS\sc\sclang.exe)
+if (-not $scOk) {
     throw "SuperCollider did not make it into dist\LooperOSS\sc - refusing to ship a package that needs a manual install"
 }
-Write-Host "   dist\LooperOSS\sc\sclang.exe"
+Write-Host "   SuperCollider bundled"
 
 # content-based build stamp: a rebuilt exe with the same VERSION must still
 # refresh the payload the launcher stages into %LOCALAPPDATA%
