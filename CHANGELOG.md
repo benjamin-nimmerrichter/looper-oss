@@ -8,6 +8,15 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ### Fixed
 
+- **The bar ruler is painted above the playhead again, not behind it.** The beat
+  and bar marks are children of the playhead bar, and among positioned siblings
+  with `z-index: auto` the later one wins — so the accent fill covered every mark
+  it had passed. The ruler was legible only *ahead* of the playhead, which is the
+  half you cannot read, and erased behind it, which is the half that tells you
+  where you are. Both layers now state their order explicitly. Measured in WebKit
+  at 50 % fill: before, 0 of the first seven beat marks were visible inside the
+  filled part; after, 7 of 7. `scripts/uicheck.mjs` compares the two computed
+  `z-index` values, so it cannot come back quietly.
 - **A config carried over from an older version is now completed, not just
   copied.** `stage()` has kept `ui/config.json` across updates since 0.2.0 --
   which is what a musician wants — their bpm, interface and MIDI map — but a

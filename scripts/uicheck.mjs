@@ -76,6 +76,34 @@ note(audit.bad.length === 0,
   `main view: ${audit.total} interactive targets, all >= 48px` +
   (audit.bad.length ? ` — too small: ${JSON.stringify(audit.bad.slice(0, 5))}` : ""));
 
+// -------------------------------------------------- playhead reads as ruler --
+// The bar/beat marks are children of the playhead bar, and among positioned
+// siblings with z-index:auto the later one wins -- so the accent fill used to
+// paint over every mark it had passed, and the ruler was readable only ahead of
+// the playhead. Assert the paint order explicitly, not by looking.
+const ruler = await page.evaluate(() => {
+  const ticks = document.querySelector(".playhead .ticks");
+  const fill = document.querySelector(".playhead > i");
+  const s = window.__ld.state();
+  const cs = ticks ? getComputedStyle(ticks) : null;
+  return {
+    zTick: cs ? Number(cs.zIndex) : NaN,
+    zFill: fill ? Number(getComputedStyle(fill).zIndex) : NaN,
+    // a custom property that was never set computes to "", so an empty value
+    // here means tick() never wrote it and the marks are frozen on the CSS
+    // fallbacks
+    bars: cs ? cs.getPropertyValue("--bars").trim() : "",
+    beats: cs ? cs.getPropertyValue("--beats").trim() : "",
+    wantBars: String(Math.max(1, s.bars || 4)),
+    wantBeats: String(Math.max(1, (s.bars || 4) * (s.beatsPerBar || 4))),
+  };
+});
+note(Number.isFinite(ruler.zTick) && ruler.zTick > ruler.zFill,
+  `ruler marks paint above the playhead fill (ticks z=${ruler.zTick}, fill z=${ruler.zFill})`);
+note(ruler.bars === ruler.wantBars && ruler.beats === ruler.wantBeats,
+  `ruler marks follow the grid (--bars ${ruler.bars || "unset"}=${ruler.wantBars}, ` +
+  `--beats ${ruler.beats || "unset"}=${ruler.wantBeats})`);
+
 // -------------------------------------------------------------- behaviour --
 const before = await page.evaluate(() => window.__ld.state().tracks[0].state);
 await page.locator(".track").nth(0).locator(".pad.main").click();

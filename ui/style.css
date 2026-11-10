@@ -131,10 +131,15 @@ body.no-master #master { display: none; }
   z-index: 5;
   pointer-events: none;
 }
-/* beat marks faint, bar marks stronger: the playhead reads as a ruler */
+/* beat marks faint, bar marks stronger: the playhead reads as a ruler.
+   The marks paint ABOVE the fill, and both say so explicitly: among positioned
+   siblings with z-index:auto the later one wins, so markup order alone used to
+   put the accent fill on top of every mark it had passed -- the ruler was
+   readable only ahead of the playhead, which is the half you cannot read yet. */
 .playhead .ticks {
   position: absolute;
   inset: 0;
+  z-index: 2;
   background-image:
     repeating-linear-gradient(to right,
       rgba(231, 235, 240, 0.30) 0 1px,
@@ -145,6 +150,7 @@ body.no-master #master { display: none; }
 }
 .playhead > i {
   position: relative;
+  z-index: 1;
   display: block;
   height: 100%;
   width: 0;
