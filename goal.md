@@ -534,7 +534,11 @@ layers that have to stay in step.
    `layerCount = 1`. Reuse `\ld_bounce`. Because the destination is also a source,
    either prove the same-index read/write is safe with a probe, or sum into a
    spare buffer and swap — the swap is cheap and removes the argument.
-   **It must be undoable**; a merge that cannot be undone would need tap-to-arm.
+   **It must be undoable, or destructive with tap-to-arm.** Decided (M3):
+   tap-to-arm. The layer stack has no spare slot to keep the originals in, and
+   the model has no hidden backup, so an "undoable" merge would mean inventing a
+   fifth buffer per track. `clear` already works this way, the hardware's Bounce
+   is destructive too, and the button asks before it commits.
 2. **MERGE TRACKS, by selection.** `~bounce` today is "every track into one".
    Extend to a source list and a destination, so two of five can be joined and the
    other three left alone.

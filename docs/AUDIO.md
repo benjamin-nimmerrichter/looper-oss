@@ -262,6 +262,27 @@ starts wherever the play head is, so the content is not necessarily at index 0
 (which is also why `probe`'s `peak0..peak3`, reading 48 000 frames, can report 0
 for a take that is perfectly audible — it is a diagnostic window, not a verdict).
 
+### Merging (issue #6)
+
+`\ld_bounce` sums up to eight buffers with per-buffer gains into one destination
+over one loop pass. Both merges are that same def:
+
+- **Merge tracks** — sources are the named tracks' layers, destination is the
+  target track's layer 0; the sources are freed afterwards.
+- **Merge layers** — sources are *one* track's own layers, destination is its
+  layer 0, which is also source 0. Reading and writing the same buffer is safe
+  here because the read is a dependency of the write, and it is the same overlap
+  the original bounce has always had.
+
+Both stop the destination's synth for the pass: it writes its buffers back every
+sample (`w0..w3` closed means "write my own content"), and that write-back would
+clobber the sum as it is being built. The synth is rebuilt afterwards.
+
+Merging *layers* is destructive — the stack has no spare slot to keep the
+originals in, and the layer model has no concept of a hidden backup — so the UI
+arms it first (`sure?`). Merging fewer than two layers is refused rather than
+silently doing nothing, and neither merge touches a track with a take open.
+
 ## Sleep and resume (issue #1)
 
 A suspend tears the audio device down and rebuilds it. `scsynth` survives that

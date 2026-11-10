@@ -956,14 +956,22 @@ if (~hasVST) {
 		};
 	};
 
-	// BOUNCE IN: merge every track that has layers into one, as a single layer.
-	~bounce = { |dstIdx|
+	// BOUNCE IN: merge tracks that have layers into one, as a single layer.
+	// `srcIdx` nil = every track (the hardware's Bounce In); a list = only those,
+	// so two of five can be joined and the other three left alone (#6).
+	~bounce = { |dstIdx, srcIdx|
 		var dst = ~tracks[dstIdx];
 		var srcs, bufs = [], gains = [], secs, args, synth;
 		// No `^` anywhere here: this runs from an OSC responder, and a non-local
 		// return unwinds that thread without an error (AGENTS.md rule 8).
 		if (dst.notNil) {
-		srcs = ~tracks.select { |t| t[\layerCount] > 0 };
+		srcs = if (srcIdx.notNil) {
+			srcIdx.collect { |k| ~tracks[k.asInteger] }.select { |t|
+				t.notNil && (t[\layerCount] > 0)
+			};
+		} {
+			~tracks.select { |t| t[\layerCount] > 0 };
+		};
 		if (srcs.notEmpty) {
 		secs = ~loopSeconds.value;
 		srcs.do { |t|
@@ -1008,6 +1016,50 @@ if (~hasVST) {
 			~bridge.sendMsg('/ldbounce', dstIdx);
 		};
 		};
+		};
+	};
+
+	// MERGE LAYERS (#6): the four layers of one track become one. Same sum the
+	// bounce uses, with the track's own buffers as the sources; the destination is
+	// b0, which is also a source, and the read is a dependency of the write so the
+	// pass is safe. DESTRUCTIVE -- b1..b3 are zeroed when it finishes -- because the
+	// layer stack has no spare slot to keep the originals in; the UI asks first.
+	~mergeLayers = { |i|
+		var t = ~tracks[i];
+		var bufs = [], gains = [], secs, args, synth, wasPlaying;
+		if ((t.notNil) && (t[\layerCount] > 1) && (t[\recOn] == 0)) {
+			secs = ~loopSeconds.value;
+			wasPlaying = t[\playing];
+			t[\bufs].do { |b, li|
+				bufs = bufs ++ [b.bufnum];
+				gains = gains ++ [if (li < t[\layerCount], { t[\gains][li] }, { 0 })];
+			};
+			while { bufs.size < 8 } { bufs = bufs ++ [0]; gains = gains ++ [0] };
+			bufs = bufs.keep(8); gains = gains.keep(8);
+			// stop the track first: its unconditional write-back would clobber the sum
+			t[\synth].free; t[\meterSynth].free; t[\autoSynth].free;
+			t[\playing] = 0; t[\recOn] = 0;
+			args = [\dst, t[\bufs][0].bufnum, \len, t[\contentLen], \secs, secs];
+			8.do { |k|
+				args = args ++ [("b" ++ k).asSymbol, bufs[k], ("g" ++ k).asSymbol, gains[k]];
+			};
+			synth = Synth(\ld_bounce, args, ~grpTracks, \addToTail);
+			fork {
+				(secs + 0.4).wait;
+				synth.free;
+				t[\bufs].do { |b, li| if (li > 0) { b.zero } };
+				t[\gains] = Array.fill(~maxLayers, 0);
+				t[\gains][0] = 1;
+				t[\layerCount] = 1; t[\undone] = 0;
+				t[\recOn] = 0;
+				t[\playing] = wasPlaying;
+				t[\state] = if (wasPlaying == 1, 2, 3);
+				t[\contentLen] = ~contentLenNow.value(t);
+				~makeTrackSynth.value(t, i);
+				~bridge.sendMsg('/ldmerged', i, 1);
+			};
+		} {
+			~bridge.sendMsg('/ldmerged', i, 0);
 		};
 	};
 
@@ -1163,6 +1215,7 @@ if (~hasVST) {
 			"mark",   { if (t.notNil) { ~setMark.value(t) } },
 			"markBack", { if (t.notNil) { ~markBack.value(t) } },
 			"bounce", { ~bounce.value(i.asInteger) },
+			"mergeLayers", { ~mergeLayers.value(i.asInteger) },
 			"stopAll",{
 				~tracks.do { |tr| ~stopTrack.value(tr) };
 				~state[\gridOn] = 0; ~applyRate.value;    // playhead + click stop
@@ -1470,7 +1523,9 @@ if (~hasVST) {
 					"stop",  { if (val > 0) { ~stopTrack.value(t) } },
 					"clear", { if (val > 0) { ~clearTrack.value(t) } },
 					"undo",  { if (val > 0) { ~undo.value(t) } },
-					"redo",  { if (val > 0) { ~redo.value(t) } }
+					"redo",  { if (val > 0) { ~redo.value(t) } },
+					// a pedal can flatten a track's layers; the UI asks first
+					"merge", { if (val > 0) { ~mergeLayers.value(head[1..].asInteger) } }
 				);
 			};
 		};
@@ -1682,6 +1737,12 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			"tap",       { ~tapTempo.value },
 			"stats",     { ~sendStats.value },
 			"probe",     { ~probeTrack.value((msg[2] ? 0).asInteger) },
+			// #6: MERGE TRACKS by selection -- svc mergeTracks dst src1 [src2 ...]
+			"mergeTracks", {
+				var dstIdx = (msg[2] ? 0).asInteger;
+				var srcs = if (msg.size > 3) { msg.copyRange(3, msg.size - 1) } { nil };
+				~bounce.value(dstIdx, srcs !? { |a| a.collect(_.asInteger) });
+			},
 			// mute the hardware output without touching internal buses, so a test
 			// can drive a tone through the record path and measure it in silence
 			"silence",   { if ((msg[2] ? 1) != 0) { s.mute } { s.unmute } },

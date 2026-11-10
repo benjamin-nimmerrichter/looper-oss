@@ -176,6 +176,10 @@ function handle(m) {
       // a take recorded nothing: it was dropped instead of muting the track
       toast(`track ${m.track + 1}: nothing recorded, take dropped`);
       break;
+    case "merged":
+      toast(m.ok ? `track ${m.track + 1}: layers merged`
+                  : `track ${m.track + 1}: nothing to merge`);
+      break;
     case "saved":
       // slot < 0 is the autosave: silent
       if (m.slot >= 0) toast(`saved slot ${m.slot} (${m.layers} layers)`);
@@ -510,11 +514,14 @@ function buildTracks(n) {
     undo.addEventListener("pointerup", () => act("undo", i));
     const redo = Button({ label: "redo", cls: "tiny" });
     redo.addEventListener("pointerup", () => act("redo", i));
+    // MERGE LAYERS flattens the stack into one layer and zeroes the rest, so it
+    // arms first. It is the only way to get from four takes to one loop.
+    const merge = confirmButton("merge", () => act("mergeLayers", i), "tiny");
     const clear = confirmButton("clear", () => {
       act("clear", i);
       toast(`track ${i + 1} cleared`);
     }, "tiny danger");
-    rowB.append(undo, redo, clear);
+    rowB.append(undo, redo, merge, clear);
 
     const meter = Meter();
     col.append(name, pad, rowA, vol, rowB, meter);
@@ -1163,7 +1170,7 @@ function renderSettings() {
     const c = card(body, "learn");
     const targets = [];
     for (let i = 0; i < (S ? S.tracks.length : CFG.tracks); i++) {
-      ["press", "stop", "undo", "clear"].forEach((v) => targets.push(`t${i}.${v}`));
+      ["press", "stop", "undo", "clear", "merge"].forEach((v) => targets.push(`t${i}.${v}`));
     }
     ["tap", "stopAll", "metro"].forEach((v) => targets.push(`g.${v}`));
     targets.forEach((tgt) => {

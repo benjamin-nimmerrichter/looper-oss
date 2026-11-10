@@ -245,9 +245,11 @@ body.no-master #master { display: none; }
 
 .row2 {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
   gap: 0.3rem;
+  /* a fourth button (merge) made four-in-a-row wider than a 1024 px column:
+     auto-fit wraps to a second line instead of overflowing, and every column
+     keeps the 48 px touch floor */
+  grid-template-columns: repeat(auto-fit, minmax(var(--tap), 1fr));
 }
 
 .btn {

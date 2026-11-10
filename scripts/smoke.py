@@ -639,9 +639,90 @@ async def run_tests(c: Client) -> None:
           f"playing {t0_before['gains'][0]:.2f}->{t0_after['gains'][0]:.2f}, "
           f"stopped {still_before['gains'][0]:.2f}->{still_after['gains'][0]:.2f}"
           if (t0_before and t0_after and still_before and still_after) else "no probe")
+    # ---- #6: MERGE -------------------------------------------------------
+    # A take starts on the bar line here, so its content is at the head of the
+    # buffer and the probe window (the first 48 000 frames) really sees it.
+    await c.set("g.autoClose", 0)
+    await c.set("g.autoDub", 0)
+    await c.set("g.quantizeStart", 1)
+    # a one-bar loop, so a take covers it and the probe window really sees it;
+    # the silent-take check above also left this track's gate closed.
+    bars_before = (c.last_state or {}).get("bars", 4)
+    await c.set("g.bars", 1)
+    await c.set("g.bpm", 120)
+    await c.set(f"t{L}.gateThr", 0.02)
+    await c.set(f"t{L}.gateOn", 0)
+    await asyncio.sleep(0.8)
+
+    async def quantized_take(freq: int = 220) -> None:
+        await c.svc("testTone", [freq, 0.25, 120])
+        await c.act("dub", L)
+        await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 1, 12)
+        await asyncio.sleep(1.6)
+        await c.act("dub", L)
+        await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["layers"] > 0
+                     and m["tracks"][L]["state"] != 1, 10)
+        await asyncio.sleep(1.0)
+
+    await c.act("clear", L)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["layers"] == 0, 8)
+    await quantized_take(220)
+    await quantized_take(330)
+    pr = await probe_l()
+    stacked = list(pr["peaks"][:2]) if pr else [0, 0]
+    await c.act("mergeLayers", L)
+    merged = await c.wait(lambda m: m.get("t") == "merged" and m["track"] == L, 20)
+    await asyncio.sleep(1.0)
+    pr = await probe_l()
+    # The probe reads a 48 000-frame window of a longer loop, so it under-reads
+    # each source by an unknown amount: the merged peak must be louder than
+    # either layer alone (the sum really happened) and no louder than twice the
+    # sum of what was measured (it was written once, not piled up).
+    lo, hi = max(stacked) * 1.05, (stacked[0] + stacked[1]) * 2.0
+    check("merge layers sums the stack into one layer",
+          merged is not None and merged.get("ok") == 1 and pr is not None
+          and pr["layers"] == 1 and pr["gains"][0] == 1
+          and stacked[0] > 0.05 and stacked[1] > 0.05
+          and lo <= pr["peaks"][0] <= hi,
+          f"{stacked[0]:.2f}+{stacked[1]:.2f} -> {pr['peaks'][0]:.2f} "
+          f"(want {lo:.2f}..{hi:.2f}, {pr['layers']}L)" if pr else "no probe")
+
+    # merging one layer is not a merge: it must be refused, not silently no-op
+    await c.act("mergeLayers", L)
+    merged = await c.wait(lambda m: m.get("t") == "merged" and m["track"] == L, 10)
+    check("merge layers is refused with fewer than two layers",
+          merged is not None and merged.get("ok") == 0, f"{merged}")
+
+    # MERGE TRACKS by selection: two of five joined, the other three untouched
+    t0_layers = c.track(0)["layers"]
+    await c.set("t3.input", testin)
+    await c.set("t3.gateOn", 0)
+    await asyncio.sleep(0.3)
+    await c.act("clear", 3)
+    await asyncio.sleep(0.6)
+    await c.svc("testTone", [440, 0.25, 120])
+    await c.act("dub", 3)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][3]["state"] == 1, 12)
+    await asyncio.sleep(1.6)
+    await c.act("dub", 3)
+    await asyncio.sleep(1.2)
+    await c.svc("mergeTracks", [3, 3, L])
+    st = await c.wait(lambda m: m.get("t") == "s"
+                      and m["tracks"][3]["layers"] == 1
+                      and m["tracks"][L]["layers"] == 0, 25)
+    left_alone = c.track(0)["layers"] == t0_layers
+    check("merge tracks joins the selection and frees the sources",
+          st is not None and left_alone,
+          f"dst={st['tracks'][3]['layers'] if st else '?'} "
+          f"src={st['tracks'][L]['layers'] if st else '?'} "
+          f"untouched={'yes' if left_alone else 'no'}")
+
+    await c.set("g.quantizeStart", 0)
     await c.set("g.autoClose", 1)
     await c.set("g.autoDub", 1)
+    await c.set("g.bars", bars_before)
     await c.act("clear", L)
+    await c.act("clear", 3)
 
     await c.act("stop", 0)
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 3, 8)

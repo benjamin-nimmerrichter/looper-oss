@@ -621,6 +621,12 @@ def on_auto(_addr: str, *args: Any) -> None:
         push({"t": "auto", "i": inum(args[0])})
 
 
+def on_merged(_addr: str, *args: Any) -> None:
+    """MERGE LAYERS finished (ok=1) or was refused (ok=0: <2 layers, or a take is open)."""
+    push({"t": "merged", "track": inum(args[0]) if args else 0,
+          "ok": inum(args[1]) if len(args) > 1 else 0})
+
+
 def on_silent(_addr: str, *args: Any) -> None:
     """A take recorded nothing and was dropped instead of muting the track."""
     push({"t": "silent", "track": inum(args[0]) if args else 0,
@@ -985,7 +991,7 @@ async def main() -> None:
         ("/ldin", on_input), ("/ldstats", on_stats), ("/ldvst", on_vst),
         ("/ldvstcatalog", on_vst_catalog), ("/ldmidimap", on_midi_map),
         ("/ldmidi", on_midi_event), ("/ldrhythm", on_rhythm), ("/ldvstbanks", on_vst_banks), ("/ldinputs", on_inputs), ("/ldimport", on_import), ("/ldmididevs", on_midi_devices),
-        ("/ldauto", on_auto), ("/ldsilent", on_silent), ("/ldready", on_ready), ("/ldbootfail", on_boot_fail), ("/ldprobe", on_probe), ("/ldtap", on_tap),
+        ("/ldauto", on_auto), ("/ldsilent", on_silent), ("/ldmerged", on_merged), ("/ldready", on_ready), ("/ldbootfail", on_boot_fail), ("/ldprobe", on_probe), ("/ldtap", on_tap),
         ("/ldsaved", on_saved), ("/ldloaded", on_loaded), ("/ldloaderr", on_loaderr),
         ("/ldcapturing", on_capturing), ("/ldexported", on_exported),
     ):

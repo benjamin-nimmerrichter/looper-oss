@@ -57,6 +57,7 @@ SynthDefs): `\ld_meter` writes `BufWr.kr` into a 64-frame buffer, sclang sends
 | `/ldloaded` | `tag, layers, dir` | |
 | `/ldloaderr` | `tag, message` | |
 | `/ldprobe` | `track, layers, contentLen, recOn, playing, meterL, meterR, g0..g3, peak0..peak3` | diagnostic: what is actually in the layer buffers |
+| `/ldmerged` | `track, ok` | MERGE LAYERS finished (`1`) or was refused (`0`: fewer than two layers, or a take is open) |
 | `/ldcapturing` | `seconds` | export started |
 | `/ldexported` | `path` | export finished |
 | `/ldready` | `tracks` | engine finished booting |

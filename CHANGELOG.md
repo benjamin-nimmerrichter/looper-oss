@@ -6,6 +6,16 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ## [Unreleased]
 
+### Added
+
+- **MERGE LAYERS and MERGE TRACKS by selection (#6).** The four layers of a track
+  can be joined into one (`merge` on the track, tap to arm — it is destructive),
+  and `svc mergeTracks dst src…` joins only the tracks you name instead of every
+  track into one. Both reuse the existing bounce sum, so the audio path is the one
+  that was already verified; the sources are freed afterwards and a merge of fewer
+  than two layers is refused rather than silently doing nothing. A MIDI pedal can
+  reach the layer merge as `t{i}.merge`.
+
 ### Fixed
 
 - **A resume is only reported fixed when the engine is actually back (#1).** The
