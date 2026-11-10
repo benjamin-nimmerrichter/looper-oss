@@ -157,9 +157,9 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | INPUT MONITOR | stepper | 0–1.5, **default 0** | Dry input heard while recording. `0` = loop only, which is right when your interface has direct monitoring / a hardware loopback — two copies at different latencies is comb filtering. | `cfg loop.monitor` | `monitor` |
 | AUTO-CLOSE 1ST LAYER | toggle | on | The first take closes on the loop boundary instead of running on. | `cfg loop.autoClose` | `autoClose` |
 | CONTINUE INTO OVERDUB | toggle | on | After that close, recording carries straight on as an overdub (hardware behaviour) instead of dropping to playback. | `cfg loop.autoDub` | `autoDub` |
-| OVERDUB REPLACES | toggle | off | A new take **mutes the layers it covered** instead of layering on top — the hardware's replace mode. Their content is never erased, so UNDO brings them straight back. | `cfg loop.overdubMode` | `overdubMode` in `~commit` |
+| OVERDUB REPLACES | toggle | off | A new take **mutes the layers it covered** instead of layering on top — the hardware's replace mode. Their content is never erased, so UNDO brings them straight back. A take that recorded **nothing** is dropped instead of committing, and the muted layers come back. While the mode is on, every track header shows a `REPLACE` badge: the mode can silence a track, so it is not a drawer-only secret. | `cfg loop.overdubMode` | `~commit`, `~dropIfSilent` |
 | QUANTIZE START | toggle | off | Start recording on the next loop boundary instead of immediately. | `cfg loop.quantizeStart` | `quantizeStart` |
-| DUB DECAY | stepper | 0–95 %, default 0 | Every pass, existing layers lose this fraction — the classic dub fade. | `cfg loop.dubDecay` | `dubDecay` |
+| DUB DECAY | stepper | 0–95 %, default 0 | Every pass, the layers of a **playing** track lose this fraction — the classic dub fade. Per track: a loop that is stopped, or one nothing is dubbing over, keeps its level, and the layer being recorded never fades. | `cfg loop.dubDecay` | `~dubPass` |
 
 **Master chain** (same tab):
 

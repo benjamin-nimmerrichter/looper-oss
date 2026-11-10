@@ -184,6 +184,18 @@ body.no-master #master { display: none; }
 }
 .tname b { color: var(--c); font-size: 1.05rem; }
 .tname .layers { font-variant-numeric: tabular-nums; }
+/* REPLACE mode mutes the layers below every new take: say so on the track */
+.tname .replace {
+  display: none;
+  padding: 0 0.3rem;
+  border-radius: 0.2rem;
+  background: var(--warn, #d08a2a);
+  color: #10141a;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+}
+.tname .replace.on { display: inline-block; }
 
 /* -------------------------------------------------------------- the pads -- */
 .pad {

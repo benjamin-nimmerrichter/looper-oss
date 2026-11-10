@@ -469,7 +469,15 @@ async def run_tests(c: Client) -> None:
     check("mark back jumps to the bookmark", st is not None,
           f"layers={st['tracks'][0]['layers'] if st else '?'}")
 
-    # replace mode: the new take mutes what it covers, and undo puts it back
+    # replace mode: the new take mutes what it covers, and undo puts it back.
+    # The take has to carry signal: a take that records nothing is now dropped
+    # rather than committed (checked below), so a silent one would prove nothing.
+    await c.svc("testTone", [220, 0.25, 120])
+    await c.set("t0.input", int(CFG.get("audio", {}).get("in", 2)) + 1)
+    await c.set("t0.gateOn", 0)
+    await c.set("t0.hp", 20)
+    await c.set("t0.lp", 19000)
+    await asyncio.sleep(0.5)
     await c.cfg("loop.overdubMode", 1)
     await asyncio.sleep(0.8)
     before_replace = c.track(0)["layers"]
@@ -481,15 +489,140 @@ async def run_tests(c: Client) -> None:
                  and m["tracks"][0]["layers"] > before_replace, 8)
     await c.svc("probe", [0])
     pr = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 0, 8)
+    # the take is the top layer; everything below it is muted
     check("replace mode mutes the covered layers",
-          pr is not None and pr["gains"][0] == 0 and pr["gains"][-1] > 0,
-          f"gains={pr['gains'] if pr else '?'}")
+          pr is not None and pr["gains"][0] == 0
+          and pr["gains"][pr["layers"] - 1] > 0,
+          f"layers={pr['layers'] if pr else '?'} gains={pr['gains'] if pr else '?'}")
     await c.act("undo", 0)
     await c.svc("probe", [0])
     pr = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 0, 8)
     check("undo restores the covered layers",
           pr is not None and pr["gains"][0] > 0, f"gains={pr['gains'] if pr else '?'}")
     await c.cfg("loop.overdubMode", 0)
+    await c.set("t0.input", 0)
+
+    # ---- #5: the layer model must not lose sound -------------------------
+    # Four sequences that used to break the promise that content, gain and the
+    # undo stack agree. Track 4 is kept out of every other check's way, and a
+    # take here starts and closes only when we say so (autoClose/autoDub off).
+    L = 4
+    testin = int(CFG.get("audio", {}).get("in", 2)) + 1   # the diagnostic bus
+    await c.set("g.autoClose", 0)
+    await c.set("g.autoDub", 0)
+    await c.set(f"t{L}.input", testin)
+    await c.set(f"t{L}.gateOn", 0)
+    await c.set(f"t{L}.hp", 20)
+    await c.set(f"t{L}.lp", 19000)
+    await asyncio.sleep(0.6)
+
+    async def take_dub(secs: float = 1.6, gate: int = 0) -> None:
+        """Open a take, let it run, close it, and wait for the layer count.
+
+        gate=1 closes the input gate above the tone's level, so the take writes
+        digital silence -- deterministic, and independent of the interface.
+        """
+        await c.set(f"t{L}.gateThr", 0.9 if gate else 0.02)
+        await c.set(f"t{L}.gateOn", gate)
+        await asyncio.sleep(0.3)
+        await c.act("dub", L)
+        await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 1, 8)
+        await asyncio.sleep(secs)
+        await c.act("dub", L)
+        await asyncio.sleep(1.2)
+
+    async def probe_l() -> dict | None:
+        await c.svc("probe", [L])
+        return await c.wait(lambda m: m.get("t") == "probe" and m["track"] == L, 10)
+
+    async def clear_l() -> None:
+        await c.act("clear", L)
+        await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["layers"] == 0, 8)
+
+    # a take that recorded nothing must not mute what is underneath it. This is
+    # the reported "sounds get deleted when a silent part overdubs": REPLACE
+    # committed the empty take and silenced the whole track.
+    await clear_l()
+    await c.svc("testTone", [220, 0.25, 120])
+    await take_dub()
+    await c.cfg("loop.overdubMode", 1)
+    await asyncio.sleep(0.6)
+    await take_dub(gate=1)          # gate thresh 0.02 vs a 0.25 tone: silence
+    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["layers"] == 1, 8)
+    pr = await probe_l()
+    check("a silent take under REPLACE is dropped, not committed",
+          st is not None and pr is not None and pr["gains"][0] > 0,
+          f"layers={pr['layers'] if pr else '?'} gains={pr['gains'] if pr else '?'}")
+    await c.cfg("loop.overdubMode", 0)
+
+    # undo to empty must leave the track STOPPED, or the next tap on the pad
+    # stops a track that is not playing instead of recording into it
+    await c.act("undo", L)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["layers"] == 0, 8)
+    await c.act("press", L)
+    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 1, 8)
+    check("after undo to empty, the pad records again", st is not None)
+    await asyncio.sleep(1.2)
+    await c.act("press", L)
+    st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["layers"] == 1, 8)
+    check("that take closes as one layer", st is not None)
+
+    # erasing a layer invalidates the redo above it: a redo must never restore a
+    # gain for a buffer the new take just zeroed
+    await c.act("undo", L)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["layers"] == 0, 8)
+    await take_dub()
+    await c.act("redo", L)
+    await asyncio.sleep(0.8)
+    pr = await probe_l()
+    check("redo cannot resurrect a take a new recording erased",
+          pr is not None and pr["layers"] == 1 and pr["gains"][0] > 0,
+          f"layers={pr['layers'] if pr else '?'} gains={pr['gains'] if pr else '?'}")
+
+    # and it must not promote a layer while the write head is on it
+    await c.act("undo", L)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["layers"] == 0, 8)
+    await c.act("dub", L)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 1, 8)
+    await c.act("redo", L)
+    await asyncio.sleep(0.8)
+    mid = c.track(L)["layers"]
+    await c.act("dub", L)
+    await asyncio.sleep(1.4)
+    check("redo is refused while a take is open", mid == 0, f"layers={mid}")
+
+    # dub decay belongs to the track being dubbed over, not to the instrument:
+    # a stopped loop must not fade because another track is playing. The playing
+    # track is the positive control -- without it a silent engine would pass.
+    await c.act("stop", L)
+    await asyncio.sleep(0.3)
+    st0 = c.track(0)["state"]
+    if st0 != 2:
+        await c.act("press", 0)
+        await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 2, 8)
+    await c.svc("probe", [0])
+    t0_before = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 0, 8)
+    await c.svc("probe", [L])
+    still_before = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == L, 8)
+    await c.set("g.dubDecay", 0.3)
+    await asyncio.sleep(5.0)          # ~2-3 wraps at 1 bar / 120 bpm
+    await c.svc("probe", [0])
+    t0_after = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 0, 8)
+    await c.svc("probe", [L])
+    still_after = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == L, 8)
+    await c.set("g.dubDecay", 0)
+    decayed = (t0_before is not None and t0_after is not None
+               and t0_after["gains"][0] < t0_before["gains"][0] - 0.01)
+    kept = (still_before is not None and still_after is not None
+            and abs(still_after["gains"][0] - still_before["gains"][0]) < 0.001)
+    check("dub decay is per track (playing fades, stopped does not)",
+          decayed and kept,
+          f"playing {t0_before['gains'][0]:.2f}->{t0_after['gains'][0]:.2f}, "
+          f"stopped {still_before['gains'][0]:.2f}->{still_after['gains'][0]:.2f}"
+          if (t0_before and t0_after and still_before and still_after) else "no probe")
+    await c.set("g.autoClose", 1)
+    await c.set("g.autoDub", 1)
+    await c.act("clear", L)
 
     await c.act("stop", 0)
     st = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][0]["state"] == 3, 8)

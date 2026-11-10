@@ -8,6 +8,24 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ### Fixed
 
+- **The layer model no longer loses sound (#5).** Four ways it could, all fixed:
+  REPLACE mode committed a take that recorded nothing and so muted the whole
+  track (the reported "sounds get deleted when a silent part overdubs" — such a
+  take is now dropped and the muted layers come back); `undo` to zero layers left
+  the track "playing", so the next pad tap stopped it instead of recording;
+  `redo` could promote a layer while a take was still being written into it, and
+  could restore a gain for a buffer a new recording had already zeroed; and dub
+  decay walked every track, fading loops nothing was dubbing over. The undo stack
+  is now a property of the buffers: recording clears it, redo refuses while a
+  take is open, dub decay is per track and skips the recording layer. REPLACE
+  also shows a badge on every track header, because a mode that can silence a
+  track should not be a drawer-only secret.
+- **`&&` guards in the engine did nothing, and two threads died for it.** `a && b`
+  evaluates `b` in sclang even when `a` is false, so
+  `x.notNil && (Main.elapsedTime - x)` subtracted from nil: the clock-poll routine
+  threw on its first tick and stopped, and a double tap on a MIDI pedal threw in
+  the note-off handler. Both now use the lazy form (`&& { … }`) or nested `if`s,
+  and the engine log has no `ERROR` line at boot.
 - **The bar ruler is painted above the playhead again, not behind it.** The beat
   and bar marks are children of the playhead bar, and among positioned siblings
   with `z-index: auto` the later one wins — so the accent fill covered every mark

@@ -51,6 +51,7 @@ SynthDefs): `\ld_meter` writes `BufWr.kr` into a 64-frame buffer, sclang sends
 | `/ldmidimap` | `csv` | `type\|num\|target` entries split by `;` |
 | `/ldmidi` | `what, num, target` | `learned` |
 | `/ldauto` | `track` | threshold recorder fired |
+| `/ldsilent` | `track, layer` | a take recorded nothing: it was dropped instead of muting the track (REPLACE mode) |
 | `/ldtap` | `bpm, taps` | result of a tap-tempo measurement |
 | `/ldsaved` | `tag, layers, dir` | tag < 0 is the autosave |
 | `/ldloaded` | `tag, layers, dir` | |

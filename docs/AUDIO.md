@@ -238,3 +238,26 @@ A track is a stack of layers, not one overdub buffer:
 At most `maxLayers` (1–4) layers per track, which is also the undo depth. Layers
 are why undo costs nothing and why there is no buffer arithmetic anywhere in the
 engine.
+
+**Content, gain and the undo stack have to agree.** A layer's buffer, its gain
+and the counters `layerCount`/`undone` are three views of one fact, and a bug in
+any one of them shows up as "the looper ate my take". The rules the engine keeps:
+
+- `~startRec` zeroes the buffer it is about to write, so it **clears `undone`** —
+  a redo above the write head points at content that no longer exists.
+- `~redo` refuses while a take is open, and refuses to restore a gain for a
+  buffer that is not there.
+- `~undo` down to zero layers also sets `playing = 0`. An "empty" track that is
+  still playing makes the next pad tap stop instead of record.
+- REPLACE mode mutes the layers a take covers, but **a take that recorded
+  nothing is dropped instead**: the buffer is read back in 48 000-frame chunks
+  and, below −40 dBFS (0.01 peak), the layer comes off the stack and the gains
+  the mute just removed are restored. Nothing was gained, so nothing is lost.
+- Dub decay is **per track and only while it is playing**, and never touches the
+  layer the write head is on. The instrument does not fade a loop the player is
+  not touching.
+
+The read-back walks the whole layer buffer rather than its first second: a take
+starts wherever the play head is, so the content is not necessarily at index 0
+(which is also why `probe`'s `peak0..peak3`, reading 48 000 frames, can report 0
+for a take that is perfectly audible — it is a diagnostic window, not a verdict).

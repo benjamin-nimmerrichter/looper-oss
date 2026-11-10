@@ -741,6 +741,11 @@ if (~hasVST) {
 				t[\synth].set(\contentLen, t[\contentLen]);
 			};
 			buf.zero;
+			// Erasing this layer invalidates every redo above it: the content those
+			// layers pointed at is gone, so a later REDO would restore a gain for an
+			// empty buffer and the track would look like it lost a take. The undo
+			// stack is a property of the buffers, not a counter.
+			t[\undone] = 0;
 			// The layer being recorded must NOT be played back: wpos is derived from
 			// rpos, so the play head reads the very sample the write head is writing
 			// in the same block, and UGen order inside a synth is unspecified --
@@ -778,6 +783,13 @@ if (~hasVST) {
 				~maxLayers.do { |k|
 					if (k < li) { t[\gains][k] = 0; t[\synth].set(~gainKeys[k], 0) };
 				};
+				// ... but a take that recorded NOTHING must not silence the track.
+				// That is the reported "sounds get deleted when a silent part
+				// overdubs": nothing was gained and everything below was muted.
+				// The buffer is already written, so ask it, then put the track back
+				// and drop the empty layer. Guarded by the layer count, so a take
+				// started in the meantime is never touched.
+				if (li > 0) { ~dropIfSilent.value(t, li) };
 			};
 			t[\state] = 2;
 		};
@@ -788,6 +800,51 @@ if (~hasVST) {
 	// redo still walks it back.
 	// MARK BACK bookmarks the current layer count; the layers above the
 	// mark are gated but kept, so redo still walks them back.
+	// A take that recorded nothing is not a layer. Walk the whole layer buffer
+	// (a take starts wherever the play head is, so the content can be anywhere),
+	// and if it holds nothing above -40 dBFS, restore the gains REPLACE muted and
+	// take the layer off the stack again.
+	//
+	// One buffer read at a time, not one huge one: a 16 s buffer is 768k floats,
+	// and streamToFloatArray starts dropping chunks at that size.
+	~dropIfSilent = { |t, li|
+		var buf = t[\bufs][li];
+		var total = t[\contentLen].asInteger.max(1);
+		var chunks = (total / 48000).ceil.asInteger.max(1);
+		var step = (total / chunks).asInteger.max(1);
+		var i = 0, peak = 0, stepFn;
+		if (buf.notNil) {
+			stepFn = {
+				if (i >= chunks) {
+					// only if nothing moved on: same layer count, no take open
+					if ((t[\layerCount] == (li + 1)) && (t[\recOn] == 0)
+						&& (peak < 0.01)) {
+						t[\layerCount] = li;
+						t[\gains][li] = 0;
+						t[\synth].set(~gainKeys[li], 0);
+						~maxLayers.do { |k|
+							if (k < li) {
+								t[\gains][k] = 1;
+								t[\synth].set(~gainKeys[k], 1);
+							};
+						};
+						t[\state] = if (li > 0, 2, 0);
+						~bridge.sendMsg('/ldsilent', t[\idx] ? 0, li);
+					};
+				} {
+					var at = i * step;
+					var n = (total - at).min(step);
+					i = i + 1;
+					buf.getToFloatArray(at, n, 0, 3, { |data|
+						if (data.size > 0) { peak = peak.max(data.abs.maxItem) };
+						stepFn.value;
+					});
+				};
+			};
+			fork { stepFn.value };
+		};
+	};
+
 	~setMark = { |t| t[\mark] = t[\layerCount].max(1) };
 
 	// step-sequence pattern: eight values 0..1, written as one setn
@@ -872,11 +929,19 @@ if (~hasVST) {
 						if (k < li) { t[\gains][k] = 1; t[\synth].set(~gainKeys[k], 1) };
 					};
 					t[\state] = if (li > 0, 2, 0);
+					// An empty stack is a stopped track. Leaving `playing` on made the
+					// next press STOP instead of record, while the state said "empty".
+					if (li == 0) {
+						t[\playing] = 0;
+						t[\synth].set(\playing, 0);
+					};
 		};
 	};
 
 	~redo = { |t|
-		if ((t[\layerCount] < ~maxLayers) && (t[\undone] > 0)) {
+		// Never while a take is open: the write head is on layer `layerCount`,
+		// so promoting it would commit the take into the wrong buffer.
+		if ((t[\recOn] == 0) && (t[\layerCount] < ~maxLayers) && (t[\undone] > 0)) {
 			var li = t[\layerCount];
 			t[\gains][li] = 1;
 			t[\synth].set(~gainKeys[li], 1);
@@ -941,15 +1006,21 @@ if (~hasVST) {
 		};
 	};
 
-	// dub mode: every layer loses dubDecay of its gain per loop pass
+	// dub mode: the material being dubbed over loses dubDecay of its gain per
+	// loop pass. Per TRACK, and only while that track is playing: this used to
+	// walk every track and every layer, so a loop the player was not touching
+	// faded on its own, and the layer being recorded faded as it was built.
 	~dubPass = {
 		if (~state[\dubDecay] > 0.001) {
 			var f = 1 - ~state[\dubDecay].clip(0, 0.95);
 			~tracks.do { |t|
-				~maxLayers.do { |li|
-					if (t[\gains][li] > 0.0005) {
-						t[\gains][li] = t[\gains][li] * f;
-						t[\synth].set(~gainKeys[li], t[\gains][li]);
+				if ((t[\playing] == 1) && (t[\layerCount] > 0)) {
+					~maxLayers.do { |li|
+						// never the layer the write head is on
+						if ((li < t[\layerCount]) && (t[\gains][li] > 0.0005)) {
+							t[\gains][li] = t[\gains][li] * f;
+							t[\synth].set(~gainKeys[li], t[\gains][li]);
+						};
 					};
 				};
 			};
@@ -1252,7 +1323,10 @@ if (~hasVST) {
 		} {
 			Buffer.readChannel(s, path, 0, 0, -1, { |src|
 				var n = 0;
-				if (src.notNil && (src.numFrames > 0)) {
+				// `&&` is eager in sclang, and `nil > 0` throws: a failed read used
+				// to kill the action instead of reporting "import failed". A block on
+				// the right side is the lazy form (AGENTS invariant 28).
+				if (src.notNil && { src.numFrames > 0 }) {
 					n = src.numFrames.min(t[\contentLen]).asInteger;
 					~maxLayers.do { |li|
 						t[\synth].set(("w" ++ li).asSymbol, 0, ~gainKeys[li], 0);
@@ -1473,7 +1547,10 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 				var now = Main.elapsedTime;
 				var downAt = ~noteAt[num];
 				if (~learnTarget.notNil) { ~learnNum = num };
-				if (downAt.notNil && ((now - downAt) < 0.30)) {
+				// `&&` is eager in sclang (AGENTS invariant 28): a double tap clears
+				// ~noteAt[num], so the noteOff that follows subtracted from nil and
+				// killed the MIDI responder thread for the rest of the run.
+				if (downAt.notNil && { (now - downAt) < 0.30 }) {
 					// second tap within 300 ms: double
 					~noteAt[num] = nil;
 					~noteHold[num] !? { |r| r.stop };
@@ -1502,7 +1579,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 				~noteAt[num] = nil;
 				~noteHold[num] !? { |r| r.stop };
 				~noteHold[num] = nil;
-				if (downAt.notNil && ((Main.elapsedTime - downAt) < 0.30)) {
+				if (downAt.notNil && { (Main.elapsedTime - downAt) < 0.30 }) {
 					if (~learnGesture.value(num, "press").not) {
 						~fireGesture.value(num, "press", 1);
 					};
@@ -1723,7 +1800,10 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			// Never have more than one poll outstanding: on Windows a round trip
 			// takes longer than the interval, and the queued replies starved
 			// sclang -- the playhead then crawls while everything looks idle.
-			if (~clockPollSent.notNil && (Main.elapsedTime - ~clockPollSent) > 0.5) {
+			// Lazy form: `x.notNil && expr` is EAGER in sclang, so on the first
+			// tick this subtracted from nil and killed the routine -- the clock
+			// fallback died silently at every boot (AGENTS invariant 28).
+			if (~clockPollSent.notNil && { (Main.elapsedTime - ~clockPollSent) > 0.5 }) {
 				~clockPollBusy = false;      // a dropped reply must not freeze the clock
 			};
 			if (~clockBuf.notNil && (~clockPollBusy != true)) {

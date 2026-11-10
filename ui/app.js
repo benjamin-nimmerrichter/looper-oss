@@ -172,6 +172,10 @@ function handle(m) {
     case "auto":
       toast(`track ${m.i + 1}: threshold reached`);
       break;
+    case "silent":
+      // a take recorded nothing: it was dropped instead of muting the track
+      toast(`track ${m.track + 1}: nothing recorded, take dropped`);
+      break;
     case "saved":
       // slot < 0 is the autosave: silent
       if (m.slot >= 0) toast(`saved slot ${m.slot} (${m.layers} layers)`);
@@ -463,6 +467,13 @@ function buildTracks(n) {
     // which input this track records, visible without opening anything
     const insrc = el("span", "insrc", inputTag(0));
     name.append(layers, insrc);
+    // REPLACE mode silences everything below every new take, so it must be
+    // visible on the track itself, not only in a settings drawer.
+    const replace = el("span", "replace", "REPLACE");
+    replace.title = "overdub mode: a new take mutes the layers below it";
+    name.append(replace);
+    ui.replaceBadges = ui.replaceBadges || [];
+    ui.replaceBadges[i] = replace;
 
     const pad = Pad({
       label: "EMPTY",
@@ -1351,6 +1362,10 @@ function onState(s) {
     u.layers.textContent = `${t.layers}L${marks}${hot}`;
     const tag = inputTag(t.input);
     if (u.insrc.textContent !== tag) u.insrc.textContent = tag;
+    // REPLACE is a global mode, but its effect is per track: show it where the
+    // player is looking, not only in the settings drawer.
+    const rep = ui.replaceBadges?.[i];
+    if (rep) rep.classList.toggle("on", Number(CFG.loop?.overdubMode ?? 0) === 1);
     if (!u.vol.classList.contains("active")) u.vol.setValue(t.vol);
     u.meter.set(t.meter);
     u.col.classList.toggle("selected", i === selected);
