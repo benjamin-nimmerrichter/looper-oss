@@ -26,9 +26,9 @@ multiply, reverse, rate, undo/redo), **LoopMix** (5 ms seam crossfade),
 | fade in / fade out per track | ✅ | — | ✅ |
 | seam fade (click-free wrap) | ✅ | ✅ | ✅ configurable 0.1–50 ms |
 | varispeed on tempo change | ✅ SPEED CHANGE | ✅ rate | ✅ free (contentLen) |
-| per-layer volume / mute / delete | — | — | ⬜ (P-later, UI only) |
-| track copy / swap / duplicate | ✅ | — | ⬜ |
-| "once" / one-shot playback | ✅ | ✅ | ⬜ |
+| per-layer volume / mute / delete | — | — | ✅ mute per layer (the layer gains are the mixer) |
+| track copy / swap / duplicate | ✅ | — | ✅ `svc copyTrack` / `svc swapTracks` |
+| "once" / one-shot playback | ✅ | ✅ | ✅ per track (`t{i}.oneshot`) |
 | loop length display + playhead | ✅ | ✅ | ✅ bar playhead |
 
 ## 2. Input
@@ -39,9 +39,9 @@ multiply, reverse, rate, undo/redo), **LoopMix** (5 ms seam crossfade),
 | input gain | ✅ |
 | noise gate (threshold, smoothed) | ✅ |
 | high pass / low pass | ✅ |
-| input compressor | ⬜ |
+| input compressor | ✅ per track, before the write head |
 | input FX block separate from track FX (RC-505 split) | ✅ |
-| threshold auto-record (start on first note) | ✅ (arm per track) |
+| threshold auto-record (start on first note) | ✅ per track (`t{i}.autoArm`, arm from the fx drawer or a pedal) |
 | record level per track + soft clip | ✅ + HOT indicator |
 | latency / record offset compensation | ✅ report + ±8192 smp |
 | input metering (peak + layer peak) | ✅ |
@@ -54,8 +54,8 @@ multiply, reverse, rate, undo/redo), **LoopMix** (5 ms seam crossfade),
 | shared reverb bus with per-track send | ✅ FreeVerb2 |
 | reverb size/damp control | ✅ (size knob) |
 | master limiter | ✅ Compander + clip2(0.98) |
-| master FX insert (filter) | ✅ HP/LP |
-| VST3/VST2 insert chain per track | ✅ 3 slots, bypass, editor |
+| master FX | ✅ static HP/LP, a bipolar DJ filter with resonance, two live FX slots |
+| VST3/VST2 insert chain per track | ✅ 4 slots, bypass, editor |
 | LV2 plugins (Linux, via Carla) | ⬜ |
 | per-track EQ / comp as stock UGens | ⬜ |
 | effects presets / bypass all | ⬜ |
@@ -71,7 +71,7 @@ multiply, reverse, rate, undo/redo), **LoopMix** (5 ms seam crossfade),
 | grid follows tempo | ✅ varispeed |
 | rhythm guide / drum patterns | ✅ 16 synthesised kits, 200 patterns (generated, no samples) |
 | external MIDI clock in/out | ⬜ |
-| Ableton Link (SC Link quark) | ⬜ |
+| Ableton Link | ✅ `engine/link.scd`, tempo and phase (phase within one beat) |
 | JACK transport sync | ⬜ |
 
 ## 5. Memory & files
@@ -83,7 +83,7 @@ multiply, reverse, rate, undo/redo), **LoopMix** (5 ms seam crossfade),
 | autosave + crash recovery | ✅ |
 | export mixdown to WAV | ✅ |
 | session capture (record everything you play) | ⬜ |
-| import a WAV as a layer | ⬜ |
+| import a WAV as a layer | ✅ |
 
 ## 6. Control
 
@@ -108,7 +108,7 @@ multiply, reverse, rate, undo/redo), **LoopMix** (5 ms seam crossfade),
 | long-press guard on destructive actions | ✅ |
 | websocket reconnect without reload | ✅ |
 | logging + graceful failure messages | ✅ rotated logs, sweep |
-| Windows build | ⛔ **recipe only** (PyInstaller + Inno Setup) — never built, installed or run on Windows; full support is 0.3.0 |
+| Windows build | ✅ 0.3.0 ships PyInstaller + Inno Setup, verified on real Windows 10 |
 | kiosk autostart (systemd user unit / .desktop) | ⬜ |
 | theming / colour-blind safe palette | ⬜ |
 | localisation (CZ/EN) | ⬜ |

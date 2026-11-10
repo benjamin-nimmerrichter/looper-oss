@@ -621,6 +621,32 @@ function openFx(i) {
   body.replaceChildren();
   const t = S ? S.tracks[i] : null;
 
+  // #3: the per-layer mixer, one-shot and Auto Rec. These live on the track
+  // itself, because they are about the material, not about an effect.
+  const layersCard = el("div", "fxcard");
+  const lh = el("div", "head");
+  lh.append(el("div", "caption", "layers"));
+  layersCard.append(lh);
+  const nLayers = t ? t.layers : 0;
+  const rowMute = el("div", "row2");
+  for (let k = 0; k < 4; k++) {
+    const b = Button({ label: `L${k + 1}`, cls: "tiny", toggle: true });
+    if (k >= nLayers) b.classList.add("off");
+    b.addEventListener("pointerup", () => set(`t${i}.lmute`, k));
+    rowMute.append(b);
+  }
+  layersCard.append(settingsRow("mute", rowMute, "tap a layer to mute or unmute it"));
+  const rowFlags = el("div", "row2");
+  const autoB = Button({ label: "auto rec", cls: "tiny", toggle: true });
+  if (Number(getPath(CFG, `t${i}.autoArm`) ?? 0)) autoB.classList.add("on");
+  autoB.addEventListener("pointerup", () => set(`t${i}.autoArm`, autoB.classList.contains("on") ? 0 : 1));
+  const onceB = Button({ label: "one-shot", cls: "tiny", toggle: true });
+  onceB.addEventListener("pointerup", () => set(`t${i}.oneshot`, onceB.classList.contains("on") ? 0 : 1));
+  rowFlags.append(autoB, onceB);
+  layersCard.append(settingsRow("play", rowFlags,
+    "auto rec starts on the first note; one-shot plays one pass and stops"));
+  body.append(layersCard);
+
   const card = (heading) => {
     const c = el("div", "fxcard");
     const h = el("div", "head");

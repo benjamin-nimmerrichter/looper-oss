@@ -84,6 +84,7 @@ CFG_TO_ENGINE = {
     "rhythm.on": "rhythmOn",
     "rhythm.kit": "rhythmKit",
     "rhythm.pattern": "rhythmPattern",
+    "rhythm.cue": "rhythmCue",
     "loop.autosave": "autosave",
     "loop.revMix": "revMix",
     "loop.room": "room",
@@ -627,6 +628,12 @@ def on_auto(_addr: str, *args: Any) -> None:
         push({"t": "auto", "i": inum(args[0])})
 
 
+def on_copied(_addr: str, *args: Any) -> None:
+    """TRACK COPY / SWAP finished."""
+    push({"t": "copied", "src": inum(args[0]) if args else 0,
+          "dst": inum(args[1]) if len(args) > 1 else 0})
+
+
 def on_link(_addr: str, *args: Any) -> None:
     """Ableton Link status: peer count, tempo, on/off. Not per-frame state."""
     push({"t": "link", "peers": inum(args[0]) if args else 0,
@@ -1014,7 +1021,7 @@ async def main() -> None:
         ("/ldvstcatalog", on_vst_catalog), ("/ldmidimap", on_midi_map),
         ("/ldmidi", on_midi_event), ("/ldrhythm", on_rhythm), ("/ldvstbanks", on_vst_banks), ("/ldinputs", on_inputs), ("/ldimport", on_import), ("/ldmididevs", on_midi_devices),
         ("/ldauto", on_auto), ("/ldsilent", on_silent), ("/ldmerged", on_merged),
-        ("/lddiag", on_diag), ("/ldlink", on_link), ("/ldready", on_ready), ("/ldbootfail", on_boot_fail), ("/ldprobe", on_probe), ("/ldtap", on_tap),
+        ("/lddiag", on_diag), ("/ldlink", on_link), ("/ldcopied", on_copied), ("/ldready", on_ready), ("/ldbootfail", on_boot_fail), ("/ldprobe", on_probe), ("/ldtap", on_tap),
         ("/ldsaved", on_saved), ("/ldloaded", on_loaded), ("/ldloaderr", on_loaderr),
         ("/ldcapturing", on_capturing), ("/ldexported", on_exported),
     ):

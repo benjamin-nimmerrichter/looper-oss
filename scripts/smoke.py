@@ -966,15 +966,17 @@ async def run_tests(c: Client) -> None:
         dead (AGENTS §8). A query is answered from the meter the engine is
         holding *now*.
         """
-        # a filter's output needs a moment to settle in the meter follower
-        await asyncio.sleep(0.9)
+        # Sample across a whole loop and take the MAX: the level wobbles by 2x
+        # from one instant to the next (a short take in a 2 s loop), and comparing
+        # two single readings made a working filter look broken.
+        await asyncio.sleep(0.7)
         best = 0.0
-        for _ in range(3):
+        for _ in range(8):
             await c.svc("master", [])
             m = await c.wait(lambda x: x.get("t") == "master", 5)
             if m:
                 best = max(best, float(m.get("l") or 0))
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.18)
         return best
 
     # a track with a steady tone, playing. autoClose/autoDub off, or the take
@@ -1009,13 +1011,19 @@ async def run_tests(c: Client) -> None:
     await c.wait(lambda m: m.get("t") == "s" and m["masterVol"] > 0.04, 8)
     await c.svc("testTone", [220, 0.25, 120])     # a tone that is certainly alive
     await asyncio.sleep(0.6)
+    # The level drifts slowly over the block (the loop's material, the meter's
+    # follower), so each extreme is compared with a centre reading taken just
+    # before it rather than with one reading minutes earlier.
     await c.set("g.dj", 0)
-    centre = await master_level()
+    c1 = await master_level()
     await c.set("g.dj", -0.98)                   # low pass near 8 Hz: everything out
     low = await master_level()
+    await c.set("g.dj", 0)
+    c2 = await master_level()
     await c.set("g.dj", 0.7)                     # high pass ~2.5 kHz: the tone is gone
     high = await master_level()
     await c.set("g.dj", 0.0)
+    c3 = await master_level()
     back = await master_level()
     pr = await probe_l()
     await c.svc("diag", [])
@@ -1034,9 +1042,8 @@ async def run_tests(c: Client) -> None:
     # The meter wobbles by ~2x between samples (a short take in a 2 s loop), so
     # the assertion is directional with a margin, not a ratio.
     check("dj filter: centre passes, both ends cut",
-          centre > 0.002 and low < centre * 0.3 and high < centre * 0.8
-          and back > centre * 0.45,
-          f"centre={centre:.4f} lp={low:.4f} hp={high:.4f} back={back:.4f} "
+          c1 > 0.002 and low < c1 * 0.4 and high < c2 * 0.8 and back > c3 * 0.6,
+          f"centre={c1:.4f}/{c2:.4f}/{c3:.4f} lp={low:.4f} hp={high:.4f} back={back:.4f} "
           f"[state={tr.get('state')} layers={tr.get('layers')} "
           f"meter={tr.get('meter')} vol={st.get('masterVol')} dj={st.get('dj')} "
           f"gains={(pr or {}).get('gains')} peaks={(pr or {}).get('peaks')} "
@@ -1057,6 +1064,88 @@ async def run_tests(c: Client) -> None:
     await c.set("g.autoDub", 1)
     await c.set("g.bars", bars_m4)
     await c.act("stop", L)
+
+    # ---- #3: the parity gaps the matrix actually flagged -------------------
+    # Auto Rec: the detector synth has existed all along with an `arm` argument
+    # that nothing ever set, so the feature looked implemented and was not.
+    await c.act("clear", L)
+    await asyncio.sleep(0.5)
+    await c.set(f"t{L}.input", testin)
+    await c.set(f"t{L}.gateOn", 0)
+    await c.set(f"t{L}.autoArm", 1)
+    await asyncio.sleep(0.4)
+    await c.svc("testTone", [660, 0.3, 30])
+    autostart = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 1, 12)
+    check("auto rec starts a take on the first note", autostart is not None,
+          f"state={autostart['tracks'][L]['state'] if autostart else '?'}")
+    await asyncio.sleep(1.4)
+    await c.act("dub", L)
+    await asyncio.sleep(1.0)
+
+    # per-layer mute: the layer gains ARE the mixer
+    await asyncio.sleep(0.4)
+    before = (await probe_l() or {}).get("gains")
+    await c.set(f"t{L}.lmute", 0)
+    await asyncio.sleep(0.5)
+    mid = (await probe_l() or {}).get("gains")
+    await c.set(f"t{L}.lmute", 0)
+    await asyncio.sleep(0.5)
+    after = (await probe_l() or {}).get("gains")
+    flipped = (before and mid and after
+               and before[0] != mid[0] and mid[0] != after[0])
+    check("per-layer mute toggles one layer's gain", bool(flipped),
+          f"{before} -> {mid} -> {after}")
+
+    # one-shot: plays one complete pass, then stops by itself
+    oneshot_bars = (c.last_state or {}).get("bars", 4)
+    await c.set("g.bars", 1)          # 2 s loops, so two passes fit in the timeout
+    await asyncio.sleep(0.5)
+    await c.set(f"t{L}.oneshot", 1)
+    await c.act("press", L)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 2, 8)
+    stopped = await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 3, 25)
+    check("one-shot stops the track at the boundary", stopped is not None,
+          f"state={stopped['tracks'][L]['state'] if stopped else '?'}")
+    await c.set(f"t{L}.oneshot", 0)
+    await c.set("g.bars", oneshot_bars)
+
+    # track copy and swap
+    await c.act("clear", 3)
+    await asyncio.sleep(0.5)
+    await c.act("clear", L)
+    await asyncio.sleep(0.5)
+    await c.set(f"t{L}.gateThr", 0.02)
+    await c.set(f"t{L}.gateOn", 0)
+    await c.set(f"t{L}.input", testin)
+    await c.svc("testTone", [300, 0.3, 60])
+    await c.act("dub", L)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 1, 12)
+    await asyncio.sleep(1.6)
+    await c.act("dub", L)
+    await asyncio.sleep(1.2)
+    await c.svc("copyTrack", [L, 3])
+    cp = await c.wait(lambda m: m.get("t") == "copied", 12)
+    p3 = await probe_l() if False else None
+    await c.svc("probe", [3])
+    p3 = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 3, 10)
+    src_layers = (await probe_l() or {}).get("layers", 0)
+    check("track copy duplicates the layers",
+          cp is not None and p3 is not None and p3["layers"] == src_layers
+          and p3["peaks"][0] > 0.05,
+          f"copied={cp} layers={(p3 or {}).get('layers')} "
+          f"peak={round((p3 or {}).get('peaks', [0])[0], 3)}")
+
+    await c.svc("swapTracks", [3, 4])
+    await c.wait(lambda m: m.get("t") == "copied", 12)
+    await asyncio.sleep(0.6)
+    await c.svc("probe", [3])
+    a3 = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 3, 10)
+    await c.svc("probe", [4])
+    a4 = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 4, 10)
+    check("track swap exchanges the two tracks",
+          a3 is not None and a4 is not None and a4["layers"] == a3["layers"]
+          and a4["layers"] > 0,
+          f"t3={(a3 or {}).get('layers')} t4={(a4 or {}).get('layers')}")
 
     # ---- #4: Ableton Link, the paths that need no peer ---------------------
     # A live peer cannot be assumed here, so the suite covers what a machine

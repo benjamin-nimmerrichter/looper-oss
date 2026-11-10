@@ -203,7 +203,8 @@
   "rhythm": {
     "on": 0,
     "kit": 0,
-    "pattern": 0
+    "pattern": 0,
+    "cue": 0
   },
   "master": {
     "djRes": 0.35,

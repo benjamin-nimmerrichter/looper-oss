@@ -142,6 +142,7 @@ s.latency = 0.02;
 	// rhythm engine: 16 synthesised kits, 200 patterns generated from rows
 	// a stale generated _config.scd may not have this section at all
 	rhythmOn: ((~cfg[\rhythm] ? ())[\on] ? 0).asInteger,
+	rhythmCue: ((~cfg[\rhythm] ? ())[\cue] ? 0).asFloat,
 	rhythmKit: ((~cfg[\rhythm] ? ())[\kit] ? 0).asInteger,
 	rhythmPattern: ((~cfg[\rhythm] ? ())[\pattern] ? 0).asInteger,
 	// 0 = hear only the loop: most interfaces monitor directly, and mixing our
@@ -382,8 +383,13 @@ if (~hasLink) {
 	}).add;
 
 	// threshold recorder trigger (its own tiny def, like the meters)
-	SynthDef(\ld_autodetect, { |idx = 0, arm = 0, thresh = 0.02, input = 0, gain = 1|
-		var raw = Select.ar(K2A.ar(input), ~inputChannels.value) * gain;
+	SynthDef(\ld_autodetect, { |idx = 0, arm = 0, thresh = 0.02, input = 0, gain = 1,
+			testBus = 0|
+		// the same source list the recorder uses, test bus included -- without it
+		// the detector could never hear what a take would have recorded, which is
+		// why Auto Rec was untestable as well as unreachable
+		var raw = Select.ar(K2A.ar(input),
+			~inputChannels.value ++ [In.ar(testBus, 1)]) * gain;
 		var env = Amplitude.kr(raw, 0.002, 0.05);
 		var trig = Trig1.kr((env > thresh) * LagUD.kr(arm, 0.001, 0.001), 0.02);
 		SendReply.kr(trig, '/ldauto', [idx]);
@@ -505,7 +511,7 @@ if (~hasLink) {
 	// snare, hat, perc. No samples -- a shipped drum kit would drag a licence
 	// along, and every voice here is a stock UGen. The pattern lives in a
 	// 64-frame buffer (4 voices x 16 steps), so changing it is one buffer write.
-	SynthDef(\ld_rhythm, { |outBus = 0, patBuf = 0, amp = 0.0, bpm = 120,
+	SynthDef(\ld_rhythm, { |outBus = 0, cueBus = 0, cueOn = 0, patBuf = 0, amp = 0.0, bpm = 120,
 			kickHz = 55, kickDecay = 0.22, snareHz = 180, hatDecay = 0.05, drive = 0|
 		var stepRate = (bpm / 60) * 4;
 		var imp  = Impulse.kr(stepRate);
@@ -521,6 +527,9 @@ if (~hasLink) {
 		var sig = (kick * 0.9) + (snare * 0.6) + (hat * 0.32) + (perc * 0.4);
 		sig = (sig * (1 + drive)).tanh;
 		Out.ar(outBus, sig * amp);
+		// cue: the drums can be monitored without being in the main mix (#3).
+		// Bus C's last pair, so it does not take a track's slot.
+		Out.ar(cueBus, sig * amp * LagUD.kr(cueOn, 0.02, 0.05));
 	}).add;
 
 	// ---- input mixer --------------------------------------------------------
@@ -618,8 +627,9 @@ if (~hasLink) {
 			[\bus, ~busFor.value(t[\route]) + (i * 2), \idx, i, \meterBuf, ~meterBuf],
 			~grpTracks, \addToTail);
 		t[\autoSynth] = Synth(\ld_autodetect,
-			[\idx, i, \arm, 0, \thresh, t[\autoThresh], \input, t[\input],
-			 \gain, t[\gain]], ~grpTracks, \addToTail);
+			[\idx, i, \arm, t[\autoArm] ? 0, \thresh, t[\autoThresh],
+			 \input, t[\input], \gain, t[\gain], \testBus, ~testBus],
+			~grpTracks, \addToTail);
 		// the args above carry the static setup; live state is pushed back on top
 		~maxLayers.do { |k| t[\synth].set(~gainKeys[k], t[\gains][k]) };
 		t[\synth].set(\playing, t[\playing], \recOn, 0);
@@ -733,7 +743,8 @@ if (~hasLink) {
 
 	~rhythmSynth = Synth(\ld_rhythm, [
 		\outBus, ~rhythmBus, \patBuf, ~patternBuf.bufnum,
-		\amp, 0, \bpm, ~state[\bpm]
+		\amp, 0, \bpm, ~state[\bpm],
+		\cueBus, ~busC.index + 30, \cueOn, ~state[\rhythmCue] ? 0
 	], ~grpTracks, \addToTail);
 	~rhythmSet.value(~state[\rhythmOn], ~state[\rhythmKit], ~state[\rhythmPattern]);
 
@@ -760,7 +771,7 @@ if (~hasLink) {
 			layerCount: 0, undone: 0, passes: 0,
 			state: 0, playing: 0, recOn: 0,
 			vol: 0.8, pan: 0.0, muted: 0, input: 0, gain: 1.0, recGain: 1.0,
-			gateOn: 1, gateThr: 0.02, autoArm: 0, autoThresh: 0.02,
+			gateOn: 1, gateThr: 0.02, autoArm: 0, autoThresh: 0.02, oneshot: 0,
 			compOn: 0, compThr: 0.6, compRatio: 0.4,
 			hp: 40, lp: 16000,
 			delayOn: 0, delayBeats: 0.75, delayDecay: 0.4, delayMix: 0.25,
@@ -1110,6 +1121,56 @@ if (~hasLink) {
 		};
 	};
 
+	// TRACK COPY (#3): buffers and layer state, like the bounce, without the sum.
+	// Buffer:copyData(buf, dstStartAt, srcStartAt, numSamples) -- receiver is the
+	// source, and the arg order is not the obvious one (AGENTS invariant 6).
+	~copyTrack = { |src, dstIdx|
+		var s = ~tracks[src], d = ~tracks[dstIdx];
+		if ((s.notNil) && (d.notNil) && (s !== d) && (s[\layerCount] > 0)) {
+			var n = s[\contentLen].asInteger;
+			// stop both write-backs for the pass, or they clobber the copy
+			d[\synth].free; d[\meterSynth].free; d[\autoSynth].free;
+			s[\synth].free; s[\meterSynth].free; s[\autoSynth].free;
+			d[\bufs].do { |b, li| b.zero };
+			s[\bufs].do { |b, li|
+				if (li < s[\layerCount]) { b.copyData(d[\bufs][li], 0, 0, n) };
+			};
+			d[\layerCount] = s[\layerCount];
+			d[\undone] = 0;
+			d[\gains] = s[\gains].copy;
+			d[\contentLen] = s[\contentLen];
+			d[\playing] = s[\playing];
+			d[\recOn] = 0;
+			d[\state] = if (d[\layerCount] > 0, if (d[\playing] == 1, 2, 3), 0);
+			~makeTrackSynth.value(s, src);
+			~makeTrackSynth.value(d, dstIdx);
+			~bridge.sendMsg('/ldcopied', src, dstIdx);
+		};
+	};
+
+	// TRACK SWAP (#3): three copies through the spare buffer, state included.
+	~swapTracks = { |ia, ib|
+		var a = ~tracks[ia], b = ~tracks[ib];
+		if ((a.notNil) && (b.notNil) && (a !== b)) {
+			var n = a[\contentLen].min(b[\contentLen]).asInteger;
+			var la = a[\layerCount], lb = b[\layerCount];
+			var ga = a[\gains].copy, gb = b[\gains].copy;
+			var pa = a[\playing], pb = b[\playing];
+			a[\synth].free; a[\meterSynth].free; a[\autoSynth].free;
+			b[\synth].free; b[\meterSynth].free; b[\autoSynth].free;
+			a[\bufs].do { |buf, li| buf.copyData(~scratch, 0, 0, n) };      // a -> spare
+			b[\bufs].do { |buf, li| buf.copyData(a[\bufs][li], 0, 0, n) };  // b -> a
+			a[\bufs].do { |buf, li| ~scratch.copyData(buf, 0, 0, n) };      // spare -> b
+			a[\layerCount] = lb; b[\layerCount] = la;
+			a[\gains] = gb; b[\gains] = ga;
+			a[\playing] = pb; b[\playing] = pa;
+			a[\undone] = 0; b[\undone] = 0;
+			~makeTrackSynth.value(a, ia);
+			~makeTrackSynth.value(b, ib);
+			~bridge.sendMsg('/ldcopied', ia, ib);
+		};
+	};
+
 	// dub mode: the material being dubbed over loses dubDecay of its gain per
 	// loop pass. Per TRACK, and only while that track is playing: this used to
 	// walk every track and every layer, so a loop the player was not touching
@@ -1210,6 +1271,8 @@ if (~hasLink) {
 			"busB", { ~state[\busB] = v; ~busGains[1] = v; ~master !? { |m| m.set(\gB, v) } },
 			"busC", { ~state[\busC] = v; ~busGains[2] = v; ~master !? { |m| m.set(\gC, v) } },
 			"rhythmOn",      { ~rhythmSet.value(v, ~state[\rhythmKit], ~state[\rhythmPattern]) },
+			"rhythmCue",    { ~state[\rhythmCue] = v.clip(0, 1);
+				~rhythmSynth.set(\cueOn, ~state[\rhythmCue]) },
 			"rhythmKit",      { ~rhythmSet.value(~state[\rhythmOn], v, ~state[\rhythmPattern]) },
 			"rhythmPattern",  { ~rhythmSet.value(~state[\rhythmOn], ~state[\rhythmKit], v) },
 			"sel",         { ~state[\sel] = v.asInteger }
@@ -1218,7 +1281,31 @@ if (~hasLink) {
 
 	~setTrack = { |i, key, v|
 		var t = ~tracks[i];
+		var handled = false;
 		if (t.notNil) {
+			// #3: keys that need more than "push the arg at the track synth"
+			if (key == "autoArm") {
+				// the threshold recorder is its own small def, so the arm switch
+				// has to go to THAT synth, not the track synth -- nothing set it
+				// before, which is why Auto Rec looked implemented but was not
+				t[\autoArm] = v.asInteger.clip(0, 1);
+				if (t[\autoSynth].notNil) { t[\autoSynth].set(\arm, t[\autoArm]) };
+				handled = true;
+			};
+			if (key == "oneshot") {
+				t[\oneshot] = v.asInteger.clip(0, 1);
+				handled = true;
+			};
+			if (key == "lmute") {
+				// per-layer mute: the layer gains ARE the mixer, so this uses the
+				// same mechanism undo does instead of a second volume stage
+				var li = v.asInteger.clip(0, ~maxLayers - 1);
+				var on = if (t[\gains][li] > 0.0005, { 0 }, { 1 });
+				t[\gains][li] = on;
+				t[\synth].set(~gainKeys[li], on);
+				handled = true;
+			};
+			if (handled.not) {
 			if (key == "route") {
 				var base;
 				t[\route] = v.asInteger.clip(0, 2);
@@ -1240,6 +1327,7 @@ if (~hasLink) {
 				} {
 					~pushTrack.value(t, key, v);
 				};
+			};
 			};
 			};
 		};
@@ -1803,6 +1891,9 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			"diag",      { ~bridge.sendMsg('/lddiag', (~state[\gridOn] ? 1),
 				(~beatCount ? 0), (~clockPollMode == true).asInteger, ~pollBeats ? -1,
 				if (~hasLink && ~link.notNil, { (~link.tempo * 60) }, { -1 })) },
+			// #3: TRACK COPY / SWAP -- svc copyTrack src dst / svc swapTracks a b
+			"copyTrack", { ~copyTrack.value((msg[2] ? 0).asInteger, (msg[3] ? 1).asInteger) },
+			"swapTracks", { ~swapTracks.value((msg[2] ? 0).asInteger, (msg[3] ? 1).asInteger) },
 			// #6: MERGE TRACKS by selection -- svc mergeTracks dst src1 [src2 ...]
 			"mergeTracks", {
 				var dstIdx = (msg[2] ? 0).asInteger;
@@ -1878,12 +1969,15 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 	OSCdef(\ldBeat, { |msg|
 		if (~clockPollMode != true) {
 			~clockReplies = Main.elapsedTime;
-			~fireBeat.value((msg[4] ? 0).asInteger);
+			// SendReply layout is [cmdName, nodeID, replyID, v1, ...]: the first
+			// value is msg[3], not msg[4] (AGENTS invariant 1). Reading msg[4] gave
+			// nil, so every beat looked like beat 0.
+			~fireBeat.value((msg[3] ? 0).asInteger);
 		};
 	}, '/ldbeat');
 
 	OSCdef(\ldAuto, { |msg|
-		var i = (msg[4] ? 0).asInteger, t = ~tracks[i];
+		var i = (msg[3] ? 0).asInteger, t = ~tracks[i];   // invariant 1
 		if (t.notNil && t[\autoArm] == 1 && t[\recOn] == 0) {
 			t[\autoArm] = 0;
 			t[\synth].set(\autoArm, 0);
@@ -1918,6 +2012,23 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 				};
 			};
 			~dubPass.value;
+			// ONE-SHOT (#3): a track marked `oneshot` plays one complete pass and
+			// stops. The first boundary after it starts is a partial pass, so the
+			// stop happens at the second -- that way the player always hears a full
+			// loop before it ends.
+			~tracks.do { |t|
+				if ((t[\playing] == 1) && (t[\recOn] == 0)) {
+					if (t[\oneshot] == 1) {
+						t[\oneshotPass] = (t[\oneshotPass] ? 0) + 1;
+						if (t[\oneshotPass] >= 2) {
+							t[\oneshotPass] = 0;
+							~stopTrack.value(t);
+						};
+					} {
+						t[\oneshotPass] = 0;
+					};
+				};
+			};
 		};
 		~bridge.sendMsg('/ldwrap');
 	};

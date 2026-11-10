@@ -8,6 +8,13 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ### Added
 
+- **The rest of the #3 parity subset, small gaps first.** *Auto Rec* was dead
+  code: the detector synth had an `arm` argument that nothing ever set, so the
+  feature looked implemented and never armed — it now has a set path, a toggle in
+  the fx drawer and a pedal target, and it listens to the same source the
+  recorder does. *Per-layer mute* (L1–L4 in the fx drawer), *one-shot playback*,
+  *track copy* and *track swap* (`svc copyTrack` / `svc swapTracks`), and a
+  *rhythm cue send* so the drums can be monitored without being in the mix.
 - **Ableton Link (#4).** The looper can follow tempo and bar phase from Link
   peers on the local network — Link ships inside SuperCollider 3.14, so this adds
   no dependency. Off is the internal clock; on with no peer keeps our own tempo
