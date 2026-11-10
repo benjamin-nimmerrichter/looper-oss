@@ -801,9 +801,14 @@ if (~hasLink) {
 
 	~seqBufs = Array.fill(~nTracks, { Buffer.alloc(s, 8, 1) });   // step sequence
 	s.sync;                                                      // see above
+	~cfgIn = (~cfg[\audio] ? ())[\inputEq];
 	~inputSynths = Array.fill(~inCount, { |ch|
 		Synth(\ld_input, [\outBus, ~inBus.index + ch, \inCh, ch,
-			\gain, (~inGain ? [])[ch] ? 1], ~grpTracks, \addToTail)
+			\gain, (~inGain ? [])[ch] ? 1,
+			// per-channel EQ lives on the input strip, before any track (#3)
+			\hp, (~cfgIn ? ())[("hp" ++ ch).asSymbol] ? 20,
+			\lp, (~cfgIn ? ())[("lp" ++ ch).asSymbol] ? 19000],
+			~grpTracks, \addToTail)
 	});
 	~tracks.do { |t, i| ~makeTrackSynth.value(t, i) };
 	s.sync;
@@ -1891,6 +1896,16 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			"diag",      { ~bridge.sendMsg('/lddiag', (~state[\gridOn] ? 1),
 				(~beatCount ? 0), (~clockPollMode == true).asInteger, ~pollBeats ? -1,
 				if (~hasLink && ~link.notNil, { (~link.tempo * 60) }, { -1 })) },
+			// #3: per-channel input EQ -- svc inputEq ch hp lp
+			"inputEq", {
+				var ch = (msg[2] ? 0).asInteger;
+				var hp = msg[3];
+				var lp = msg[4];
+				if (~inputSynths.notNil && (ch >= 0) && (ch < ~inputSynths.size)) {
+					if (hp.notNil) { ~inputSynths[ch].set(\hp, hp.asFloat.clip(10, 20000)) };
+					if (lp.notNil) { ~inputSynths[ch].set(\lp, lp.asFloat.clip(200, 20000)) };
+				};
+			},
 			// #3: TRACK COPY / SWAP -- svc copyTrack src dst / svc swapTracks a b
 			"copyTrack", { ~copyTrack.value((msg[2] ? 0).asInteger, (msg[3] ? 1).asInteger) },
 			"swapTracks", { ~swapTracks.value((msg[2] ? 0).asInteger, (msg[3] ? 1).asInteger) },

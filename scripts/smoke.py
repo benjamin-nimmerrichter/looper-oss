@@ -1172,6 +1172,20 @@ async def run_tests(c: Client) -> None:
     finally:
         await c.cfg("clock.link", 0)
 
+    # ---- #3: the phrase browser lists what is on disk ----------------------
+    # slot 99 was saved earlier in this run, so the browser must see it.
+    await c.ws.send(json.dumps({"op": "sessions"}))
+    slots = await c.wait(lambda m: m.get("t") == "slots" and "slot99" in (m.get("csv") or ""), 10)
+    check("phrase browser lists the saved slots", slots is not None,
+          (slots or {}).get("csv", "")[:80])
+
+    # ---- #3: per-channel input EQ, before any track -------------------------
+    await c.svc("inputEq", [0, 200, 4000])
+    await asyncio.sleep(0.4)
+    st = await c.wait(lambda m: m.get("t") == "s", 5)
+    check("per-channel input EQ is accepted", st is not None, "svc inputEq 0 200 4000")
+    await c.svc("inputEq", [0, 20, 19000])
+
     # ---- the engine never complains ---------------------------------------
     # sclang reports a bad guard or a broken UGen by posting an ERROR line and
     # carrying on, so a suite that only reads behaviour cannot see it. That is

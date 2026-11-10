@@ -215,6 +215,21 @@ function handle(m) {
       }
       break;
     }
+    case "slots": {
+      const list = document.getElementById("slotlist");
+      if (list) {
+        list.replaceChildren();
+        const names = (m.csv || "").split(";").filter(Boolean);
+        if (!names.length) list.append(el("span", "dim", "none yet"));
+        names.forEach((name) => {
+          const n = Number(name.replace("slot", ""));
+          const b = Button({ label: String(n), cls: "tiny" });
+          b.addEventListener("pointerup", () => svc("load", [n]));
+          list.append(b);
+        });
+      }
+      break;
+    }
     case "imported":
       toast(m.frames > 0 ? `imported ${m.name} (${m.frames} frames)`
         : `import failed: ${m.name}`);
@@ -1351,6 +1366,11 @@ function renderSettings() {
       },
     });
     c.append(settingsRow("slot", slotStepper));
+    // phrase browser: every slot on disk, one tap to load (#3)
+    const browsed = el("div", "slotlist");
+    browsed.id = "slotlist";
+    c.append(settingsRow("memories", browsed, "tap a slot to load it"));
+    send({ op: "sessions" });
     c.append(
       rowButton("save", "save slot", () => svc("save", [Number(CFG.session?.slot ?? 1)])),
       rowButton("load", "load slot", () => svc("load", [Number(CFG.session?.slot ?? 1)])),

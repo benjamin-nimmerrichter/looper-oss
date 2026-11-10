@@ -137,6 +137,7 @@ Per track paths: `t<N>.<field>` for every per-track state field above.
 | `vstBankSave` / `vstBankLoad` | track, bank 0–3 |
 | `vstMode` | track, slot, 0 = toggle / 1 = momentary |
 | `vstEditor` | track, slot |
+| `sessions` | — | → `t: "slots"`, csv of the slot folders on disk (phrase browser) |
 | `midiLearn` | target, e.g. `t0.press` |
 | `midiMap` / `midiClear` | — |
 | `save` / `load` | slot |

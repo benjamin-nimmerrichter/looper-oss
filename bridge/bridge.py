@@ -841,6 +841,16 @@ def handle_command(raw: str) -> None:
             log(f"restored {name}")
         except (OSError, ValueError) as exc:
             push({"t": "restored", "ok": 0, "msg": str(exc)})
+    elif op == "sessions":
+        # phrase browser: which memories exist on disk, oldest slot first
+        root = ROOT / "sessions"
+        slots = []
+        if root.is_dir():
+            for d in root.iterdir():
+                if d.is_dir() and d.name.startswith("slot") and (d / "session.json").is_file():
+                    slots.append(d.name)
+        slots.sort(key=lambda n: int(n[4:] or 0))
+        push({"t": "slots", "csv": ";".join(slots)})
     elif op == "backups":
         push({"t": "backups", "csv": ";".join(b.name for b in session_backups())})
     elif op == "devices":

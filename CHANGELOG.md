@@ -15,6 +15,9 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
   recorder does. *Per-layer mute* (L1–L4 in the fx drawer), *one-shot playback*,
   *track copy* and *track swap* (`svc copyTrack` / `svc swapTracks`), and a
   *rhythm cue send* so the drums can be monitored without being in the mix.
+  A *phrase browser* in setup → session lists every slot on disk (tap one to
+  load), and `svc inputEq ch hp lp` gives each input channel its own high
+  pass/low pass on its input strip, before any track.
 - **Ableton Link (#4).** The looper can follow tempo and bar phase from Link
   peers on the local network — Link ships inside SuperCollider 3.14, so this adds
   no dependency. Off is the internal clock; on with no peer keeps our own tempo

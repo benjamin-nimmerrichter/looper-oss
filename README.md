@@ -490,7 +490,7 @@ have the UI outline each target and count any that fall below that floor.
 
 ```bash
 ./install.sh                          # .venv + pinned requirements
-./scripts/smoke.py                    # starts its own engine: 84 end-to-end checks
+./scripts/smoke.py                    # starts its own engine: 86 end-to-end checks
 ./scripts/smoke.py --attach            # run against a stack you already started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules ./scripts/uicheck.mjs
 python3 scripts/shots.py              # regenerate docs/img (auto: starts and stops the stack)

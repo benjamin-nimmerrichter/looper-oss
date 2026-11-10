@@ -811,3 +811,12 @@ select.sel {
 .keypad-grid .btn.wide { grid-column: span 2; }
 .keypad-grid .btn.ok { background: var(--accent); border-color: var(--accent); color: #06121c; }
 .keypad-hint { font-size: 0.72rem; color: var(--dim); text-align: center; }
+
+/* the phrase browser: a wrapped row of slot numbers */
+.slotlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  justify-content: flex-end;
+}
+.slotlist .btn { min-width: var(--tap); }
