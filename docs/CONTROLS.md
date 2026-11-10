@@ -27,6 +27,8 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | **COUNT-IN** | toggle | off by default | Adds `count-in bars` bars of click before a recording starts, and starts the take exactly on the bar. | `set g.countIn` | state `countIn`, `/ldbeat` handler |
 | **RHYTHM** | toggle + two steppers | `on` · kit 1–16 · pattern 1–200 | The drum engine: four **synthesised** voices (kick, snare, hat, perc) stepped by a 16th-note clock at the current bpm. `kit` picks the voice parameters (pitch, decay, drive); `pattern` picks one of 200 rows built from 5 kick × 5 snare × 4 hat × 2 perc. No samples, so there is no sample licence to carry. | `cfg rhythm.on/kit/pattern` | `\ld_rhythm`, `~rhythmSet` |
 | **bus A/B/C** | 3 knobs (footer) | 0–1.2, default 1 | Output mixer: one level per stereo bus, applied on the master. Bus A is the main mix (and carries reverb, click and drums); B and C are for tracks you route away. | `set g.busA/busB/busC` | `\ld_master` `gA/gB/gC` |
+| **dj filter** | knob, bipolar | −1 … 0 … +1, default 0 | The RC-505's DJ-style filter, for performing. Centre is a **hard bypass** — the filter is not in the path at all. Left sweeps a low pass down to 20 Hz, right sweeps a high pass up to 20 kHz, with `djRes` as resonance. **Double-tap returns it to centre.** `MoogFF`, so sweeping does not recompute biquad coefficients, and the frequency is clamped away from 0 (the BLowPass help file warns about both). | `set g.dj` | `\ld_master` `perfFn` |
+| DJ resonance | stepper | 0–100 %, default 35 | Resonance of the DJ filter (setup → master chain). 0 is a plain 12 dB slope, 100 is close to self-oscillation. | `cfg master.djRes` | `djRes` → `MoogFF` gain |
 | master fader | fader | 0–1.2, default 0.8 | Master volume (post-limiter). Silences everything, click included. | `set g.masterVol` | `\ld_master` `vol` |
 
 ## 2. Track column (one per track, 1–N)
@@ -121,6 +123,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | master fader | fader | 0–1.2, default 0.8 | Same value as the transport master fader. | `set g.masterVol` | `\ld_master` `vol` |
 | master meter | meter | — | Post-limiter output level. | — | metre buffer slots 60/61 |
 | **SAVE** | button | — | Writes slot 1: one WAV per layer + `session.json` + plugin state. | `svc save` | `~writeSession` |
+| **master FX ×2** | select + 2 knobs | off · filter · delay · drive · tremolo | Two insert slots on the master, each one of four stock-UGens effects, live. The knobs are labelled for the chosen type (cutoff/resonance, time/feedback, drive/tone, rate/depth). Setup → loop → master FX; the choice is configuration and survives a restart (`master.fx1Type`…). They sit after the static HP/LP and the DJ filter, before the limiter, so a resonant sweep is caught instead of clipping. | `cfg master.fx1Type` / `set g.fx1A` | `\ld_master` `slotFn` |
 | **EXPORT** | button | — | Bounces 30 s of the master bus to `sessions/exports/`. | `svc export` | `~exportMix` |
 
 ---

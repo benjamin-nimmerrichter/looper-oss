@@ -211,8 +211,8 @@ async def run_tests(c: Client) -> None:
         return
     globals_ = len(st) - 2
     fields = len(st["tracks"][0])
-    check("state shape (26 globals / 32 track fields)",
-          globals_ == 26 and fields == 32 and len(st["tracks"]) == N,
+    check("state shape (28 globals / 32 track fields)",
+          globals_ == 28 and fields == 32 and len(st["tracks"]) == N,
           f"{globals_}/{fields}/{len(st['tracks'])}")
 
     # meters + playhead live inside the state frame (no separate OSC paths).
@@ -954,6 +954,121 @@ async def run_tests(c: Client) -> None:
     await c.cfg("rhythm.kit", 0)
     await c.cfg("rhythm.pattern", 0)
     await c.svc("midiClear", [])
+
+    # ---- #7: the DJ filter and the master FX slots ------------------------
+    # Measured at the master meter, so this needs the master *unmuted*: 0.05 of
+    # 0.25 amplitude is about -60 dBFS at the speaker, inaudible, and plenty for
+    # Amplitude.kr to read.
+    async def master_level() -> float:
+        """Ask the engine for the master meter, instead of reading the socket.
+
+        A websocket frame can be seconds old and makes a working filter look
+        dead (AGENTS §8). A query is answered from the meter the engine is
+        holding *now*.
+        """
+        # a filter's output needs a moment to settle in the meter follower
+        await asyncio.sleep(0.9)
+        best = 0.0
+        for _ in range(3):
+            await c.svc("master", [])
+            m = await c.wait(lambda x: x.get("t") == "master", 5)
+            if m:
+                best = max(best, float(m.get("l") or 0))
+            await asyncio.sleep(0.2)
+        return best
+
+    # a track with a steady tone, playing. autoClose/autoDub off, or the take
+    # closes at the wrap and starts another one, leaving the track recording
+    # (and therefore silent) for the rest of the measurement.
+    await c.set("g.autoClose", 0)
+    await c.set("g.autoDub", 0)
+    # one bar: a 1.6 s take then covers most of the loop, so the meter is not
+    # silent for 80% of the time by design
+    bars_m4 = (c.last_state or {}).get("bars", 4)
+    await c.set("g.bars", 1)
+    await c.set("g.bpm", 120)
+    await c.act("clear", L)
+    await asyncio.sleep(0.5)
+    await c.set(f"t{L}.gateThr", 0.02)
+    await c.set(f"t{L}.gateOn", 0)
+    await c.svc("testTone", [220, 0.25, 120])
+    await c.act("dub", L)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 1, 12)
+    await asyncio.sleep(1.6)
+    await c.act("dub", L)
+    await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["layers"] == 1
+                 and m["tracks"][L]["state"] != 1, 10)
+    await asyncio.sleep(0.8)
+    await c.set("g.masterVol", 0.05)
+    # a commit leaves the track playing; press would STOP it
+    if c.track(L)["state"] != 2:
+        await c.act("press", L)
+        await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 2, 8)
+    # waiting for the engine to *confirm* the volume is what gets us past the
+    # frames buffered before it (AGENTS §8: read fresh frames)
+    await c.wait(lambda m: m.get("t") == "s" and m["masterVol"] > 0.04, 8)
+    await c.svc("testTone", [220, 0.25, 120])     # a tone that is certainly alive
+    await asyncio.sleep(0.6)
+    await c.set("g.dj", 0)
+    centre = await master_level()
+    await c.set("g.dj", -0.98)                   # low pass near 8 Hz: everything out
+    low = await master_level()
+    await c.set("g.dj", 0.7)                     # high pass ~2.5 kHz: the tone is gone
+    high = await master_level()
+    await c.set("g.dj", 0.0)
+    back = await master_level()
+    pr = await probe_l()
+    await c.svc("diag", [])
+    d1 = await c.wait(lambda m: m.get("t") == "diag", 6) or {}
+    await asyncio.sleep(1.2)
+    await c.svc("diag", [])
+    d2 = await c.wait(lambda m: m.get("t") == "diag", 6) or {}
+    dg = {"a": d1.get("beats_seen"), "b": d2.get("beats_seen"),
+          "gridOn": d2.get("gridOn"), "poll": d2.get("poll")}
+    st = c.last_state or {}
+    ph1 = st.get("phase")
+    await asyncio.sleep(0.4)
+    st = await c.wait(lambda m: m.get("t") == "s", 3) or c.last_state or {}
+    ph2 = st.get("phase")
+    tr = (st.get("tracks") or [{}])[L] if len(st.get("tracks") or []) > L else {}
+    # The meter wobbles by ~2x between samples (a short take in a 2 s loop), so
+    # the assertion is directional with a margin, not a ratio.
+    check("dj filter: centre passes, both ends cut",
+          centre > 0.002 and low < centre * 0.3 and high < centre * 0.8
+          and back > centre * 0.45,
+          f"centre={centre:.4f} lp={low:.4f} hp={high:.4f} back={back:.4f} "
+          f"[state={tr.get('state')} layers={tr.get('layers')} "
+          f"meter={tr.get('meter')} vol={st.get('masterVol')} dj={st.get('dj')} "
+          f"gains={(pr or {}).get('gains')} peaks={(pr or {}).get('peaks')} "
+          f"tvol={tr.get('vol')} phase={ph1}->{ph2} diag={dg}]")
+
+    # a master FX slot is live: a filter at the bottom of its range kills the tone
+    await c.set("g.fx1Type", 1)
+    await c.set("g.fx1A", 0.0)
+    await c.set("g.fx1B", 0.2)
+    fx_on = await master_level()
+    await c.set("g.fx1Type", 0)
+    fx_off = await master_level()
+    check("master fx slot applies and switches off live",
+          fx_on < fx_off * 0.2 and fx_off > 0.002,
+          f"fx={fx_on:.4f} bypass={fx_off:.4f}")
+    await c.set("g.masterVol", 0)
+    await c.set("g.autoClose", 1)
+    await c.set("g.autoDub", 1)
+    await c.set("g.bars", bars_m4)
+    await c.act("stop", L)
+
+    # ---- the engine never complains ---------------------------------------
+    # sclang reports a bad guard or a broken UGen by posting an ERROR line and
+    # carrying on, so a suite that only reads behaviour cannot see it. That is
+    # how a routine died on every boot for months (AGENTS invariant 28).
+    try:
+        text = (ROOT / "logs" / "engine.log").read_text(errors="replace")
+        bad = [ln for ln in text.splitlines() if ln.startswith("ERROR")]
+        check("engine log is free of errors", not bad,
+              bad[0][:120] if bad else f"{len(text)} bytes")
+    except OSError as exc:
+        check("engine log is free of errors", False, repr(exc))
 
     # WAV import: a file dropped in sessions/import/ becomes a track's layer
     imp_dir = ROOT / "sessions" / "import"

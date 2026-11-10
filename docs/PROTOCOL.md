@@ -30,7 +30,7 @@ two-line test before wiring it into the UI.
 
 | message | values | notes |
 | --- | --- | --- |
-| `/ldstate` | 23 global + 24 per track, see below | 20 Hz |
+| `/ldstate` | 28 global + 32 per track, see below | 20 Hz |
 | `/ldbeat` | `beat in bar` | on every beat |
 | `/ldwrap` | — | loop boundary |
 
@@ -50,6 +50,7 @@ SynthDefs): `\ld_meter` writes `BufWr.kr` into a 64-frame buffer, sclang sends
 | `/ldvstcatalog` | `csv` | plugin keys separated by `;` |
 | `/ldmidimap` | `csv` | `type\|num\|target` entries split by `;` |
 | `/ldmidi` | `what, num, target` | `learned` |
+| `/ldmaster` | `l, r` | the master meter peaks, on request (`svc master`) |
 | `/ldauto` | `track` | threshold recorder fired |
 | `/ldsilent` | `track, layer` | a take recorded nothing: it was dropped instead of muting the track (REPLACE mode) |
 | `/ldtap` | `bpm, taps` | result of a tap-tempo measurement |
@@ -57,6 +58,7 @@ SynthDefs): `\ld_meter` writes `BufWr.kr` into a 64-frame buffer, sclang sends
 | `/ldloaded` | `tag, layers, dir` | |
 | `/ldloaderr` | `tag, message` | |
 | `/ldprobe` | `track, layers, contentLen, recOn, playing, meterL, meterR, g0..g3, peak0..peak3` | diagnostic: what is actually in the layer buffers |
+| `/lddiag` | `gridOn, beats_seen, pollMode, lastPolledBeat` | clock diagnostics: is the transport being told to run, and are beats arriving |
 | `/ldmerged` | `track, ok` | MERGE LAYERS finished (`1`) or was refused (`0`: fewer than two layers, or a take is open) |
 | `/ldcapturing` | `seconds` | export started |
 | `/ldexported` | `path` | export finished |
@@ -64,13 +66,20 @@ SynthDefs): `\ld_meter` writes `BufWr.kr` into a 64-frame buffer, sclang sends
 
 ### `/ldstate` field order
 
-Global (26):
+Global (28):
 
 ```text
 bpm bars beatsPerBar metro countIn masterVol clickVol sel cpu
 revMix room xfadeMs recordOffset dubDecay autoClose masterHp masterLp version
 inL inR masterL masterR phase
+busA busB busC
+dj djRes
 ```
+
+`busA/busB/busC` are the three output-bus levels, `dj` the bipolar performance
+filter (−1 low pass … 0 bypass … +1 high pass) and `djRes` its resonance.
+Everything appended since 0.1.0 sits at the end, so a reader that ignores the
+tail still works.
 
 `inL/inR` are the hardware input peaks, `masterL/masterR` the master output,
 `phase` the loop position 0..1. `phase` is counted from the beat replies and

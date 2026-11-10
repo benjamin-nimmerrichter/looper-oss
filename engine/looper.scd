@@ -127,6 +127,9 @@ s.latency = 0.02;
 	// metronome defaults OFF: it is a click in your ears until you ask for it
 	metro: 0, countIn: ~cfg[\clock][\countInBars].asInteger,
 	masterVol: 0.8, clickVol: ~cfg[\clock][\clickVol].asFloat,
+	// #7 performance controls: the DJ knob starts centred (bypass), the
+	// two master FX slots come from the config, because they are setup
+	dj: 0.0, djRes: ((~cfg[\master] ? ())[\djRes] ? 0.35).asFloat,
 	// output mixer: one level per stereo bus
 	busA: 1, busB: 1, busC: 1,
 	sel: 0, revMix: ~cfg[\loop][\revMix].asFloat, room: ~cfg[\loop][\room].asFloat,
@@ -239,7 +242,8 @@ if (~hasVST) {
 				hp = 40, lp = 16000,
 				delayOn = 0, delayBeats = 0.75, delayDecay = 0.4, delayMix = 0.25,
 				revSend = 0.0, beatLen = 0.5, loopSec = 8,
-				fadeIn = 0, fadeOut = 0, vB0 = 0, vB1 = 0, vB2 = 0, vB3 = 0|
+				fadeIn = 0, fadeOut = 0, vB0 = 0, vB1 = 0, vB2 = 0, vB3 = 0,
+				peakBuf = 0|
 
 			var tph, tphFree, pos, wpos, raw, gateEnv, gate, sig, sigR, layers, src,
 			    wraps,
@@ -312,6 +316,10 @@ if (~hasVST) {
 			// write gate 30 ms later, so a take never ends in a step to zero. Steady
 			// state is recOn == 1, so the ramp does not touch the body of a take.
 			sigR = sig * LagUD.kr(recOn, 0.003, 0.003);
+			// what the write head is being fed, polled at 10 Hz by sclang: a take
+			// is judged silent at commit from this, not by streaming its buffer
+			// back while something else may be reading it
+			BufWr.kr(Amplitude.kr(sigR, 0.002, 0.08), peakBuf, idx);
 			BufWr.ar(Select.ar(K2A.ar(w0), [BufRd.ar(1, b0, wpos, 1, 1), sigR]), b0, wpos);
 			BufWr.ar(Select.ar(K2A.ar(w1), [BufRd.ar(1, b1, wpos, 1, 1), sigR]), b1, wpos);
 			BufWr.ar(Select.ar(K2A.ar(w2), [BufRd.ar(1, b2, wpos, 1, 1), sigR]), b2, wpos);
@@ -402,12 +410,18 @@ if (~hasVST) {
 	SynthDef(\ld_master, { |busA, busB, busC, gA = 1, gB = 1, gC = 1,
 			revBus, clickBus, masterBus, rhythmBus = 0,
 			vol = 0.8, revMix = 0.6, room = 0.8, damp = 0.3, clickVol = 0.3,
-			masterHp = 0, masterLp = 18000|
+			masterHp = 0, masterLp = 18000,
+			// #7: a performance filter and two master FX slots. The static HP/LP
+			// above is a setup control; these are the ones a hand is on.
+			dj = 0, djRes = 0.35,
+			fx1Type = 0, fx1A = 0.5, fx1B = 0.5,
+			fx2Type = 0, fx2A = 0.5, fx2B = 0.5|
 		// Three stereo output buses. Reverb, click and rhythm belong to the main
 		// (A) mix; B and C are dry groups a player routes tracks into.
 		// The device decides how they reach hardware: 6+ outputs get a pair each,
 		// 4 gets A and (B+C), anything less folds all three into 0/1.
 		var a, b, c, rv, wet, click, rhy, mfx, lim, outA, outB, nOut;
+		var djLpFreq, djHpFreq, djGain, perfFn, slotFn;
 		nOut  = (~audio[\out] ? 2).asInteger;
 		a     = In.ar(busA, 32).clump(2).sum * gA;
 		b     = In.ar(busB, 32).clump(2).sum * gB;
@@ -418,12 +432,52 @@ if (~hasVST) {
 		rhy   = In.ar(rhythmBus, 2);
 		a     = a + wet + click + rhy;
 		mfx   = ((masterHp > 1) + (masterLp < 19999)).clip(0, 1);
+
+		// ---- performance filters (issue #7) ---------------------------------
+		// One bipolar knob. Centre is a HARD bypass -- the filter branch is not
+		// selected at all -- left sweeps a low pass down, right sweeps a high
+		// pass up. MoogFF rather than BLowPass/BHiPass: those biquads recompute
+		// coefficients whenever a parameter changes (a sweep changes it every
+		// block), which their own help file warns about, and their frequency
+		// must never reach 0 or the output glitches and can go very loud.
+		// MoogFF is a state-variable design made for sweeping; its gain is the
+		// resonance, 0..4.
+		djLpFreq = (20000 * (1 + dj).clip(0, 1).squared).clip(20, 20000);
+		djHpFreq = (20 * ((20000 / 20) ** dj.clip(0, 1))).clip(20, 20000);
+		djGain   = djRes.clip(0, 1).linexp(0, 1, 1, 3.6);
+		perfFn   = { |x|
+			var lp   = MoogFF.ar(x, LagUD.kr(djLpFreq, 0.02, 0.06), djGain);
+			var hp   = x - MoogFF.ar(x, LagUD.kr(djHpFreq, 0.02, 0.06), djGain);
+			var pick = Select.ar(K2A.ar(dj < 0), [hp, lp]);
+			Select.ar(K2A.ar(dj.abs > 0.001), [x, pick])
+		};
+
+		// Two master FX slots, each one of four stock-UGens effects. Every branch
+		// is computed -- Select does not short-circuit a UGen graph -- but the
+		// unused ones are one filter and one comb, cheap next to five tracks of
+		// BufRd/BufWr, and it means a slot can be switched while it plays.
+		slotFn = { |x, type, ak, bk|
+			var tremRate = ak.linexp(0, 1, 0.3, 12);
+			Select.ar(K2A.ar(type.clip(0, 4)), [
+				x,                                                    // 0 off
+				MoogFF.ar(x, ak.linexp(0, 1, 40, 18000),
+					bk.linexp(0, 1, 1, 3.6)),                         // 1 filter
+				CombN.ar(x, 1.0, ak.linexp(0, 1, 0.02, 0.5),
+					bk.linexp(0, 1, 0.05, 6)),                        // 2 delay
+				LeakDC.ar(Fold.ar(x * (1 + (ak * 8)), -1, 1)) * 0.7,  // 3 drive
+				x * (1 - (bk * (0.5 + (0.5 * SinOsc.kr(tremRate)))))  // 4 tremolo
+			])
+		};
+
 		lim   = { |x|
 			x = Select.ar(K2A.ar(mfx), [
 				x,
 				BLowPass.ar(BHiPass.ar(x, masterHp.clip(20, 2000), 0.707),
 					masterLp.clip(1000, 19000), 0.707)
 			]);
+			x = perfFn.(x);                       // performance filter, pre-limiter
+			x = slotFn.(x, fx1Type, fx1A, fx1B);
+			x = slotFn.(x, fx2Type, fx2A, fx2B);
 			Compander.ar(x, x, 0.9, 1, 0.1, 0.001, 0.1).clip2(0.98) * vol
 		};
 		outA = a + (if (nOut < 4) { b } { DC.ar(0) })
@@ -503,6 +557,12 @@ if (~hasVST) {
 ~busGains = [1, 1, 1];
 ~busFor = { |route| [~busA, ~busB, ~busC][route.asInteger.clip(0, 2)].index };
 
+// master FX slots are configuration, not state: read them from the generated
+// config so a restart restores what the player set up
+~mfxc = { |slot| ((~cfg[\master] ? ())[("fx" ++ (slot + 1) ++ "Type").asSymbol] ? 0).asInteger };
+~mfxa = { |slot| ((~cfg[\master] ? ())[("fx" ++ (slot + 1) ++ "A").asSymbol] ? 0.5).asFloat };
+~mfxb = { |slot| ((~cfg[\master] ? ())[("fx" ++ (slot + 1) ++ "B").asSymbol] ? 0.5).asFloat };
+
 // input mixer: one gain per physical input channel, shared by the tracks
 ~setInputGain = { |ch, v|
 	var i = ch.asInteger;
@@ -535,7 +595,7 @@ if (~hasVST) {
 			\vol, t[\vol], \pan, t[\pan], \gateOn, t[\gateOn],
 			\gateThr, t[\gateThr], \hp, t[\hp], \lp, t[\lp],
 			\input, t[\input], \delayDecay, t[\delayDecay], \playing, 0,
-			\monitor, ~state[\monitor]
+			\monitor, ~state[\monitor], \peakBuf, ~peakBuf.bufnum
 		];
 		4.do { |li|
 			var b = if (li < ~maxLayers, { t[\bufs][li].bufnum }, { ~scratch.bufnum });
@@ -623,6 +683,10 @@ if (~hasVST) {
 	~maxFrames = (~maxSeconds * s.sampleRate).round.asInteger;
 	~scratch   = Buffer.alloc(s, ~maxFrames, 1);
 	~meterBuf  = Buffer.alloc(s, 64, 1);
+	// one slot per track: the level going into the write head, so a take can be
+	// judged silent at commit without streaming the layer buffer back
+	~peakBuf   = Buffer.alloc(s, ~maxTracks, 1);
+	~peakVals  = Array.fill(~maxTracks, 0);
 	~clockBuf  = Buffer.alloc(s, 8, 1);
 	~patternBuf = Buffer.alloc(s, 64, 1);   // 4 voices x 16 steps
 	// Buffer.alloc is asynchronous: without this the transport and the tracks were
@@ -670,7 +734,10 @@ if (~hasVST) {
 		\masterBus, ~masterBus, \vol, ~state[\masterVol],
 		\revMix, ~state[\revMix], \room, ~state[\room],
 		\clickVol, ~state[\clickVol],
-		\masterHp, ~state[\masterHp], \masterLp, ~state[\masterLp]
+		\masterHp, ~state[\masterHp], \masterLp, ~state[\masterLp],
+		\dj, ~state[\dj], \djRes, ~state[\djRes],
+		\fx1Type, ~mfxc.value(0), \fx1A, ~mfxa.value(0), \fx1B, ~mfxb.value(0),
+		\fx2Type, ~mfxc.value(1), \fx2A, ~mfxa.value(1), \fx2B, ~mfxb.value(1)
 	], ~grpMaster, \addToTail);
 	Synth(\ld_global_meter, [\meterBuf, ~meterBuf, \slot, 60], ~grpMaster, \addToTail);
 	s.sync;
@@ -762,6 +829,7 @@ if (~hasVST) {
 			t[\synth].set(("w" ++ li).asSymbol, 1, \recOn, 1, \playing, 1);
 			t[\recOn] = 1; t[\playing] = 1; t[\state] = 1;
 			t[\passes] = 0;
+			t[\recPeak] = 0;
 		};
 	};
 
@@ -791,10 +859,23 @@ if (~hasVST) {
 				// ... but a take that recorded NOTHING must not silence the track.
 				// That is the reported "sounds get deleted when a silent part
 				// overdubs": nothing was gained and everything below was muted.
-				// The buffer is already written, so ask it, then put the track back
-				// and drop the empty layer. Guarded by the layer count, so a take
-				// started in the meantime is never touched.
-				if (li > 0) { ~dropIfSilent.value(t, li) };
+				// ~recPeak is the running max of what the write head was fed (the
+				// track synth publishes it into ~peakBuf, polled at 20 Hz), so this
+				// is a number already in hand -- no buffer read, no verdict taken
+				// from a window that might miss the take.
+				if ((li > 0) && ((t[\recPeak] ? 0) < 0.01)) {
+					t[\layerCount] = li;
+					t[\gains][li] = 0;
+					t[\synth].set(~gainKeys[li], 0);
+					~maxLayers.do { |k|
+						if (k < li) {
+							t[\gains][k] = 1;
+							t[\synth].set(~gainKeys[k], 1);
+						};
+					};
+					t[\state] = if (li > 0, 2, 0);
+					~bridge.sendMsg('/ldsilent', t[\idx] ? 0, li);
+				};
 			};
 			t[\state] = 2;
 		};
@@ -805,51 +886,6 @@ if (~hasVST) {
 	// redo still walks it back.
 	// MARK BACK bookmarks the current layer count; the layers above the
 	// mark are gated but kept, so redo still walks them back.
-	// A take that recorded nothing is not a layer. Walk the whole layer buffer
-	// (a take starts wherever the play head is, so the content can be anywhere),
-	// and if it holds nothing above -40 dBFS, restore the gains REPLACE muted and
-	// take the layer off the stack again.
-	//
-	// One buffer read at a time, not one huge one: a 16 s buffer is 768k floats,
-	// and streamToFloatArray starts dropping chunks at that size.
-	~dropIfSilent = { |t, li|
-		var buf = t[\bufs][li];
-		var total = t[\contentLen].asInteger.max(1);
-		var chunks = (total / 48000).ceil.asInteger.max(1);
-		var step = (total / chunks).asInteger.max(1);
-		var i = 0, peak = 0, stepFn;
-		if (buf.notNil) {
-			stepFn = {
-				if (i >= chunks) {
-					// only if nothing moved on: same layer count, no take open
-					if ((t[\layerCount] == (li + 1)) && (t[\recOn] == 0)
-						&& (peak < 0.01)) {
-						t[\layerCount] = li;
-						t[\gains][li] = 0;
-						t[\synth].set(~gainKeys[li], 0);
-						~maxLayers.do { |k|
-							if (k < li) {
-								t[\gains][k] = 1;
-								t[\synth].set(~gainKeys[k], 1);
-							};
-						};
-						t[\state] = if (li > 0, 2, 0);
-						~bridge.sendMsg('/ldsilent', t[\idx] ? 0, li);
-					};
-				} {
-					var at = i * step;
-					var n = (total - at).min(step);
-					i = i + 1;
-					buf.getToFloatArray(at, n, 0, 3, { |data|
-						if (data.size > 0) { peak = peak.max(data.abs.maxItem) };
-						stepFn.value;
-					});
-				};
-			};
-			fork { stepFn.value };
-		};
-	};
-
 	~setMark = { |t| t[\mark] = t[\layerCount].max(1) };
 
 	// step-sequence pattern: eight values 0..1, written as one setn
@@ -1125,6 +1161,17 @@ if (~hasVST) {
 			"room",        { ~state[\room] = v; ~master.set(\room, v); ~master.set(\damp, 1 - v) },
 			"masterHp",    { ~state[\masterHp] = v; ~master.set(\masterHp, v) },
 			"masterLp",    { ~state[\masterLp] = v; ~master.set(\masterLp, v) },
+			// #7 performance controls. dj is bipolar: 0 is an exact bypass,
+			// negative sweeps a low pass down, positive a high pass up.
+			"dj",          { ~state[\dj] = v.clip(-1, 1); ~master.set(\dj, ~state[\dj]) },
+			"djRes",       { ~state[\djRes] = v.clip(0, 1);
+				~master.set(\djRes, ~state[\djRes]) },
+			"fx1Type",     { ~master.set(\fx1Type, v.asInteger.clip(0, 4)) },
+			"fx1A",        { ~master.set(\fx1A, v.clip(0, 1)) },
+			"fx1B",        { ~master.set(\fx1B, v.clip(0, 1)) },
+			"fx2Type",     { ~master.set(\fx2Type, v.asInteger.clip(0, 4)) },
+			"fx2A",        { ~master.set(\fx2A, v.clip(0, 1)) },
+			"fx2B",        { ~master.set(\fx2B, v.clip(0, 1)) },
 			"xfadeMs",     {
 				~state[\xfadeMs] = v.clip(0.1, 50);
 				~tracks.do { |t| t[\synth].set(\xfade, ~xfadeFrames.value) };
@@ -1737,6 +1784,12 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			"tap",       { ~tapTempo.value },
 			"stats",     { ~sendStats.value },
 			"probe",     { ~probeTrack.value((msg[2] ? 0).asInteger) },
+			// the master meters on request, for a measurement that must not read
+			// a websocket frame that was queued before the change it is testing
+			"master",    { ~bridge.sendMsg('/ldmaster', ~state[\masterL], ~state[\masterR]) },
+			// clock diagnostics: is the transport alive, and is it being told to run
+			"diag",      { ~bridge.sendMsg('/lddiag', (~state[\gridOn] ? 1),
+				(~beatCount ? 0), (~clockPollMode == true).asInteger, ~pollBeats ? -1) },
 			// #6: MERGE TRACKS by selection -- svc mergeTracks dst src1 [src2 ...]
 			"mergeTracks", {
 				var dstIdx = (msg[2] ? 0).asInteger;
@@ -1773,10 +1826,21 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		if ((msg[1] == ~meterBuf.bufnum) && (msg[2] == 0)) {
 			~meterVals = msg.copyToEnd(4);
 		};
+		if ((msg[1] == ~peakBuf.bufnum) && (msg[2] == 0)) {
+			~peakVals = msg.copyToEnd(4);
+			// a take's peak is the max over the whole take, not the level at the
+			// moment it closed: a take that ends quietly still recorded something
+			~tracks.do { |tr, i|
+				if (tr[\recOn] == 1) {
+					tr[\recPeak] = tr[\recPeak].max(~peakVals[i] ? 0);
+				};
+			};
+		};
 	}, '/b_setn');
 
 	~fireBeat = { |beat|
 		var beatsPerLoop = (~state[\bars] * ~state[\beatsPerBar]).max(1);
+		~beatCount = (~beatCount ? 0) + 1;   // diagnostics: is anything arriving?
 		// beat index inside the loop, counted here: a second SendReply value in the
 		// same def does not survive the trip, the beat itself does
 		~beatInLoop = ((~beatInLoop ? -1) + 1) % beatsPerLoop;
@@ -1971,7 +2035,8 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			~state[\masterHp], ~state[\masterLp], ~state[\version],
 			~state[\inL], ~state[\inR], ~state[\masterL], ~state[\masterR],
 			~state[\phase],
-			~state[\busA], ~state[\busB], ~state[\busC]
+			~state[\busA], ~state[\busB], ~state[\busC],
+			~state[\dj], ~state[\djRes]
 		];
 		~tracks.do { |t|
 			a = a ++ [
@@ -1999,9 +2064,14 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 				if (tick % 2 == 0) {
 					// plain /b_getn: the reply lands in one persistent responder.
 					// Buffer:getToFloatArray installs a timeout per call and warns
-					// "streamToFloatArray failed" when replies are a beat late.
+					// "streamToFloatArray failed" when replies are a beat late --
+					// and a second concurrent read of the same buffer corrupts both
+					// (it threw _ArrayOverwrite when a probe overlapped a take check).
 					s.sendMsg('/b_getn', ~meterBuf.bufnum, 0, 64);
 				};
+				// every tick: a short take must still register, and Amplitude's
+				// 80 ms release is what makes a 10 ms transient visible at all
+				s.sendMsg('/b_getn', ~peakBuf.bufnum, 0, ~maxTracks);
 				0.05.wait;
 			};
 		};

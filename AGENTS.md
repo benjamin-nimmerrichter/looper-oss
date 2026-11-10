@@ -29,7 +29,7 @@ browser (ui/)  ⇄ ws JSON ⇄  bridge (bridge/bridge.py)  ⇄ OSC ⇄  sclang (
 | `ui/app.js` | every control, drawers, boot screen, playhead, keypad | UI behaviour |
 | `ui/controls.js` | the touch primitives: Fader, Knob, Pad, Button, Segmented, Stepper, Select, Meter, `auditTapTargets` | gesture/size rules |
 | `ui/style.css` | layout, `--scale`, `--tap` (48 px floor), grid | anything visual |
-| `scripts/smoke.py` | 74 end-to-end checks, spawns its own engine | behaviour changes (update expectations!) |
+| `scripts/smoke.py` | 77 end-to-end checks, spawns its own engine | behaviour changes (update expectations!) |
 | `scripts/uicheck.mjs` | 16 UI checks + screenshots (needs playwright) | UI layout changes |
 | `scripts/sweep.py` | kills leftover `scsynth`/`sclang`/bridge/UI-server by scanning `/proc` | — |
 | `scripts/release.py` | builds `dist/looper-oss-<ver>.tar.gz` + `.zip` + `SHA256SUMS`, reproducible; refuses to ship runtime state | what a release contains, versioning |
@@ -70,7 +70,7 @@ LOOPER_OSS_RESUME_SIM=600 python3 -m app.main --window none
                                   # say `resume detected` and `engine ready` again
 
 python3 scripts/sweep.py          # kill leftovers (do this after any test run)
-./scripts/smoke.py                # 74 checks, spawns its own stack
+./scripts/smoke.py                # 77 checks, spawns its own stack
 ./scripts/smoke.py --attach       # ...against a stack you started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules node scripts/uicheck.mjs
 python3 scripts/shots.py          # docs/img screenshots: WebKit snapshot, starts/stops the stack
@@ -104,11 +104,11 @@ a server that no longer has the SynthDefs.
 
 `/ldstate` is a **flat positional** message. Three places must agree, in order:
 
-1. `engine/looper.scd` → `~sendState` builds the array (23 globals, then 24 per track)
+1. `engine/looper.scd` → `~sendState` builds the array (28 globals, then 32 per track)
 2. `bridge/bridge.py` → `GLOBAL_FIELDS` / `TRACK_FIELDS` name them by position
 3. `ui/app.js` → `onState` reads those names
 
-Change one, change all three, then run `smoke.py` (it asserts `23 / 24`). Per-track
+Change one, change all three, then run `smoke.py` (it asserts `28 / 32`). Per-track
 messaging is generic on purpose: `/ld/set "t2.hp" 300` → `synth.set(\hp, 300)`, so
 a new knob usually needs **no new OSC path** — just a field in the state array.
 
@@ -242,7 +242,7 @@ SuperCollider and its corners, in the order they bit us. Read before editing
 Before you call a change done:
 
 - [ ] `sclang /tmp/probe.scd` → `0 ERROR`, and the log has no `streamToFloatArray`
-- [ ] `./scripts/smoke.py` → 74/74 (update the expectations if the behaviour changed
+- [ ] `./scripts/smoke.py` → 77/77 (update the expectations if the behaviour changed
       *on purpose* — see §8)
 - [ ] `node scripts/uicheck.mjs` → `UI OK` if you touched the UI
 - [ ] `python3 scripts/sweep.py` → no processes left, user hears nothing

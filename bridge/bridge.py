@@ -54,6 +54,8 @@ GLOBAL_FIELDS = [
     "autoClose", "masterHp", "masterLp", "version",
     "inL", "inR", "masterL", "masterR", "phase",
     "busA", "busB", "busC",
+    # #7 performance controls: the bipolar DJ filter and its resonance
+    "dj", "djRes",
 ]
 TRACK_FIELDS = [
     "state", "vol", "pan", "muted", "meter", "input", "layers",
@@ -76,6 +78,9 @@ CFG_TO_ENGINE = {
     "loop.quantizeStart": "quantizeStart",
     "loop.autoDub": "autoDub",
     "loop.overdubMode": "overdubMode",
+    "master.djRes": "djRes",
+    "master.fx1Type": "fx1Type", "master.fx1A": "fx1A", "master.fx1B": "fx1B",
+    "master.fx2Type": "fx2Type", "master.fx2A": "fx2A", "master.fx2B": "fx2B",
     "rhythm.on": "rhythmOn",
     "rhythm.kit": "rhythmKit",
     "rhythm.pattern": "rhythmPattern",
@@ -621,6 +626,14 @@ def on_auto(_addr: str, *args: Any) -> None:
         push({"t": "auto", "i": inum(args[0])})
 
 
+def on_diag(_addr: str, *args: Any) -> None:
+    """Clock diagnostics: gridOn, transport alive, poll mode, last polled beat."""
+    push({"t": "diag", "gridOn": inum(args[0]) if args else 0,
+          "beats_seen": inum(args[1]) if len(args) > 1 else 0,
+          "poll": inum(args[2]) if len(args) > 2 else 0,
+          "beats": fnum(args[3]) if len(args) > 3 else -1})
+
+
 def on_merged(_addr: str, *args: Any) -> None:
     """MERGE LAYERS finished (ok=1) or was refused (ok=0: <2 layers, or a take is open)."""
     push({"t": "merged", "track": inum(args[0]) if args else 0,
@@ -991,7 +1004,8 @@ async def main() -> None:
         ("/ldin", on_input), ("/ldstats", on_stats), ("/ldvst", on_vst),
         ("/ldvstcatalog", on_vst_catalog), ("/ldmidimap", on_midi_map),
         ("/ldmidi", on_midi_event), ("/ldrhythm", on_rhythm), ("/ldvstbanks", on_vst_banks), ("/ldinputs", on_inputs), ("/ldimport", on_import), ("/ldmididevs", on_midi_devices),
-        ("/ldauto", on_auto), ("/ldsilent", on_silent), ("/ldmerged", on_merged), ("/ldready", on_ready), ("/ldbootfail", on_boot_fail), ("/ldprobe", on_probe), ("/ldtap", on_tap),
+        ("/ldauto", on_auto), ("/ldsilent", on_silent), ("/ldmerged", on_merged),
+        ("/lddiag", on_diag), ("/ldready", on_ready), ("/ldbootfail", on_boot_fail), ("/ldprobe", on_probe), ("/ldtap", on_tap),
         ("/ldsaved", on_saved), ("/ldloaded", on_loaded), ("/ldloaderr", on_loaderr),
         ("/ldcapturing", on_capturing), ("/ldexported", on_exported),
     ):

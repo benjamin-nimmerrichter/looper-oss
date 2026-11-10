@@ -325,3 +325,30 @@ Two things then have to be true, and both are checked rather than assumed:
 Measured here: a device the system does not have produced, in order,
 `could not open the audio device` → `retrying the audio device, asking for
 default` → `engine ready (5 tracks, device default)`.
+
+## Master chain order (issue #7)
+
+```
+buses A/B/C + reverb + click + drums
+  -> static HP/LP      (setup: masterHp / masterLp)
+  -> DJ filter         (performance: g.dj, bipolar, centre = bypass)
+  -> master FX slot 1  (filter | delay | drive | tremolo)
+  -> master FX slot 2
+  -> Compander + clip2(0.98) * masterVol
+  -> hardware out, and the capture bus the export reads
+```
+
+Everything that can boost — a resonant sweep, a drive — is *before* the
+limiter, so the limiter sees it instead of the interface. The DJ filter is
+`MoogFF` rather than `BLowPass`/`BHiPass`: those recompute biquad coefficients
+whenever a parameter changes, which a sweep does every block, and their help
+file warns that a frequency near 0 produces glitches and very loud artefacts.
+`MoogFF` is a state-variable design built for sweeping, and the frequency is
+clamped to 20 Hz … 20 kHz regardless. At `dj = 0` the filter branch is not
+selected at all, so centre is a true bypass rather than a filter that happens to
+be transparent.
+
+The master FX slots compute all four candidate effects and `Select` one, because
+a UGen graph cannot short-circuit: the cost is one filter and one comb per slot,
+which is small next to five tracks of `BufRd`/`BufWr`, and it means a slot can be
+switched while it plays instead of rebuilding the master synth.

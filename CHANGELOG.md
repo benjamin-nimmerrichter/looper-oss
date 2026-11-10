@@ -8,6 +8,18 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ### Added
 
+- **Performance FX on the master (#7).** A bipolar **DJ filter** knob on the main
+  screen — centre is a hard bypass, left sweeps a low pass down, right a high pass
+  up, with resonance — and **two master FX slots** (filter, delay, drive,
+  tremolo) with live knobs, saved in the config. Both sit before the limiter, so
+  a resonant sweep is caught rather than clipping. The filter is `MoogFF`, not the
+  `BLowPass` biquads: those recompute coefficients on every change (a sweep
+  changes them every block) and glitch near 0 Hz, both of which their own
+  documentation warns about. The `Knob` primitive gained a centre detent and a
+  double-tap reset, because a performance control you cannot reset mid-song is a
+  trap. Verified at the master meter: bypass 0.0062 → low pass 0.0000, high pass
+  0.0035, back to 0.0059; a filter slot at the bottom of its range 0.0000 against
+  0.0156 bypass.
 - **MERGE LAYERS and MERGE TRACKS by selection (#6).** The four layers of a track
   can be joined into one (`merge` on the track, tap to arm — it is destructive),
   and `svc mergeTracks dst src…` joins only the tracks you name instead of every

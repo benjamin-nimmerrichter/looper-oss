@@ -75,8 +75,11 @@ export function Fader({ min = 0, max = 1, value = 0, format = (v) => v.toFixed(2
 }
 
 /** Rotary knob: vertical drag, 270 degree sweep. */
-export function Knob({ min = 0, max = 1, value = 0, label = "", format = (v) => v.toFixed(2), onInput, curve = 1 }) {
-  // curve > 1 gives finer control at the low end (frequencies, thresholds)
+export function Knob({ min = 0, max = 1, value = 0, label = "", format = (v) => v.toFixed(2), onInput, curve = 1, center = null }) {
+  // curve > 1 gives finer control at the low end (frequencies, thresholds).
+  // `center` makes it a bipolar performance knob: a detent mark at that value
+  // and a double tap that returns to it, because a knob you cannot reset
+  // mid-song is a trap.
   const root = el("div", "knobwrap");
   const knob = el("div", "knob");
   const ring = el("div", "ring");
@@ -87,6 +90,10 @@ export function Knob({ min = 0, max = 1, value = 0, label = "", format = (v) => 
   root.append(knob, cap, read);
 
   let v = clamp(value, min, max);
+  if (center !== null) {
+    root.classList.add("bipolar");
+    root.style.setProperty("--center", (center - min) / (max - min));
+  }
   const toNorm = (x) => Math.pow(clamp((x - min) / (max - min), 0, 1), 1 / curve);
   const fromNorm = (p) => min + (max - min) * Math.pow(clamp(p, 0, 1), curve);
   const draw = () => {
@@ -114,9 +121,20 @@ export function Knob({ min = 0, max = 1, value = 0, label = "", format = (v) => 
     if (!knob.hasPointerCapture(e.pointerId)) return;
     set(fromNorm(startP + (startY - e.clientY) / 150));
   });
+  let lastTap = 0;
   const end = (e) => {
     if (knob.hasPointerCapture(e.pointerId)) knob.releasePointerCapture(e.pointerId);
     root.classList.remove("active");
+    // double tap returns a bipolar knob to its detent
+    if (center !== null) {
+      const now = performance.now();
+      if (now - lastTap < 320) {
+        lastTap = 0;
+        set(center);
+        return;
+      }
+      lastTap = now;
+    }
   };
   knob.addEventListener("pointerup", end);
   knob.addEventListener("pointercancel", end);

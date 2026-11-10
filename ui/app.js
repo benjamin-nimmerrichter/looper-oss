@@ -80,6 +80,18 @@ const act = (a, t = 0) => send({ op: "act", a, t });
 const svc = (what, args = []) => send({ op: "svc", what, args });
 const cfgSet = (path, v) => send({ op: "cfg", path, v });
 
+// Master FX slots (#7): the effect types the engine can build, and what each
+// one's two knobs mean -- a label that names the parameter is worth more than a
+// dead pair of knobs that says "A" and "B" for every type.
+const FX_TYPES = ["slot 1", "slot 2"];
+const FX_KNOBS = {
+  0: ["a", "b"],
+  1: ["cutoff", "resonance"],
+  2: ["time", "feedback"],
+  3: ["drive", "tone"],
+  4: ["rate", "depth"],
+};
+
 function connect() {
   ws = new WebSocket(wsUrl);
   ws.onopen = () => {
@@ -426,6 +438,20 @@ function buildTransport() {
     min: 0, max: 1.2, value: 0.8, format: (v) => `${Math.round(v * 100)}`,
     onInput: (v) => set("g.masterVol", v),
   });
+  // The DJ filter: one bipolar knob, centre is a hard bypass, left sweeps a low
+  // pass down, right a high pass up. Built to be grabbed mid-song, so it lives
+  // here on the main screen, not in a drawer, and a double tap puts it back to
+  // centre.
+  const dj = Knob({
+    min: -1, max: 1, value: 0, center: 0, label: "dj filter",
+    format: (v) => {
+      if (Math.abs(v) < 0.01) return "off";
+      if (v < 0) return `LP ${Math.round(20 * 20000 ** (1 + v))} Hz`;
+      return `HP ${Math.round(20 * 1000 ** v)} Hz`;
+    },
+    onInput: (v) => set("g.dj", v),
+  });
+  g4.append(dj);
   g4.append(masterFader);
 
   // Rhythm engine: 16 synthesised kits, 200 patterns. Driven through the config
@@ -450,7 +476,7 @@ function buildTransport() {
   gr.append(rOn, rKit, rPat);
 
   root.append(g0, g1, g2, gpos, g3, gr, g4);
-  ui.transport = { bpmVal, bpmFader, bars, metro, countIn, masterFader, posVal };
+  ui.transport = { bpmVal, bpmFader, bars, metro, countIn, masterFader, posVal, dj };
 }
 
 /* ----------------------------------------------------------------- tracks -- */
@@ -1104,7 +1130,47 @@ function renderSettings() {
       rowStepper("room size", "loop.room", {
         min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%`,
       }),
+      // the DJ knob's resonance lives here; the knob itself is on the main
+      // screen, because that is where a hand is
+      rowStepper("dj resonance", "master.djRes", {
+        min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%`,
+      }),
     );
+
+    // Two master FX slots. `type` is a config value (it is setup, and survives a
+    // restart); the two knobs are live parameters of the chosen effect.
+    const fxc = card(body, "master FX");
+    FX_TYPES.forEach((name, slot) => {
+      const opts = [
+        { label: "off", value: 0 },
+        { label: "filter", value: 1 },
+        { label: "delay", value: 2 },
+        { label: "drive", value: 3 },
+        { label: "tremolo", value: 4 },
+      ];
+      const sel = Select({
+        options: opts,
+        value: Math.round(Number(getPath(CFG, `master.fx${slot + 1}Type`) ?? 0)),
+        onPick: (v) => cfgSet(`master.fx${slot + 1}Type`, Number(v)),
+      });
+      fxc.append(settingsRow(`${name}`, sel));
+      // the knobs are labelled by what they do *for the chosen type*: one set of
+      // controls that means the right thing is better than five dead pairs
+      const labels = FX_KNOBS[Number(getPath(CFG, `master.fx${slot + 1}Type`) ?? 0)];
+      ["A", "B"].forEach((k, idx) => {
+        fxc.append(
+          settingsRow(`  ${labels[idx]}`, Knob({
+            min: 0, max: 1, value: Number(getPath(CFG, `master.fx${slot + 1}${k}`) ?? 0.5),
+            label: `${name} ${labels[idx]}`,
+            format: (v) => `${Math.round(v * 100)}%`,
+            onInput: (v) => {
+              set(`g.fx${slot + 1}${k}`, v);
+              cfgSet(`master.fx${slot + 1}${k}`, v);
+            },
+          })),
+        );
+      });
+    });
   }
 
   if (settingsTab === "clock") {
@@ -1356,6 +1422,11 @@ function onState(s) {
       });
     }
     ui.master.vol.setValue(s.masterVol);
+    // the DJ knob follows the engine: a MIDI pedal can move it, and after a
+    // restart it comes back centred, which the knob must show
+    if (ui.transport?.dj && !ui.transport.dj.classList.contains("active")) {
+      ui.transport.dj.setValue(s.dj ?? 0);
+    }
   }
 
   s.tracks.forEach((t, i) => {

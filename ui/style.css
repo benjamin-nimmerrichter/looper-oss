@@ -426,6 +426,18 @@ body.no-master #master { display: none; }
   gap: 0.2rem;
   padding: 0.25rem 0;
 }
+/* a bipolar knob shows where its detent is, so "back to centre" is visible */
+.knobwrap.bipolar .knob::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0.15rem;
+  width: 2px;
+  height: 0.5rem;
+  transform: translateX(-50%);
+  background: var(--dim);
+  opacity: 0.7;
+}
 .knob {
   position: relative;
   width: max(var(--tap), calc(4.4rem * var(--k)));

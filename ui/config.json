@@ -203,5 +203,14 @@
     "on": 0,
     "kit": 0,
     "pattern": 0
+  },
+  "master": {
+    "djRes": 0.35,
+    "fx1Type": 0,
+    "fx1A": 0.5,
+    "fx1B": 0.5,
+    "fx2Type": 0,
+    "fx2A": 0.5,
+    "fx2B": 0.5
   }
 }
