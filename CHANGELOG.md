@@ -8,6 +8,14 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ### Added
 
+- **Ableton Link (#4).** The looper can follow tempo and bar phase from Link
+  peers on the local network — Link ships inside SuperCollider 3.14, so this adds
+  no dependency. Off is the internal clock; on with no peer keeps our own tempo
+  and says so. Link is used as a *reference*, not as the transport (the grid is a
+  server-side `Phasor`), and the phase is corrected by nudging the rate rather
+  than jumping the play head, so a correction cannot click. Verified against a
+  real second SuperCollider peer: 120 → 140 bpm followed within a second, no peer
+  120 → 120, and off restores the configured tempo.
 - **Performance FX on the master (#7).** A bipolar **DJ filter** knob on the main
   screen — centre is a hard bypass, left sweeps a low pass down, right a high pass
   up, with resonance — and **two master FX slots** (filter, delay, drive,

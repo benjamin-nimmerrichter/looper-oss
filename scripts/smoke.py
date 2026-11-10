@@ -1058,6 +1058,31 @@ async def run_tests(c: Client) -> None:
     await c.set("g.bars", bars_m4)
     await c.act("stop", L)
 
+    # ---- #4: Ableton Link, the paths that need no peer ---------------------
+    # A live peer cannot be assumed here, so the suite covers what a machine
+    # without one must do: enable, keep our tempo, and come back on disable.
+    # The with-peer tempo change was verified by hand against a second sclang.
+    try:
+        await c.cfg("clock.link", 1)
+        lk = await c.wait(lambda m: m.get("t") == "link" and m.get("on") == 1, 12)
+        await asyncio.sleep(1.5)
+        st = await c.wait(lambda m: m.get("t") == "s", 5)
+        bpm_held = st is not None and abs(st["bpm"] - 120.0) < 3.0
+        check("link can be enabled with no peer and keeps our tempo",
+              lk is not None and bpm_held,
+              f"status={lk} bpm={st['bpm'] if st else '?'}")
+
+        await c.cfg("clock.link", 0)
+        await asyncio.sleep(1.5)
+        st = await c.wait(lambda m: m.get("t") == "s", 5)
+        check("link off returns to the configured tempo",
+              st is not None and abs(st["bpm"] - 120.0) < 0.5,
+              f"bpm={st['bpm'] if st else '?'}")
+    except Exception as exc:                       # noqa: BLE001 - report, don't crash
+        check("link can be enabled with no peer and keeps our tempo", False, repr(exc))
+    finally:
+        await c.cfg("clock.link", 0)
+
     # ---- the engine never complains ---------------------------------------
     # sclang reports a bad guard or a broken UGen by posting an ERROR line and
     # carrying on, so a suite that only reads behaviour cannot see it. That is

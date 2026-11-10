@@ -160,7 +160,11 @@ s.latency = 0.02;
 ~phaseRate   = { 1 / (~loopSeconds.value * s.sampleRate) };
 // rate is applied through here so a parked clock survives tempo changes
 ~applyRate   = {
-~transport.set(\rate, if ((~state[\gridOn] ? 1) == 1, { ~phaseRate.value }, { 0 }));
+// `~linkCorrection` is 1 unless Ableton Link is nudging the grid: that is the
+// soft correction, so a phase fix is a rate change and never a jump in the
+// play head (a jump would click).
+~transport.set(\rate, if ((~state[\gridOn] ? 1) == 1,
+	{ ~phaseRate.value * (~linkCorrection ? 1) }, { 0 }));
 // the rhythm clock follows bpm, so it has to hear about a tempo change
 if (~rhythmSynth.notNil) { ~rhythmSynth.set(\bpm, ~state[\bpm]) };
 };
@@ -174,6 +178,13 @@ if (~rhythmSynth.notNil) { ~rhythmSynth.set(\bpm, ~state[\bpm]) };
 if (~hasVST) {
 	~vstFile = "engine/vst.scd".standardizePath;
 	if (File.exists(~vstFile)) { ~vstFile.load };
+};
+// Ableton Link ships inside SuperCollider 3.14, but it is still optional: probe
+// it and keep every reference in its own file (invariant 15).
+~hasLink   = \LinkClock.asClass.notNil;
+if (~hasLink) {
+	~linkFile = "engine/link.scd".standardizePath;
+	if (File.exists(~linkFile)) { ~linkFile.load };
 };
 
 // ------------------------------------------------------------------ defs ----
@@ -1164,6 +1175,7 @@ if (~hasVST) {
 			// #7 performance controls. dj is bipolar: 0 is an exact bypass,
 			// negative sweeps a low pass down, positive a high pass up.
 			"dj",          { ~state[\dj] = v.clip(-1, 1); ~master.set(\dj, ~state[\dj]) },
+			"link",        { if (~hasLink) { if (v > 0.5, { ~linkOn.value }, { ~linkOff.value }) } },
 			"djRes",       { ~state[\djRes] = v.clip(0, 1);
 				~master.set(\djRes, ~state[\djRes]) },
 			"fx1Type",     { ~master.set(\fx1Type, v.asInteger.clip(0, 4)) },
@@ -1789,7 +1801,8 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			"master",    { ~bridge.sendMsg('/ldmaster', ~state[\masterL], ~state[\masterR]) },
 			// clock diagnostics: is the transport alive, and is it being told to run
 			"diag",      { ~bridge.sendMsg('/lddiag', (~state[\gridOn] ? 1),
-				(~beatCount ? 0), (~clockPollMode == true).asInteger, ~pollBeats ? -1) },
+				(~beatCount ? 0), (~clockPollMode == true).asInteger, ~pollBeats ? -1,
+				if (~hasLink && ~link.notNil, { (~link.tempo * 60) }, { -1 })) },
 			// #6: MERGE TRACKS by selection -- svc mergeTracks dst src1 [src2 ...]
 			"mergeTracks", {
 				var dstIdx = (msg[2] ? 0).asInteger;
@@ -2054,6 +2067,9 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		~bridge.sendMsg('/ldstate', *a);
 	};
 
+	// Link is configuration, so a restart comes back the way it was left
+	if (~hasLink && (((~cfg[\clock] ? ())[\link] ? 0) == 1)) { ~linkOn.value };
+
 	~stateLoop = {
 		fork {
 			var tick = 0;
@@ -2061,6 +2077,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 				~sendState.value;
 				tick = tick + 1;
 				if (tick % 20 == 0) { ~autosaveTick.value };
+				if ((tick % 2 == 0) && ~hasLink) { ~linkTick.value };
 				if (tick % 2 == 0) {
 					// plain /b_getn: the reply lands in one persistent responder.
 					// Buffer:getToFloatArray installs a timeout per call and warns

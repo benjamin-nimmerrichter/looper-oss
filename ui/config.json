@@ -33,7 +33,8 @@
     "clickVol": 0.3,
     "countInBars": 1,
     "accentHz": 1580,
-    "clickHz": 1050
+    "clickHz": 1050,
+    "link": 0
   },
   "midi": {
     "device": null,

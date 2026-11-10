@@ -89,6 +89,7 @@ CFG_TO_ENGINE = {
     "loop.room": "room",
     "clock.clickVol": "clickVol",
     "clock.countInBars": "countIn",
+    "clock.link": "link",
     "loop.monitor": "monitor",
 }
 
@@ -626,12 +627,20 @@ def on_auto(_addr: str, *args: Any) -> None:
         push({"t": "auto", "i": inum(args[0])})
 
 
+def on_link(_addr: str, *args: Any) -> None:
+    """Ableton Link status: peer count, tempo, on/off. Not per-frame state."""
+    push({"t": "link", "peers": inum(args[0]) if args else 0,
+          "bpm": fnum(args[1]) if len(args) > 1 else 0,
+          "on": inum(args[2]) if len(args) > 2 else 0})
+
+
 def on_diag(_addr: str, *args: Any) -> None:
     """Clock diagnostics: gridOn, transport alive, poll mode, last polled beat."""
     push({"t": "diag", "gridOn": inum(args[0]) if args else 0,
           "beats_seen": inum(args[1]) if len(args) > 1 else 0,
           "poll": inum(args[2]) if len(args) > 2 else 0,
-          "beats": fnum(args[3]) if len(args) > 3 else -1})
+          "beats": fnum(args[3]) if len(args) > 3 else -1,
+          "link_bpm": fnum(args[4]) if len(args) > 4 else -1})
 
 
 def on_merged(_addr: str, *args: Any) -> None:
@@ -1005,7 +1014,7 @@ async def main() -> None:
         ("/ldvstcatalog", on_vst_catalog), ("/ldmidimap", on_midi_map),
         ("/ldmidi", on_midi_event), ("/ldrhythm", on_rhythm), ("/ldvstbanks", on_vst_banks), ("/ldinputs", on_inputs), ("/ldimport", on_import), ("/ldmididevs", on_midi_devices),
         ("/ldauto", on_auto), ("/ldsilent", on_silent), ("/ldmerged", on_merged),
-        ("/lddiag", on_diag), ("/ldready", on_ready), ("/ldbootfail", on_boot_fail), ("/ldprobe", on_probe), ("/ldtap", on_tap),
+        ("/lddiag", on_diag), ("/ldlink", on_link), ("/ldready", on_ready), ("/ldbootfail", on_boot_fail), ("/ldprobe", on_probe), ("/ldtap", on_tap),
         ("/ldsaved", on_saved), ("/ldloaded", on_loaded), ("/ldloaderr", on_loaderr),
         ("/ldcapturing", on_capturing), ("/ldexported", on_exported),
     ):

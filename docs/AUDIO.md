@@ -328,7 +328,7 @@ default` → `engine ready (5 tracks, device default)`.
 
 ## Master chain order (issue #7)
 
-```
+```text
 buses A/B/C + reverb + click + drums
   -> static HP/LP      (setup: masterHp / masterLp)
   -> DJ filter         (performance: g.dj, bipolar, centre = bypass)
@@ -352,3 +352,44 @@ The master FX slots compute all four candidate effects and `Select` one, because
 a UGen graph cannot short-circuit: the cost is one filter and one comb per slot,
 which is small next to five tracks of `BufRd`/`BufWr`, and it means a slot can be
 switched while it plays instead of rebuilding the master synth.
+
+## Ableton Link (issue #4)
+
+Link is in SuperCollider 3.14 (`SCClassLibrary/External/Ableton/LinkClock`), so it
+is library-first: no quark, no vendored code, and it is local multicast rather
+than the internet. `engine/link.scd` is loaded only when `\LinkClock.asClass.notNil`
+(invariant 15) and the main engine never names a Link class.
+
+**Link is a reference, not the transport.** The grid here is a server-side
+`Phasor` on `phaseBus`, so there is nothing for a `TempoClock` to schedule.
+`~linkTick` is polled from the state loop at 10 Hz and does two things:
+
+- **Tempo.** `bpm = link.tempo * 60` — `LinkClock:tempo` is beats per *second*,
+  and the help file's own example multiplies by 60. Getting that wrong makes the
+  looper run at 1/60 or 60× the session tempo. The new tempo goes through
+  `~state[\bpm]`, so the transport rate and every track's `beatLen` follow.
+- **Phase.** The rate is nudged by up to ±15 % until the engine's loop phase
+  matches Link's phase within the quantum, which is set once at enable to
+  `bars × beatsPerBar` and never touched again (*"it is risky to change quantum
+  during a performance"*, and a quantum change can change the beat duration).
+  A nudge is a rate change, not a jump in the play head, so a correction cannot
+  click.
+
+The honest limitation: `~state[\phase]` is counted per beat, so the phase
+comparison has a resolution of one beat of the loop. In practice the loop locks
+to within a beat of Link's barline and the *tempo* tracks exactly. Locking the
+phase in sub-beat resolution would need a continuous play-head position from the
+server, which is a bigger change than this round carries.
+
+Two traps, both paid for:
+
+- **A LinkClock must be created at our tempo.** `LinkClock.new(1)` means one beat
+  per second; if SuperCollider is the first peer it *creates* the session and the
+  looper drops to 60 bpm. It is created with `~state[\bpm] / 60` instead, and an
+  existing session overrides it anyway.
+- **A peer that sets its tempo before joining loses it.** The newcomer adopts the
+  session's tempo when it joins, so the change must come after. That cost one
+  false "Link does not follow" result before the peer script waited.
+
+Turning Link off restores `bpm` from the config, because the internal tempo is
+what the player set, not whatever the session was running at.

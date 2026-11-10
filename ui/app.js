@@ -247,6 +247,15 @@ function handle(m) {
       setBoot(`engine failed to start: ${m.msg}`, false, true);
       console.error("engine boot failed:", m.msg);
       break;
+    case "link": {
+      const el2 = document.getElementById("linkstatus");
+      if (el2) {
+        el2.textContent = !m.on ? "off"
+          : m.peers > 0 ? `${m.peers} peer${m.peers === 1 ? "" : "s"} · ${Math.round(m.bpm)} bpm`
+          : "on, no peer";
+      }
+      break;
+    }
     case "audio":
       // the engine opened a different device than the one asked for, or fell
       // back to the default: the meters can move while nothing is heard
@@ -1187,6 +1196,15 @@ function renderSettings() {
         min: 200, max: 4000, step: 20, format: (v) => `${v} Hz`, hint: "restart",
       }),
     );
+    // Ableton Link: tempo and phase in from the rest of the rig. Off means the
+    // internal clock with no residue; on with no peer keeps our own tempo.
+    const lk = card(body, "ableton link");
+    lk.append(rowToggle("follow link", "clock.link", {
+      hint: "tempo and bar phase from Link peers on the network",
+    }));
+    const status = el("div", "caption", "no peer");
+    status.id = "linkstatus";
+    lk.append(settingsRow("status", status));
   }
 
   if (settingsTab === "ui") {

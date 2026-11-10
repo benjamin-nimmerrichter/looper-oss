@@ -59,6 +59,7 @@ SynthDefs): `\ld_meter` writes `BufWr.kr` into a 64-frame buffer, sclang sends
 | `/ldloaderr` | `tag, message` | |
 | `/ldprobe` | `track, layers, contentLen, recOn, playing, meterL, meterR, g0..g3, peak0..peak3` | diagnostic: what is actually in the layer buffers |
 | `/lddiag` | `gridOn, beats_seen, pollMode, lastPolledBeat` | clock diagnostics: is the transport being told to run, and are beats arriving |
+| `/ldlink` | `peers, bpm, on` | Ableton Link status, sent when it changes (peer count or enable) — a status, not per-frame state |
 | `/ldmerged` | `track, ok` | MERGE LAYERS finished (`1`) or was refused (`0`: fewer than two layers, or a take is open) |
 | `/ldcapturing` | `seconds` | export started |
 | `/ldexported` | `path` | export finished |
