@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import functools
 import importlib.util
 import json
@@ -125,31 +126,68 @@ def resolve_home(bundled: bool) -> pathlib.Path:
 CONFIG_VERSION = 3   # bump when a shipped default changes meaning
 
 
-def migrate_config(path: pathlib.Path) -> None:
+def fill_defaults(cfg: dict, defaults: dict) -> list[str]:
+    """Add every key this build expects that the user's config does not have.
+
+    An upgrade keeps `ui/config.json`, and that is the point -- bpm, device,
+    MIDI map. The other half of it is a build that reads a key the older file
+    has never heard of. Today every consumer of `~cfg` / `CFG` has to be
+    defensive (`? 0`, `?.`) or it reads nil, and one missed guard is a silent
+    boot failure on exactly the machines that have been running the longest.
+    Filling the gaps once, at the update, keeps the two in step: values the
+    user owns always win, and only keys they never had get a default.
+    """
+    added = []
+    for key, value in defaults.items():
+        if key not in cfg:
+            cfg[key] = copy.deepcopy(value)
+            added.append(key)
+        elif isinstance(value, dict) and isinstance(cfg[key], dict):
+            added += [f"{key}.{a}" for a in fill_defaults(cfg[key], value)]
+    return added
+
+
+def migrate_config(path: pathlib.Path, defaults: pathlib.Path | None = None) -> None:
     """Carry an older user config forward without touching their tuning.
 
-    `stage()` now keeps `ui/config.json` across an update, which is the whole
+    `stage()` keeps `ui/config.json` across an update, which is the whole
     point -- a musician's bpm, track count, audio device and MIDI map must
-    survive installing a new build. The other half of that promise: when a
-    *default* was wrong and shipped, an old config keeps the wrong value
-    forever unless it is deliberately migrated. Configs older than 3 are the
-    ones that shipped `autoDub: 0`, which stopped a take at the bar instead of
-    carrying it into an overdub.
+    survive installing a new build. Two things make that safe rather than
+    merely convenient:
+
+    * `defaults` (the shipped config of the build being installed) fills in
+      keys the old file lacks, so a config from a version that predates the
+      rhythm section, the VST banks or `overdubMode` cannot reach the engine
+      with those keys missing.
+    * a *default* that was wrong when it shipped stays wrong forever otherwise.
+      Configs older than 3 are the ones that shipped `autoDub: 0`, which
+      stopped a take at the bar instead of carrying it into an overdub.
     """
     try:
         cfg = json.loads(path.read_text())
     except (OSError, ValueError):
         return
+    if not isinstance(cfg, dict):
+        return
+    before = json.dumps(cfg, sort_keys=True)
+    if defaults is not None:
+        try:
+            shipped = json.loads(defaults.read_text())
+        except (OSError, ValueError):
+            shipped = None
+        if isinstance(shipped, dict):
+            fill_defaults(cfg, shipped)
     try:
         version = int(cfg.get("version", 0) or 0)
     except (TypeError, ValueError):
         version = 0
-    if version >= CONFIG_VERSION:
+    if version < CONFIG_VERSION:
+        loop = cfg.get("loop")
+        if isinstance(loop, dict):
+            loop["autoDub"] = 1      # 0.1.0 shipped this off; the RC-505 carries on
+        cfg["version"] = CONFIG_VERSION
+    if json.dumps(cfg, sort_keys=True) == before:
         return
-    loop = cfg.get("loop")
-    if isinstance(loop, dict):
-        loop["autoDub"] = 1          # 0.1.0 shipped this off; the RC-505 carries on
-    cfg["version"] = CONFIG_VERSION
     with contextlib.suppress(OSError):
         path.write_text(json.dumps(cfg, indent=2) + "\n", newline="\n")
 
@@ -197,7 +235,8 @@ def stage(src: pathlib.Path, dst: pathlib.Path) -> None:
         if path.is_file():
             with contextlib.suppress(OSError):
                 shutil.copy2(path, tmp / "ui" / path.name)
-    migrate_config(tmp / "ui" / "config.json")
+    # the shipped default is what an old config is completed from, so pass it
+    migrate_config(tmp / "ui" / "config.json", src / "ui" / "config.json")
     if dst.exists():
         try:
             shutil.rmtree(dst)
@@ -217,12 +256,32 @@ def fatal(message: str) -> None:
 
 # ------------------------------------------------------------------ helpers --
 def load_config(home: pathlib.Path) -> dict[str, Any]:
+    """Read the user's config, falling back to the last good copy.
+
+    `apply_config` in the bridge copies the file to `config.json.bak` before
+    every write, so a write that was cut short (power, disk full, a crash) has
+    one intact predecessor. A half-written JSON is the one failure a musician
+    cannot debug, and refusing to start is the worst possible answer to it.
+    """
     path = home / "ui" / "config.json"
-    try:
-        return json.loads(path.read_text())
-    except (OSError, ValueError) as exc:
-        fatal(f"cannot read {path}\n{exc}\n\nThe file must be valid JSON.")
-        return {}
+    backup = path.with_name("config.json.bak")
+    for candidate in (path, backup):
+        try:
+            cfg = json.loads(candidate.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(cfg, dict):
+            continue
+        if candidate != path:
+            print(f"{path} is unreadable; started from {backup.name} instead",
+                  file=sys.stderr)
+            with contextlib.suppress(OSError):
+                shutil.copy2(candidate, path)
+        return cfg
+    fatal(f"cannot read {path}\n\nThe file must be valid JSON, and there is no "
+          f"usable {backup.name} beside it.\nReinstalling the application "
+          f"writes a fresh one; your recordings in sessions/ are untouched.")
+    return {}
 
 
 def port_free(port: int) -> bool:

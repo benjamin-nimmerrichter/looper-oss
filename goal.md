@@ -1,468 +1,824 @@
-# goal.md — Looper OSS 0.2: legible, standalone, and closing the RC-505 gap
+# goal.md — Looper OSS 0.4.0: the six open issues
 
-This is the plan for the next round, written before the work. The plan the first
-release was built against is archived at [`docs/goal-0.1.md`](docs/goal-0.1.md);
-everything in it is shipped.
+This is the plan for the next round, written before the work. The plans earlier
+releases were built against are archived: [`docs/goal-0.1.md`](docs/goal-0.1.md),
+[`docs/goal-0.2.md`](docs/goal-0.2.md),
+[`docs/goal-0.3.0.md`](docs/goal-0.3.0.md). Everything in them is shipped.
 
-## Context
+0.3.0 is out and the instrument works: five tracks, four layers, four VST inserts
+per track, rhythm, MIDI gestures, 99 memories, sessions, backup, Windows. What is
+left is six GitHub issues, and they are **not the same kind of thing** — treating
+them the same is how a round turns into a vague promise.
 
-0.1.0 works: record → close into an overdub → layers → undo, five tracks, touch
-UI, AppImage. Using it for real surfaced three gaps about the *package* and the
-*readout* more than the audio engine, plus a tracker issue that is a whole
-feature matrix.
+| issue | kind | what it actually is | milestone |
+| --- | --- | --- | --- |
+| #5 looping removes sounds | defect, **data loss** | content, gain and undo can disagree | M1 |
+| #1 sleep kills the audio | defect, **silence** | detection works; the device is unverified | M2 |
+| #6 merge tracks | feature, small | the hard part (`\ld_bounce`) already exists | M3 |
+| #7 performance FX | feature, new surface | master FX with live knobs + a DJ filter | M4 |
+| #4 Ableton Link | integration | `LinkClock` ships in the SuperCollider we target | M5 |
+| #3 RC-505 parity | **roadmap** | 10 sections of a hardware manual | M6 |
 
-1. **You cannot see where you are in the bar.** The only position indicator is
-   the blue playhead line. A musician counting a four-bar loop wants `bar 3 ·
-   beat 2`.
-2. **Input routing is invisible.** `\ld_track` has always had an `input` selector
-   (stereo sum / channel 1 / channel 2), so mic-on-L + guitar-on-R already works —
-   but it is buried in the FX drawer, labelled `STEREO / CH 1 / CH 2`, and
-   hard-coded to two channels although `audio.in` allows 16.
-3. **The AppImage still asks for things** (see Phase C for the measured cost).
+There is a seventh item, reported outside the tracker: **the playhead hides its
+own ruler**. It is two CSS declarations and a regression check, so it rides along
+with M0 rather than earning a milestone.
 
-## Constraints (unchanged)
+The rule for the whole round: **a milestone is done when there is evidence, not
+when the code compiles.** For the two defects that means a measurement that fails
+before and passes after. For the features it means a check in `scripts/smoke.py`
+that would fail if the feature were removed.
 
-- Library-first: audio is stock SuperCollider / sc3-plugins UGens. No hand-written DSP.
-- One config file (`ui/config.json`); the launcher generates `engine/_config.scd`.
-- No UI build step, no runtime network.
-- Touch first: targets ≥ 48 px; destructive actions use tap-to-arm, never a
-  long-press (a touchscreen claims the hold for its context menu).
-- `/ldstate` stays flat and positional: a new field means engine array +
-  `GLOBAL_FIELDS`/`TRACK_FIELDS` + `onState`, all three, and the suite's counts.
+**How to read this file.** §1 maps every requirement of every issue to a status
+and a milestone, so nothing is silently dropped. §2 is what was actually measured
+or read out of the tree before planning, including the SuperCollider documentation
+that changes how M4 and M5 have to be built. §4 is the work. §5 is the decisions
+that need a human. §6–§9 are the boundaries.
 
 ---
 
-## Phase A — position in bars and beats — **done**
+## 1. Issue traceability
 
-The engine already sends `phase` (0..1 over the loop), `bars` and `beatsPerBar`,
-so this is arithmetic in the browser: it eases along the same `playPos` as the
-playhead, so the number and the line can never disagree, and only touches the DOM
-when the beat changes. No protocol change.
+Statuses below are read from the code and the suite, not from `FEATURES.md`
+(which has drifted — M6 fixes it).
 
-## Phase B — input routing that matches a real interface — **done**
+### #5 — Looping does sometimes remove sounds → **M1**
 
-- `~inputChannels` builds the source list from `audio.in` when the SynthDef is
-  compiled: index `0` is the stereo sum, `1..n` are the mono channels, `n+1` the
-  internal test bus. Backwards compatible (`1` = channel 1, `2` = channel 2).
-- The UI builds its list from `audio.in` (`stereo`, `L`, `R`, `ch 3…`), and the
-  track header shows a badge (`IN L`) so the choice is visible without opening
-  the drawer.
-- Docs: worked example in the README, a row in `CONTROLS.md`, a section in
-  `AUDIO.md`.
-
-## Phase C — how much of the AppImage can carry everything
-
-Measured on the build machine, because the answer decides the design:
-
-| stack | closure | largest pieces |
-| --- | --- | --- |
-| GTK 3 + WebKit2GTK | 281 MB, 138 libs | WebKit 98.6, JavaScriptCore 40.6, ICU 33.1 |
-| SuperCollider | 477 MB, 242 libs | Qt6WebEngine 203.7, ffmpeg 22, x265 20.8 (sclang links Qt) |
-
-Bundling both is ~760 MB of libraries → a ~300 MB AppImage that only runs within
-the same glibc generation, with WebKit's bubblewrap sandbox as a known failure
-mode. Decision for 0.2: **do not bundle them**; instead the app names what is
-missing and installs it in one step (`--install-deps`, shipped). Full bundling
-stays on the table as a separate "fat" variant, and only if a machine without
-those packages actually has to run it.
-
-## Phase D — RC-505mkII parity (issue #3) — status
-
-| | |
+| what the issue says | status |
 | --- | --- |
-| D1 speed · D2 layer tricks · D4 mixer/routing · D5 rhythm · D6 MIDI · D7 memories · D8 rest | **done**, each verified in `scripts/smoke.py` |
-| D3 FX banks | **done** — 4 insert slots, 4 recallable banks, an eight-step sequencer, toggle/momentary per slot |
-| Phase E drawer screenshots | blocked: this sandbox's rasteriser turns text inside composited layers into wrong glyphs; `scripts/shots.py` is ready for a GPU machine |
+| auto layering works badly | 3 mechanisms found, see §2 |
+| "deletes the sounds instead of dubbing every loop over the last" | REPLACE mode mutes everything below (`~commit`) |
+| "sounds get deleted when a silent part overdubs an already recorded layer" | same, plus a silent take commits as a mute |
 
+### #1 — Audio stops working after sleep → **M2**
 
-Issue #3 lists the hardware's manual. It is a roadmap, not a sprint. Ordered the
-way it can be built on what already exists:
-
-### D1 — playback speed, per track — **done**
-Half, double and continuous `loopRatio` (the engine already has `loopRatio` per
-track; the UI and the transport rate need to expose 0.25×–4× continuously).
-Speed changes pitch (varispeed) — the hardware's pitch-preserving mode is
-time-stretch, which stays a non-goal.
-
-### D2 — the layer tricks — **done**
-- **Mark Back:** return to a previous state of the layer stack without stepping
-  through undo one layer at a time (the `undone` counter already tracks it).
-- **Bounce In:** sum several tracks into one and free the sources.
-- **Overdub modes:** replace-while-playing is the one we do not have; the layer
-  model already supports "record a new layer" and "gate the old one", so this is
-  a mode switch, not new DSP.
-- **Auto Rec:** the engine already has `\ld_autodetect`; it needs to be exposed
-  as a binding (see D6).
-
-### D3 — FX banks — **done** (four insert slots, four recallable banks, an eight-step sequencer, toggle/momentary per slot)
-4 simultaneous effects per track-bank, four banks, toggle/momentary, and a step
-sequence for parameters. The VST slot path (VSTPlugin) is the natural carrier:
-a bank is a list of plugin slots plus their parameters. The 49/53-effect
-libraries are the real cost and will be curated to what exists as free plugins,
-not invented.
-
-### D4 — mixer and routing — **done**
-Independent input mixer (2 mic + 2 stereo pairs), input EQ and mic compressors,
-3 stereo output buses with per-track routing, a headphone/cue mix. The engine
-already sums per-track stereo buses; this is bus gymnastics plus UI.
-
-### D5 — rhythm engine — **done** (synthesised)
-200 patterns and 16 kits. This is *content*, not code: the transport already has
-a phasor to trigger against. It needs a sample source whose licence allows
-redistribution (see `docs/LICENSING.md`), or generated patterns from stock UGens.
-
-### D6 — MIDI depth — **done**
-Press/hold/double-click per control, expression pedals, 16 assignable targets,
-save/recall of the map. The MIDI learn path exists; this is the mapping model and
-the UI to edit it.
-
-### D7 — memories, import/export, backup — **done**
-99 memories that store the whole session (tracks + FX + playback + control map +
-rhythm), WAV import, backup/restore as one archive. `sessions/slotN` is the seed;
-`session.json` already serialises the UI state.
-
-### D8 — the rest — **done (verified, not built)**
-
-All three bullets already hold, so they were audited rather than re-implemented:
-
-- **Independent per-track playback settings.** `CONTROLS.md` lists 21 per-track
-  controls, each sent as `set t<N>.<field>`: speed, loop ratio, reverse, fade
-  in/out, delay, high/low pass, gate, volume, pan, mute, reverb send, record
-  gain, and the record source.
-- **"Bounce to DAW" style export.** Two levels already exist: `save slot` writes
-  one WAV **per track per layer** (`sessions/slot1/t0_l0.wav`, `t0_l1.wav`, …),
-  which is stems; `export` bounces the master to
-  `sessions/exports/mixdown_*.wav`.
-- **Custom control assignments.** The MIDI map assigns any target (`t0.press`,
-  `g.stopAll`, …) to a CC or a note, and a note carries press/hold/double.
-  What does **not** exist is an on-screen button-layout editor — assignment is
-  through the map, not by dragging controls. That is the one gap, recorded here
-  rather than glossed over.
-
-**Scope honesty:** D1–D2 are reachable on the current engine. D3–D7 are each a
-release of their own, and D5 depends on a sample licence that does not exist yet.
-
-## Phase E — documentation and screenshots
-
-- README: input routing example, position readout, what the AppImage carries and
-  the measured reason it does not carry more.
-- `CONTROLS.md`: position readout, input source control, `driver = asio` row.
-- `AUDIO.md`: how many channels reach the engine and how `input` selects them.
-- **Every screenshot regenerated** after any UI change: seven settings tabs, the
-  main screen, the FX drawer.
-
----
-
-## Closed from the tracker
-
-| issue | state |
+| what the issue says | status |
 | --- | --- |
-| **#1** "audio stops working after the PC sleeps" | **fixed in 0.1.0** — the launcher detects the resume (realtime vs monotonic clock drift) and restarts the engine; the session comes back stopped. |
-| **#3** "not all RC-505mkII features implemented" | mapped to Phase D above. |
-| **#2** "Windows support not tested" | **deferred, deliberately.** It becomes its own task later: verify under Wine first, then a real Windows host. No Windows work is planned in this document. |
+| "when I exit sleep mode with the looper open, sound out stops" | suspend detection exists and is exercised by simulation; the device coming back is **not** verified |
 
-## Definition of done
+### #6 — Tracks should be able to merge → **M3**
 
-- [ ] `./scripts/smoke.py` → all checks, including per-track record source
-- [ ] `node scripts/uicheck.mjs` → `UI OK`, screenshots regenerated
-- [ ] `sclang /tmp/probe.scd` → no errors
-- [ ] the AppImage boots and plays on this machine
-- [ ] README/CONTROLS/AUDIO/PROTOCOL updated in the same change
-- [ ] `python3 scripts/sweep.py` → nothing left running
+| what the issue says | status |
+| --- | --- |
+| merge multiple tracks into one (Bounce In) | ✅ exists (`~bounce`, all tracks → one) |
+| merge a selection, not everything | ❌ M3 |
+| "record 4 drum layers and when happy join them" | ❌ M3 — per-track **layer** merge does not exist |
 
-## Risks / unknowns
+### #7 — There should be performance effects → **M4**
 
-1. **RC-505mkII parity is content-heavy.** The 49/53-effect libraries and the 200
-   rhythm patterns are the parts that cannot be written in a weekend, and the
-   drum kits need a redistributable sample licence.
-2. **Per-channel input past two** needs the device to actually expose that many
-   channels; `audio.in` already feeds `numInputBusChannels` and scsynth reports a
-   mismatch at boot.
-3. **Speed/pitch.** Half and double speed re-pitch. Anything that keeps pitch is
-   time-stretch, which stays out of scope.
+| what the issue says | status |
+| --- | --- |
+| 1–2 FX with knobs on the master | ❌ exists only as two steppers in the settings drawer |
+| configurable, tweakable live | ❌ no master FX slots at all |
+| DJ-style filter, filter sweep | ❌ HP/LP exist but no resonance, no knob, no sweep |
 
-## Non-goals
+### #4 — Ableton Link → **M5**
 
-- Time-stretch, timeline/arrangement, MIDI sequencing.
-- Bundling the audio server (see Phase C's numbers).
-- Windows support **in this round** — it is the whole of 0.3.0, below.
+| what the issue says | status |
+| --- | --- |
+| full integration | `LinkClock` verified working here; tempo + phase design in §4/M5 |
+| "useful for potential users" | local multicast only, no internet, house rules intact |
+
+### #3 — RC-505mkII parity → **M6** (subset) + declined list (§7)
+
+This issue is ten sections of a hardware manual plus its own acceptance criteria.
+Laid out against the code:
+
+#### 1. Loop Engine
+
+| requirement | status |
+| --- | --- |
+| 5 simultaneous stereo tracks | ✅ default 5, config 1–16 |
+| independent controls + volume fader per track | ✅ |
+| record / playback / overdub / clear per track | ✅ |
+| **3 overdub modes** | ⚠️ **2 of 3**: layer-on-top, and REPLACE. The third is not named by the issue → §5 decision D1 |
+| Undo / Redo | ✅ (M1 makes it consistent) |
+| Mark Back | ✅ |
+| Bounce In | ✅ → M3 adds selection and layer merge |
+| Auto Rec, assignable to a control | ❌ **dead code**: `\ld_autodetect` is created per track (`:361`, `:544`) with an `arm` argument that nothing ever sets — no set key, no action, no UI. The detector exists; the switch does not |
+
+#### 2. Playback Control
+
+| requirement | status |
+| --- | --- |
+| half and double speed | ✅ (½ · 1 · 2 · 4) |
+| continuously adjustable speed | ✅ 0.25×–4× per track |
+| **speed with or without pitch change** | ❌ **declined** — "without" is time-stretch, see §7 |
+| independent playback settings per track | ✅ |
+
+#### 3. Audio Effects
+
+| requirement | status |
+| --- | --- |
+| 49 Input FX / 53 Track FX types | ❌ **declined as written** — see §7 (VST carries this) |
+| up to 4 simultaneous effects | ✅ four VST insert slots per track |
+| 4 user-configurable banks | ✅ (`vst.banks`) |
+| save / recall combinations | ✅ |
+| toggle + momentary activation | ✅ per slot |
+| step sequence for parameters | ✅ eight-step, per slot |
+| Harmony / Electric FX | ❌ VST territory, declined (§7) |
+| dedicated FX/Track buttons per track | ✅ on a touchscreen, the drawers are the buttons |
+| customizable function assignments | ⚠️ the learn list is **fixed**: 4 actions per track (`press`/`stop`/`undo`/`clear`) plus `g.tap`/`g.stopAll`/`g.metro` (`ui/app.js:1147`). You map those targets; you cannot give a button a different function |
+| single press / hold / double-click | ✅ per note, three gestures |
+| up to 16 assignable targets | ✅ 23 at five tracks, and it scales with the track count |
+| secondary control layer via Undo/Redo | ❌ obscure hardware behaviour, needs definition → §5 D2 |
+
+#### 4. Audio Mixer & Routing
+
+| requirement | status |
+| --- | --- |
+| independent input mixer | ✅ `audio.inputGain[]` per channel |
+| ≥2 mic + 2 stereo line pairs | ✅ `audio.in` up to 16, per-track input selector (stereo sum / ch n / test bus) |
+| independent input channel volume | ✅ |
+| 2 dedicated mic compressors | ⚠️ one compressor **per track**, not per input channel |
+| independent EQ for all input channels | ⚠️ HP/LP per track, not per channel → M6 |
+| 3 stereo output buses | ✅ A / B / C |
+| output mixer, independent volumes | ✅ `g.busA/busB/busC` |
+| flexible routing of tracks to outputs | ✅ per-track route |
+| master reverb + compressor | ✅ `FreeVerb2` + `Compander` limiter |
+| dedicated headphone monitoring mix | ✅ the cue bus: `cueOn` / `cueSend` per track → output C |
+| monitor tracks and rhythm independently | ⚠️ tracks ✅ through the cue bus (`cueOn`/`cueSend` → output C, `:343`); the **rhythm has no cue send**, and the dry-input monitor is **one global level** (`loop.monitor`, `:533`), not per track → M6 |
+
+#### 5. Rhythm Engine
+
+| requirement | status |
+| --- | --- |
+| ≥200 patterns | ✅ 200, generated from rows (`:553`) |
+| ≥16 kits | ✅ 16, parameter sets — no samples, no licence problem |
+| sync with loop tracks | ✅ same transport |
+| playback alongside loops | ✅ own bus |
+| import custom patterns | ❌ needs a file format decision → §5 D3 |
+
+#### 6. Control & MIDI
+
+✅ all of it: notes and CC, learn per target, press/hold/double gestures,
+footswitch and expression pedal (CC is continuous), and the map persisted in
+`ui/config.json` under `midi.map`.
+
+#### 7. Memories / Presets
+
+⚠️ 99 slots save and load the whole session (`session.slot`, `smoke.py` covers
+slot 99), but there is **no browser**, and "quick switching" is the actual
+requirement: M6.
+
+#### 8. Import, Export & DAW
+
+✅ WAV import, WAV export, zip backup/restore, multichannel in and out.
+⚠️ "DAW integration" is Link (M5). ❌ Custom rhythm import is the same question
+as §5.
+
+#### 9. Audio Processing
+
+✅ 32-bit float at both ends: SuperCollider's buses are float and the export is
+written `buf.write(f, "WAV", "float")` (`:1307`). ✅ Five tracks stay in sync
+because they read one shared `Phasor`. ✅ Changing speed does not lose the grid.
+
+#### 10. Customization
+
+⚠️ Partial: the MIDI map plus `ui/config.json` cover most of it, but there is no
+single "complete configuration" save/load. Folded into M6's phrase browser.
+
+**The issue's own acceptance criteria** map as: 5 tracks ✅ · independent
+volume/playback/FX ✅ · 4 FX + 4 banks ✅ (VST) · 3 overdub modes ⚠️ (D1) ·
+Undo/Redo/Mark Back/Bounce ✅ (M1, M3) · speeds ✅ · 200 patterns + 16 kits ✅ ·
+memory stores the session ✅ · MIDI mapping ✅ · input/track/output routing ✅ ·
+WAV import/export and backup ✅.
 
 ---
 
-## Fixed: the mixdown export was silent
+## 2. What is already known — measured, not assumed
 
-Every `svc export` wrote a correctly sized WAV of zeros, and always had — the
-suite only ever asserted the file existed. Two causes, both now fixed:
+### The config carry-over — done, uncommitted
 
-1. **Group order.** Audio buses are cleared at the start of every block, so a
-   synth in an *earlier* group reading a bus written by a *later* one sees zeros
-   for ever. `\ld_capture` sat in `~grpClock`; `\ld_master` runs in `~grpMaster`.
-   The capture is now created in `~grpMaster` with `\addToTail`. `RecordBuf`
-   itself was never broken — the same code placed after the writer records at
-   full level (0.2 peak on a 0.2 tone).
-2. **Interleaving.** While chasing (1) the capture was rewritten with `BufWr`,
-   whose index is in frames and which interleaves by itself; scaling the index
-   by the channel count wrote one frame in two. Reverted to `RecordBuf`, which
-   handles it.
+`stage()` keeps `ui/config.json` across an update, which is right. It was keeping
+a file written by an *older* build: a 0.1.0 config has no `rhythm`, no
+`vst.banks`, no `loop.overdubMode`. Nothing crashed only because every reader
+happens to be defensive (`? default`, `?.`) — a guarantee nobody maintains.
+`migrate_config(path, defaults)` now fills the gaps from the shipped default at
+the update, user values winning; `load_config` falls back to `config.json.bak`
+instead of refusing to start. 64/64 passes. **M0 lands it.**
 
-Verified: an exported WAV now holds interleaved stereo at the recorded level.
+### #5 — three mechanisms, and one is a real invariant violation
 
-**Still open — the audio-truth tests.** They need a *known signal* recorded and
-then measured out of an exported WAV, and the suite must stay silent.
-`svc silence` (`s.mute`) silences the hardware *and* the captured bus (measured:
-export rms 0.0043 while the track meter read 0.13), so a muted run cannot
-measure anything. Pick one before writing them:
-- capture the pre-master sum (busA+busB+busC) instead of `masterBus`, which
-  `s.mute` does not touch, or
-- run the audio checks with `masterVol` around 0.08 and accept a quiet tone.
+The layer model has three things that must agree, and today they can disagree:
 
+- `t[\bufs][i]` — the content
+- `t[\gains][i]` — whether it is audible
+- `t[\layerCount]` / `t[\undone]` — what UNDO and REDO will do next
 
-## M0 result (measured, 0.2.0 engine + 2639b83)
+1. **`~startRec` zeroes a layer buffer and does not clear `undone`** (`:733`).
+   Record, undo, record again: the second take zeroes `bufs[li]` while `undone`
+   still counts the layers above it, so a later REDO restores a gain for a buffer
+   that was just erased. `~redo` (`:877`) sets `gains[li] = 1` without ever
+   asking whether that buffer has content.
+2. **REPLACE mode mutes everything below the new take** (`~commit`, `:775`). One
+   silent take in that mode silences the whole track, and `~undo` (`:868`) brings
+   it back — exactly the shape of the report. The toggle is user-facing
+   (`OVERDUB REPLACES`, `docs/CONTROLS.md:160`), so it can be on without the
+   player remembering.
+3. **`~dubPass` decays every layer of every track on every wrap** (`:944`),
+   including the layer being recorded and the tracks nobody is touching. With
+   `dubDecay` at 0 it is a no-op; with any value it fades material the player did
+   not ask to fade — and it fades it *evenly across the instrument*, which is not
+   what "dub" means.
 
-Two findings, and the first is not about the seam at all.
+A fourth, cheaper suspicion worth ruling out first: a session or autosave load
+sets `t[\layerCount]` from JSON (`:1223`, `:1264`); a load that restores a count
+the buffers cannot back would make the next `~startRec` zero a layer that holds
+the take.
 
-1. **The mixdown export was silent again, for a third reason.**
-   `Buffer.alloc` is asynchronous, and `~exportMix` created the capture synth in
-   the same message. `BufDur.kr` therefore read **0**, `Line.kr(0, 1, 0)` was done
-   on the first block, and the file was written with about 100 ms of audio and
-   the rest zeros. The capture now allocates, waits (`s.sync`) in a `fork`, then
-   starts, and takes `secs` as an explicit argument instead of asking the buffer
-   its duration. Export rms went 0.0035 -> 0.1804 on the same take.
-   That also explains every earlier "the export is empty" report that survived
-   the group-order fix.
-2. **No metallic burst with a steady tone.** `scripts/seamprobe.py` records take
-   1 with a 220 Hz tone, rolls through the auto-dub hand-off, exports and reports
-   5-15 kHz band energy per 100 ms window against the take's median:
-   worst window **2.2x**, threshold 4x -> *no burst found*. Biggest sample step
-   0.065 at t=1.02 s (**13x** the median step), i.e. a discontinuity, but not in
-   the 5-15 kHz band.
-   A steady tone is not drums; the listening half of M0 is still the user's.
+The fix is not "find the bug" — it is **make the three agree**, then prove it.
 
-## Open: metallic buzz at the auto-dub transition
+### #1 — detection works; the device is the unknown
 
-Heard by the user, while overdubbing several layers in a row: at the hand-off
-between the first take and the dub there is a digital buzz, main energy around
-**10 kHz, metallic**. It is a transition artefact, not a level problem, and it
-only appears when the loop rolls from take 1 into take 2.
+`app/main.py:764` watches for suspend: `CLOCK_MONOTONIC` stops during a sleep and
+`CLOCK_REALTIME` does not, so a drift over 5 s triggers
+`engine.restart(delay=4.0)`. `LOOPER_OSS_RESUME_SIM=600` exercises that branch
+without suspending, and AGENTS.md requires the log to show `resume detected` and
+`engine ready` again.
 
-**Measured fact: it lasts about 100 ms.** That rules out the hand-off window
-(a few ms), and it is longer than the seam: `xfadeMs` is clamped to 0.1-50 ms and
-defaults to 2, so the seam dip is 4 ms unless it was driven to the ceiling. A
-100 ms artefact at the moment a *new layer* opens points instead at **that
-layer's buffer**: `~startRec` sends `buf.zero` and opens the write gate in the
-same breath, so whatever the layer held before -- an earlier take, or content
-restored from a session -- is played into the mix until the zero lands. That is
-also a better explanation for the missing drum downbeat than a few ms of
-overwrite: it would take out ~100 ms of the take's first pass, every time.
+That is the *detection*. What the simulation cannot show is the part that fails on
+a real lid close: **whether the audio device comes back.** A USB interface that
+re-enumerates under a different node name, or a PipeWire graph that takes longer
+than 4 s to rebuild, leaves `scsynth` running against a device it no longer has —
+process alive, meters moving, no sound, and no watchdog can see it. Two concrete
+things to check when reproducing: what `audio.device` in the config actually
+selects (a name, an index, or `null` for default), and whether `scsynth` reports
+the same device after the restart as before.
 
-**Candidates, none proven -- do not "fix" one of these blind:**
+### #6 — the hard part exists
 
-1. **The overdub hand-off itself.** `/ldwrap` reaches sclang after the wrap, so
-   the write head stays open at position 0 for a few ms and writes the incoming
-   signal over the start of the committed take: a discontinuity at the seam,
-   repeated every pass. (`SetResetFF` tried to fix this and broke DUB and STOP
-   ALL -- reverted in 7b82ad0. Any retry must be measured.)
-2. **The seam fade.** `seam` dips the layer stack to 0 at `pos` 0 and
-   `contentLen`; a fade that short plus a jump in `wpos`/`rpos` at the wrap reads
-   as "metallic" rather than "click".
-3. **`~lerpRead` at the wrap.** Invariant 20 fixed the modulo, but the
-   fractional index just under `contentLen` is where a rounding error would
-   still show, and it would show as HF noise.
+`\ld_bounce` (`:374`) already sums up to eight buffers with per-buffer gains into
+a destination over one loop length, and `~bounce` (`:895`) already frees the
+sources and rebuilds the destination synth. What is missing is the *selection*:
+today it is "every track into one", and there is no way to flatten the four
+layers of a single track into one.
 
-**Settle it before touching code:** record a 220 Hz tone as take 1 with
-`autoClose`/`autoDub` on, stop after the second pass, export, and read the seam
-with `scripts/wavcheck.py` -- the step across the loop point and the HF energy in
-the 5-15 kHz band, layer 1 alone and the mix. Whichever number moves identifies
-the candidate.
+One thing to check rather than assume: `\ld_bounce` writes `dst` while reading
+`b0..b7`, and when the destination track is also a source, the same buffer is
+read and written at the same index. It is safe *today* because the read is a
+dependency of the write, but a layer merge makes that overlap the normal case, so
+M3 either proves it with a probe or sums into a spare buffer and swaps.
 
+### #7 — the master chain has a filter, but not a performance control
 
+`\ld_master` (`:397`) has `masterHp`/`masterLp`, applied **before** the
+`Compander` limiter, and they are exposed as two steppers in the settings drawer
+(`ui/app.js:1071`). Setup control, not performance: two taps deep, no knob, no
+resonance (`rq` fixed at 0.707), cannot sweep.
 
-## M1/M2 result under Wine (measured)
+Three facts that decide the design, from the UGens' own documentation:
 
-**M1 — boots end to end.** `:8181` serves, `sclang.exe` loads `engine/looper.scd`
-(SC 3.13.0), `scsynth.exe` opens an MME device, engine logs
-`tracks 5 | layers 4 | loop 8.0 s | max 16.0 s | VST no` (VST correctly absent).
+- `BLowPass`/`BHiPass` `rq` is **1/Q**. The help file warns: *"frequency values
+  close to 0 may cause glitches and/or extremely loud audio artifacts"* — so the
+  sweep must clamp, and the clamp is not optional.
+- Those biquads *"update coefficients only when a parameter changes… this can
+  cause spikes in CPU performance"*. A knob that sweeps every block is exactly
+  that case, which is why the first choice should be **`MoogFF`** (`ar(in, freq,
+  gain)`, `gain` 0–4 as resonance — a state-variable design, made for sweeping)
+  and `BLowPass`/`BHiPass` only as a fallback.
+- The existing clamps are already the house style: HP `20..2000`, LP
+  `1000..19000`, `rq` 0.707 — the sweep needs wider ranges but the same
+  discipline.
 
-**M2 — the protocol works.** `scripts/wincheck.py` (functional pass with generous
-timeouts, because Wine is ~25x slower than real time) reports **12/12**:
-state contract 26/32/5, clock advances, press records, the take closes into an
-overdub, stop/play, mixdown export 88200 frames peak 0.0715 rms 0.0372, session
-manifest written, backup zip writes.
+Also: `~grpMaster = Group.after(~grpTracks)` (`:631`), so master FX sit strictly
+downstream of every write head. **A master effect cannot corrupt loop content** —
+worth stating in `AUDIO.md`, because that is the fear a player brings to it.
 
-Four defects fixed on the way, all real on Windows too:
+And one gap in the UI primitives: `Knob` (`ui/controls.js:78`) takes
+`min`/`max`/`value`/`curve` and has **no centre detent and no reset gesture**. A
+bipolar performance knob needs both, so M4 adds them to the primitive, not to one
+control.
 
-1. `Server.program` — scsynth is not on PATH and SC boots it by bare name.
-2. SuperCollider's `synthdefs` cache directory does not exist on a fresh install.
-3. `MIDIIn.connectAll` throws when PortMidi cannot open an input (Wine: "Host
-   error"), and it unwound the boot routine — the app was silent for a MIDI
-   reason. It now runs in its own thread behind `protect`.
-4. `Path.write_text` translated newlines, so a Windows run rewrote
-   `ui/config.json` with CRLF. JSON is written with `newline="\n"` now.
+### #4 — `LinkClock` is already here, and its rules are not obvious
 
-And one architectural one: **the clock is polled, not pushed.** On Wine the
-server's `SendReply` never reaches sclang (even `/synced` is lost) while
-`/b_setn` and `/status.reply` arrive, which froze the playhead and stopped takes
-from closing. The transport now writes its beat count into a buffer and sclang
-polls it at 25 Hz -- the mechanism the meters already use (invariant 3). Replies
-win when they exist, and the choice is sticky so a stray reply cannot switch
-polling off mid-take.
+Verified on this machine:
 
-**Wine's residual limitations, not defects:** audio runs ~25x slower than wall
-time (MME), so the phase crawls (0.20 beat-steps/s); MIDI inputs cannot be
-opened; `audio.device` enumeration reports 0 nodes because the bridge asks
-`pactl`/`pw-*`, which do not exist on Windows.
+```text
+$ sclang /tmp/lkprobe.scd
+link class: LinkClock
+tempo now: 126.0
+```
 
+SuperCollider 3.14.1 ships the Ableton Link extension
+(`SCClassLibrary/External/Ableton/LinkClock.sc`, `HelpSource/Classes/LinkClock.schelp`)
+with the primitives compiled in. So Link is **library-first compliant**: nothing
+to download, nothing to vendor, and it is local multicast — not the internet, so
+the offline rule is untouched.
 
-## M3 measurement log (the seam is not solved)
+The parts of `LinkClock.schelp` that change the implementation:
 
-`scripts/seamprobe.py`, one take of a 220 Hz tone, auto-dub hand-off, export:
+- **`tempo` is beats per second, not BPM.** The help file's own GUI example reads
+  `tempoBox.value = l.tempo * 60`. Getting this wrong makes the looper run 60×
+  fast or slow, and it is the single most likely mistake in this milestone.
+- **Latency must match the server.** *"To coordinate with other applications, the
+  LinkClock must run earlier than the desired sounding time, by the same fixed
+  offset"* — `l = LinkClock(1).latency_(Server.default.latency)`. With a positive
+  latency `l.beats` reads *later* than other apps; that is normal, and ignoring it
+  makes the loop land late by the server latency.
+- **Quantum is the phase reference, and it is set before the performance.**
+  *"It is risky to change quantum during a performance… If you change the quantum,
+  Link does not guarantee that beats will keep the same duration."* Set it once,
+  at enable, to `bars × beatsPerBar` (16 for 4 bars of 4), and never move it.
+- **`beats` can be negative on join.** The help file's example has a new peer
+  starting at beat −3 so that barlines line up. Phase math must use a floored
+  modulo and be unit-tested on negatives.
+- **Peer count is free.** `numPeers` plus a `\numPeers` notification is exactly
+  the "is anyone actually there?" status the UI needs.
+- **Link does not stop or start anything.** SuperCollider clocks never stop; a DAW
+  locks into our phase. So the looper stays the transport, and Link only supplies
+  tempo and phase.
 
-| condition | worst 5-15 kHz window | biggest step |
+Architecturally that matters: this engine does **not** run on a `TempoClock` at
+all — the grid is a server-side `Phasor` on `phaseBus` (`:179`) and `~applyRate`
+(`:154`) derives its rate from `bpm`. So `LinkClock` is used as a **reference
+clock**, polled in sclang and pushed through the existing state path, not as the
+scheduler. Do not build a `Routine`-on-`LinkClock` transport; there is nothing for
+it to drive.
+
+### #3 — `FEATURES.md` has drifted
+
+Five rows contradict the code, which makes the gap look bigger in some places and
+smaller in one:
+
+| row | says | actually |
 | --- | --- | --- |
-| seam fade 2 ms (default) | **8.5x** the take's median | 0.065 (19x) |
-| seam fade 0.1 ms | **4.6x** | 0.066 (19x) |
-| after removing the idle write-back | **19.3x**, take truncated | -- |
+| §2 input compressor | ⬜ | ✅ `compOn` / `compThr` / `compRatio` in `\ld_track` |
+| §2 threshold auto-record | ✅ "(arm per track)" | ❌ the detector synth exists, but the `arm` switch is never set — nothing arms it. M6 makes it real |
+| §3 VST insert chain | ✅ 3 slots | ✅ **four** slots |
+| §5 import a WAV as a layer | ⬜ | ✅ `smoke.py` imports one |
+| §7 Windows build | ⛔ recipe only | ✅ 0.3.0 ships it |
 
-Two things that are now established rather than assumed:
+---
 
-1. **The artefact is not the seam fade.** Cutting it from 2 ms to 0.1 ms moves the
-   band energy from 8.5x to 4.6x -- it contributes, it is not the cause.
-2. **It sits 150-250 ms AFTER each loop point**, and repeats exactly with the loop
-   period. That is the window in which a new take opens, not the wrap itself.
-3. **The idle write-back is load-bearing.** Removing it (writing to the scratch
-   buffer instead of reading a layer back to rewrite it) truncated the take and
-   pushed the band energy to 19.3x. Reverted. The suite was green for that
-   change; only the measurement caught it.
+## 3. Order, and why
 
-So the buffer pair is still to build, and the next attempt must start by
-isolating which layer's playback the burst belongs to (per-layer export or a
-solo'd layer), not by rewriting the write path again.
+1. **M0** lands the config fix and the playhead fix. Both are small, both are
+   already diagnosed, and both are housekeeping: the tree should start clean so
+   this round's own changes are distinguishable from what was already in it, and
+   an archived plan that no longer describes the tree is a small lie worth paying
+   off first.
+2. **M1 (#5)** — the only issue that *destroys the player's work*. Everything else
+   can wait a release; this cannot.
+3. **M2 (#1)** — silence with no error: the failure a player cannot diagnose and
+   cannot work around.
+4. **M3 (#6)** — small, reuses `\ld_bounce`, and makes the layer model honest
+   before M4 adds a second way to touch the master.
+5. **M4 (#7)** — the first new surface. It comes after the layer work because a
+   performance filter is only useful on material that stays where you put it.
+6. **M5 (#4)** — integration with an external peer. It wants a stable transport,
+   which M1–M4 leave alone.
+7. **M6 (#3)** — breadth, last: the only milestone that can be cut without leaving
+   the instrument broken.
+8. **M7** — release.
 
+---
 
-### M3 isolation result: the layers are clean, the instrument is not
+## 4. The work — milestones M0–M7
 
-Soloing each layer's gain and exporting separately, same take:
+Each milestone names what it is for, what is already known about it, the work,
+the **evidence to record**, and what "done" means. The evidence line is the
+important one: it is the difference between a milestone and an intention.
 
-| what | peak | worst 5-15 kHz window |
+## M0 — clear the deck: the config carry-over, and the playhead that hides its ruler
+
+**Why.** Two small, already-diagnosed things stand between the tree and the real
+work. The first is finished and uncommitted. The second is the one defect every
+player sees all the time: the loop ruler is unreadable exactly where it matters.
+
+### M0a — land the config carry-over
+
+**Work.** One Conventional Commit (`fix(app): complete a carried-over config
+instead of trusting it`) with `app/main.py`, `scripts/smoke.py`, `AGENTS.md`,
+`README.md`, `CHANGELOG.md`. The archive move (`goal.md` → `docs/goal-0.2.md`) and
+`README.md`'s three references are already done as part of writing this plan.
+
+**Done when.** `git status` clean · `./scripts/smoke.py` 64/64 ·
+`python3 scripts/sweep.py` leaves nothing.
+
+### M0b — the bar ruler is painted underneath the playhead
+
+**The bug.** The ruler marks are children of the playhead bar:
+
+```html
+<div class="playhead">      <!-- 0.22rem tall, black, overflow hidden -->
+  <div class="ticks"></div> <!-- the beat and bar marks -->
+  <i></i>                   <!-- the accent fill, width = loop position -->
+</div>
+```
+
+`.playhead .ticks` is `position: absolute` and `.playhead > i` is
+`position: relative`, and **neither sets `z-index`** (`ui/style.css:135`, `:146`).
+Among positioned siblings with `z-index: auto`, paint order is DOM order, so the
+accent fill paints **over** every beat and bar mark it has passed. The ruler is
+therefore visible only ahead of the playhead — the part you cannot read yet — and
+it is erased behind it, which is the half that tells you where you are.
+
+**Work.** Put the marks in front of the fill: an explicit `z-index` on both, not
+one, so the order is stated rather than inherited from markup order. Then look at
+the result: the bar is 0.22rem tall and the beat marks are 1 px at 30 % alpha, so
+if the snapshot still cannot resolve them the answer is a contrast or height
+bump — a separate, deliberate decision, not a quiet redesign.
+
+**Evidence to record.** A WebKit snapshot (AGENTS §8: `scripts/shots.py`, **not**
+Chromium — text and thin marks rasterise wrong in a GPU-less container) with the
+loop at roughly 50 %, showing the beat and bar marks in front of the fill.
+
+**Regression check.** In `scripts/uicheck.mjs`, compare the *computed* `z-index`
+of `.playhead .ticks` against `.playhead > i` and require the marks to be on top —
+that is the exact defect, and it cannot come back quietly. Also confirm the ticks
+still follow a `bars` change (1 → 8) rather than being frozen at the default.
+
+**Done when.** `uicheck.mjs` says `UI OK` including the new check, and the
+snapshot shows the ruler across the filled part as well as ahead of it.
+
+**Docs.** `CHANGELOG.md` (`fix(ui): draw the bar ruler above the playhead fill`).
+Nothing in `CONTROLS.md`: this changes how a control looks, not what it does.
+
+---
+
+## M1 — #5: the layer model must not lose sound
+
+**Why.** The only issue that destroys work. A player who loses a take does not
+file a second issue, they stop using the app.
+
+**Work.**
+
+1. **Reproduce before touching anything.** A scripted sequence over the existing
+   OSC API, asserting with `~probeTrack` (per-layer peak and gain) after every
+   step:
+   - record → undo → record → redo: does layer 0 still have its content?
+   - record → **silent** overdub with `overdubMode = 1`: is layer 0 still audible?
+   - two layers → `dubDecay = 0.3` → three wraps: what is left, and of *which
+     track*?
+   - load a session with a high `layerCount`, then record: which buffer is zeroed?
+
+   Write it as a smoke check that **fails on today's code**. That failing check is
+   the deliverable of this step, not a fix.
+
+   **If all four pass**, the reported mechanism is not one of these and this plan
+   is wrong — do not "fix" a bug that was not reproduced. Then log every
+   `~startRec` / `~commit` / `~undo` / `~redo` / wrap with track and layer index,
+   record one real take that loses sound, and read the log back. Write down what
+   it shows before touching the model again.
+2. **Make content, gain and undo agree.** One function that sets a layer's gain,
+   one predicate for "does this layer have content", used by `~commit`, `~undo`,
+   `~redo`, `~startRec`, `~setMark`. `~startRec` clears `undone` when it erases a
+   layer; `~redo` refuses to restore a gain for an empty buffer.
+3. **REPLACE mode cannot silence a track by accident.** A take that recorded
+   nothing must not mute the layers below it: a silent commit is a no-op and the
+   UI says so.
+4. **`~dubPass` becomes per-track and skips the recording layer.** Dub decay is a
+   property of the material being dubbed over, not of the instrument.
+5. **Make the mode visible.** When `OVERDUB REPLACES` is on, the track header says
+   so. A setting that can silence a track silently is a design defect on its own.
+
+**Evidence to record.** The probe output for each of the four sequences, before
+and after, and `scripts/wavcheck.py` on an export of "record, silent overdub,
+play" showing the first take at its original level.
+
+**Done when.** The step-1 check passes, the new checks pass, and the counts in
+`AGENTS.md`/`README.md` match. 64 → ~69.
+
+**Docs.** `CONTROLS.md` (REPLACE row + header badge) · `AUDIO.md` (dub decay is
+per track) · `CHANGELOG.md`.
+
+---
+
+## M2 — #1: the audio must come back after a sleep
+
+**Why.** The app looks alive and is silent. No error, no log line the player would
+find, no workaround but restarting.
+
+**Work.**
+
+1. **Instrument the wake path.** Log, in order: the drift that triggered the
+   restart, the engine's exit code, the device name `scsynth` reports *after* the
+   restart, and the time from restart to `engine ready`. Today the log says
+   "resume detected" and nothing about the device.
+2. **Verify the device, do not assume it.** After `engine.restart()`, compare the
+   device the engine reports with `audio.device`. Not the configured one → retry
+   once with the default device and tell the UI instead of going quiet. The
+   comparison needs no new plumbing: the bridge already reports the opened device
+   as `links.inputs`/`links.outputs` in the existing `t: "devices"` frame — from
+   `pw-dump` on Linux and from scsynth's own boot log on Windows
+   (`opened_from_log`, `bridge/bridge.py:344`, called at `:222`). Add a `reason` to that frame only
+   if it cannot already carry the answer.
+3. **Give the graph time, and say why.** 4 s is a guess. Measure how long PipeWire
+   takes to rebuild after a real suspend here, use the measurement, with a
+   bounded retry rather than a longer sleep.
+4. **Reproduce for real, once.** `LOOPER_OSS_RESUME_SIM=600` proves the branch;
+   only a real lid close proves the device. Do both and quote both logs.
+
+**Evidence to record.** Both logs (simulated and real), the measured rebuild time,
+and the device name before and after.
+
+**Done when.** The simulated resume logs `resume detected` → device name →
+`engine ready`, and a real suspend on this machine does the same and plays
+afterwards. If the real test cannot be run here, that is a **named blocker** in
+the release notes, not a claim.
+
+**Docs.** `AUDIO.md` (the wake path) · AGENTS.md invariant 22 (extend with the
+device check) · `CHANGELOG.md`.
+
+---
+
+## M3 — #6: merge layers, and merge tracks by selection
+
+**Why.** Four layers is the undo depth, but it is also how a drum part gets built:
+kick, snare, hats, fill. Once it is right the player wants one loop, not four
+layers that have to stay in step.
+
+**Work.**
+
+1. **MERGE LAYERS, per track.** Sum `b0..b3` with their gains into one layer,
+   `layerCount = 1`. Reuse `\ld_bounce`. Because the destination is also a source,
+   either prove the same-index read/write is safe with a probe, or sum into a
+   spare buffer and swap — the swap is cheap and removes the argument.
+   **It must be undoable**; a merge that cannot be undone would need tap-to-arm.
+2. **MERGE TRACKS, by selection.** `~bounce` today is "every track into one".
+   Extend to a source list and a destination, so two of five can be joined and the
+   other three left alone.
+3. **One command each on the wire**, so the UI *and* a MIDI pedal reach them:
+   `svc mergeLayers [track]`, `svc mergeTracks [dst, srcs…]`. Add the learn rows.
+
+**Evidence to record.** Two layers with known content → merge → the probe peak is
+their sum, `layerCount` is 1, the sources are free, UNDO restores the layers, and
+a `wavcheck` export matches.
+
+**Done when.** Both checks pass and the merge is undoable.
+
+**Docs.** `CONTROLS.md` (two rows) · `PROTOCOL.md` (two commands) · `AUDIO.md`
+(why the sum is safe) · `CHANGELOG.md`.
+
+---
+
+## M4 — #7: performance FX on the master, and a DJ filter
+
+**Why.** Everything on the master today is a setup control. A performer needs one
+hand on a knob that does something musical without opening a drawer.
+
+**Work.**
+
+1. **A DJ filter as one bipolar knob.** Centre is bypass; left sweeps a low-pass
+   down, right sweeps a high-pass up, with resonance. **`MoogFF` first**
+   (`ar(in, freq, gain)`, resonance `gain` 0–4) because it is built for sweeping;
+   `BLowPass`/`BHiPass` only if it falls short, and then with the frequency
+   clamped away from 0 per their help file's warning. It sits where
+   `masterHp`/`masterLp` sit: before the limiter, so resonance is caught.
+2. **A real bypass at centre.** With the knob at 0 the output must be
+   *bit-identical* to no filter at all — not "close". A filter that colours the
+   sound when it is off is a bug report waiting to happen.
+3. **Reconcile with the existing steppers.** Two controls for one filter is a
+   future bug report. The steppers stay the *static* setting; the knob is a
+   *performance offset* on top, and the UI shows both so the player can see why
+   the sound is filtered.
+4. **Two master FX slots with knobs.** Each slot picks one effect from a small
+   curated list of **stock UGens only** — `MoogFF`/`BLowPass` (filter), `CombN` /
+   `DelayN` (delay), `Shaper` / `Fold` (drive), `SinOsc`-modulated gain
+   (tremolo) — two or three knobs each, live, on the main screen, persisted in
+   `ui/config.json` under `master.fx`.
+5. **The primitive needs two things it does not have.** `Knob`
+   (`ui/controls.js:78`) has no centre detent and no reset gesture: add both, plus
+   the ≥48 px tap target. A performance control that cannot be reset mid-song is
+   a trap.
+
+**Evidence to record.** Probe or `wavcheck` on an export for: knob hard left
+(low-pass), hard right (high-pass), centre (bit-identical to bypass), and a full
+sweep at the configured block size with the CPU number from `/ldstats` before and
+during — the biquad-coefficient warning is a measurement, not a guess.
+
+**Done when.** A smoke check covers both extremes and the centre-bypass identity,
+a master FX slot survives a restart, `uicheck.mjs` says `UI OK`, and the tap-target
+audit passes.
+
+**Docs.** `CONTROLS.md` (new controls, ranges, defaults) · `AUDIO.md` (position in
+the chain, why before the limiter, and that master FX cannot corrupt loop
+content) · `PROTOCOL.md` (new fields) · `CHANGELOG.md`.
+
+---
+
+## M5 — #4: Ableton Link
+
+**Why.** A looper that cannot follow the rest of the rig is a looper used alone.
+
+**Work.**
+
+1. **`engine/link.scd`, optional and probed.** Per AGENTS invariant 15, a missing
+   class aborts the block that mentions it: probe `\LinkClock.asClass.notNil` and
+   keep every reference in its own file, loaded only if the probe passes. The
+   engine must boot identically with Link absent.
+2. **Tempo in, with the unit trap handled.** `bpm = link.tempo * 60`; that drives
+   `~state[\bpm]` and therefore `~applyRate`, so the grid moves, not just a number.
+   A `\tempo` notification is the trigger, plus a slow poll as a fallback.
+3. **Phase in.** `link = LinkClock(1).latency_(Server.default.latency)`, quantum
+   set **once** at enable to `bars × beatsPerBar`, never mid-performance. Apply
+   the offset to the transport as a wrapped phase offset so the read side sees an
+   aligned grid. Floored modulo, unit-tested with negative `beats` (the join case).
+   Document the trade-off: a hard jump is a click, a soft `LagUD` correction
+   wavers — prefer soft and say so.
+4. **A switch, a status, and a peer count.** `clock.link` in the config, a toggle
+   in the settings drawer, `numPeers` in the UI (from the `\numPeers`
+   notification) so "Link is on but nobody is there" is visible. Off means the
+   internal clock with no residue — and with no peer at all the app behaves
+   exactly as it does today.
+5. **Do not build a scheduler.** `LinkClock` is a reference here, not the
+   transport: the engine's grid is a server-side `Phasor`. No `Routine`-on-clock
+   transport, and nothing pushed through `SendReply` — AGENTS invariants 2 and the
+   Windows note say replies are not reliable; push through the existing state path.
+
+**Evidence to record.** With a peer on the network: BPM follows a tempo change
+within 100 ms; the loop stays phase-locked across a bar boundary; peer count
+updates when a peer leaves. Without a peer: the looper keeps its own tempo.
+Turning Link off returns to the internal clock with no jump.
+
+**Done when.** The no-peer and toggle-off paths are smoke checks (a peer cannot be
+assumed in CI) and the with-peer path is demonstrated manually and recorded.
+
+**Docs.** `CONTROLS.md` · `PROTOCOL.md` (the link message) · `AUDIO.md` (phase
+alignment and the latency offset) · `README.md` (how to try it) · `CHANGELOG.md`.
+
+---
+
+## M6 — #3: the parity subset, and making `FEATURES.md` true
+
+**Why.** The issue is a manual. This milestone closes what is cheap on the model
+that already exists, and reclassifies the rest in the open (§7), so the issue stops
+reading like a bug list.
+
+**Work, in this order — each its own commit and its own smoke check.**
+
+1. **The small gaps first**, because they are what the matrix in §1 actually
+   flags: **Auto Rec becomes reachable** (the detector synth already exists and is
+   armed by an argument nothing sets — it needs a set key, an action, a learn row
+   and a UI switch), **input EQ per channel** rather than only per track (HP/LP
+   already exist per track; the change is where the settings live), and a
+   **rhythm cue send** so the drums can be monitored without being in the mix.
+2. **Per-layer mixer** — volume, mute and delete per layer. The model already has
+   `gains[0..3]`; this is three args per layer plus a UI, no new audio, and it
+   makes M1's invariant visible to the player.
+3. **One-shot playback** — a track that plays once and stops. The transport
+   already knows the wrap; this is a per-track flag.
+4. **Track copy / swap / duplicate** — buffer-level, like `~bounce`, no new DSP.
+5. **Phrase browser** — 99 memory slots already save and load. What is missing is
+   the browser: list, name, load, delete, slot number visible, and **quick
+   switching**, which is the actual requirement in issue #3 §7.
+6. **`FEATURES.md` truth pass** — fix the four stale rows in §2, move everything
+   this round ships to ✅, and put §7's declined list in the backlog section with
+   its reason.
+7. **Comment on issue #3** with the §1 matrix: what this round closed, what is
+   deferred, and why. Then close it or retitle it as the roadmap it is.
+
+**Decisions needed before step 1.** §5 D1 (the third overdub mode) and D3 (custom
+rhythm import format). D2 (secondary control layer) can stay open and deferred.
+
+**Done when.** Each of 1–5 has a smoke check, `FEATURES.md` has no row that
+contradicts the code, and the issue comment exists.
+
+---
+
+## M7 — ship 0.4.0
+
+**Work.** `VERSION` → 0.4.0. `CHANGELOG.md` with a section per issue **quoting the
+evidence** — the probe numbers for #5, both resume logs for #1, the tempo
+measurement for #4, the centre-bypass identity for #7. `README.md` for the new
+controls. `./scripts/release.py --check`, then the archives. Rebuild the AppImage
+and install it over 0.3.0 locally, so M0's config carry-over is exercised by a
+real upgrade rather than by a test.
+
+**Done when.** `./scripts/smoke.py` green at its new count · `uicheck.mjs` →
+`UI OK` · `scripts/sweep.py` leaves nothing · `release.py --check` passes · the
+tag is created only after telling the user.
+
+---
+
+## 5. Decisions needed from the user
+
+Each has a recommended default so a run is never blocked.
+
+| # | question | blocks | recommended |
+| --- | --- | --- | --- |
+| **D1** | Issue #3 names **3 overdub modes** and describes one (replace). We have two: layer-on-top and replace. What is the third? | M6 | Ship two, and say so in the issue reply — a mode nobody can name is not a requirement yet |
+| **D2** | "Secondary control layer accessible through Undo/Redo" — the RC-505's A/B control layer. Do you want it? | M6 | Defer: it is a hardware-controller concept and the touchscreen has room for both layers at once |
+| **D3** | "Import custom rhythm patterns" — a file format has to be chosen | M6 | Defer to 0.5.0 with the format question: MIDI file, or a text row like the generator uses |
+| **D4** | #3 asks for **49 input FX and 53 track FX types**. Four VST slots already carry any effect that exists as a plugin. | M6 | Decline the count, keep the mechanism, and say it plainly in the issue reply |
+
+---
+
+## 6. Risks
+
+| risk | where | mitigation |
 | --- | --- | --- |
-| layer 0 (first take) | 0.112 | **1.0x** |
-| layer 1 (the overdub) | 0.114 | **1.9x** |
-| layer 2 (empty) | 0.005 | -- |
+| #5 is not the bug the code suggests | M1 | step 1 is a *failing check*; if it passes, instrument and reproduce before changing anything |
+| a merge in place smears the buffer | M3 | spare buffer + swap, or prove the read/write order with a probe |
+| `rq`/`freq` glitch at the end of a sweep | M4 | clamp per the UGen's own warning; centre must be an exact bypass |
+| biquad coefficient spikes during a sweep | M4 | `MoogFF` first; measure CPU; quantize the frequency update if needed |
+| Link tempo unit (beats/s vs BPM) | M5 | the `* 60` is stated in §2 — test it against a peer, not by inspection |
+| Link quantum changed mid-performance | M5 | set once at enable; never exposed as a live control |
+| a real suspend cannot be tested here | M2 | named blocker in the release notes, never a claim |
+| `FEATURES.md` and the issue drift apart again | M6 | the truth pass is a deliverable, and the issue comment is the receipt |
+| `smoke.py` wipes `sessions/` | every milestone | back up before, restore after (AGENTS §8) |
 
-Neither take carries the artefact. Repeating the *mix* export within one session
-gave 1.5x, while separate runs of the same configuration measured 2.2x, 3.6x,
-4.6x and 8.5x. The spread across identical settings is larger than any effect
-currently being chased.
+---
 
-**Fixed by taking a median.** `seamprobe --repeat 3` in one session reports
-1.1, 1.1, 2.0 -> **median 1.1x**, i.e. consistently below the 4x threshold. The
-8.5x reading was an outlier, not a state. So with a steady tone the current
-engine does **not** exhibit the burst, and the earlier "got worse / got better"
-comparisons were noise.
+## 7. Declined, with reasons
 
-**Still true:** the instrument needed the median before it could gate anything. The worst-window statistic is a
-maximum over ~80 windows, so it is dominated by where the export happens to start
-relative to the loop and by the tone switching on or off inside the take. Before
-the buffer pair is built the instrument needs: several exports per configuration
-with a median, a window aligned to the loop point, and a source that is
-continuous across the seam. Until then "below baseline" is not a claim this
-measurement can support.
+Stated here so the issue can be answered honestly instead of left open forever.
 
+- **Time-stretch ("speed with or without pitch change").** Varispeed only, like the
+  hardware's SPEED. Pitch-preserving stretch is exactly the hand-written DSP the
+  house rules forbid; it is a 0.5.0 conversation about a library, not a milestone.
+- **49 input FX / 53 track FX *types*.** The count is a content programme, not a
+  feature. Four VST insert slots per track already carry any effect that exists as
+  a plugin; inventing 100 built-ins would be an enormous surface with worse sound.
+- **Harmony / Electric FX specifically.** Same: VST territory.
+- **A master VST chain.** Per-track VST exists; a master slot is a later option and
+  M4's built-in FX are the 505's model.
+- **`MeterSync` / barline sync between SuperCollider peers.** `LinkClock` offers it,
+  but there is one engine per instance and nothing to sync it with.
+- **Rewriting the layer model.** M1 makes the existing one consistent; it does not
+  replace it.
 
-## M3 bench: fixed twice, and what it now says
+## 8. Non-goals for the round
 
-The probe was measuring itself, in three separate ways. All three are fixed:
+- Any cloud, account, telemetry or internet dependency. Link is local multicast.
+- Multi-user or networked sessions.
+- A DAW-style arrangement view, MIDI sequencing, plugin delay compensation.
+- Localisation, theming, phone remote — backlog, not this round.
 
-1. **Body reference.** It used the median band energy over *all* windows. With
-   percussive material most windows are silence, so the median is ~0 and every
-   click onset scored 50-70x -- that was the material, not an artefact.
-2. **Source that stopped inside the take.** The percussive source fired a fixed
-   number of bursts and then stopped, which put a hard step in the take and
-   made the body digital silence (`wavcheck` reported `|dx|=0.00000` and a 37.7%
-   step at the stop). It now runs for the whole take.
-3. **Single export.** One export is dominated by where it starts relative to the
-   loop; `--repeat N` takes a median, which turned 1.5x-8.5x into a stable number.
+## 9. Definition of done, whole round
 
-What the corrected bench reports:
+- [ ] every open issue is either closed with evidence or has a comment saying what
+      was deferred and why
+- [ ] `./scripts/smoke.py` green, and its count in `AGENTS.md` and `README.md`
+      updated to match
+- [ ] `node scripts/uicheck.mjs` → `UI OK` (M0, M4 and M6 touch the UI)
+- [ ] `python3 scripts/sweep.py` → nothing running, the user hears nothing
+- [ ] `sessions/` backed up before every suite run and restored after
+- [ ] `CONTROLS.md` / `PROTOCOL.md` / `AUDIO.md` updated in the same change as the
+      behaviour they describe
+- [ ] `CHANGELOG.md` has an entry per user-visible change
+- [ ] no claim in the release notes that was not measured on this machine
 
-| source | worst 5-15 kHz window | verdict |
-| --- | --- | --- |
-| steady 220 Hz tone, 3 exports | **median 1.1x** (1.1, 1.1, 2.0) | no burst |
-| continuous percussive bursts | **3.7x** | no burst, but the highest reading so far |
+---
 
-So the engine does not exceed the 4x threshold on either source in a controlled
-take. That does **not** mean the user is imagining it: their material, level and
-timing are not this bench. What it does mean is that the buffer-pair rewrite
-cannot be justified by these numbers, and the next step is to reproduce the
-sound with the user's own recording rather than with synthesised clicks.
+## Paste this into `/goal`
 
+```text
+Implement goal.md (Looper OSS 0.4.0) milestone by milestone, M0 through M7, in
+order. Read AGENTS.md first: its invariants are not suggestions, and §6.27 is the
+config rule this round starts from.
 
-## M4 result: the Windows kill path works, and stop() now uses it
+M0  clear the deck: (a) land the uncommitted config carry-over as one commit,
+    tree clean, 64/64; (b) fix the playhead painting over its own ruler — set an
+    explicit z-index on BOTH .playhead .ticks and .playhead > i so the marks
+    paint above the fill, add a uicheck.mjs check comparing their computed
+    z-index, and prove it with a WebKit snapshot at ~50% loop position.
+M1  #5 layer model: write the FAILING probe check first (record/undo/record/redo,
+    a silent overdub in REPLACE mode, dubDecay across three wraps, and a session
+    load followed by record). If it passes, stop and instrument instead of
+    "fixing". Then make content, gain and undo agree; REPLACE cannot silence a
+    track; dubPass is per-track and skips the recording layer; the mode is
+    visible in the track header.
+M2  #1 sleep/resume: log drift, exit code, the device actually reported after
+    restart, and time to engine ready; verify the device and retry once with the
+    default; prove it with LOOPER_OSS_RESUME_SIM=600 and once for real, quoting
+    both logs.
+M3  #6 merge: MERGE LAYERS per track (undoable, spare buffer + swap) and MERGE
+    TRACKS by selection, both reusing \ld_bounce; one command each on the wire
+    plus MIDI learn rows.
+M4  #7 performance FX: a bipolar DJ filter (MoogFF first, gain as resonance,
+    before the limiter, centre = exact bypass, frequency clamped per the UGen
+    warning) reconciled with the existing HP/LP steppers, plus two master FX
+    slots with live knobs persisted under master.fx. Add centre detent and
+    reset to the Knob primitive. Measure CPU during a full sweep.
+M5  #4 Ableton Link: engine/link.scd, optional and probed with
+    \LinkClock.asClass.notNil; bpm = link.tempo * 60; latency_(s.latency);
+    quantum set once at enable to bars*beatsPerBar and never changed; floored
+    modulo for negative beats; phase offset with soft correction; a switch, a
+    peer count, a clean no-peer fallback. Link is a reference clock, NOT a
+    scheduler: no Routine transport, no SendReply.
+M6  #3 parity subset, small gaps first: make Auto Rec reachable (the detector
+    synth exists, the arm switch is never set — set key + action + learn row +
+    UI), per-channel input EQ, rhythm cue send, then per-layer mixer, one-shot,
+    track copy/swap, and a phrase browser with quick switching. Then make
+    FEATURES.md true (five stale rows) and comment on #3 with the traceability
+    matrix, the deferred list and the reasons.
+M7  ship 0.4.0: VERSION, CHANGELOG quoting the measured evidence per issue,
+    README, release check, AppImage installed over 0.3.0.
 
-`sweep_stale` (taskkill /F on scsynth.exe and sclang.exe) was verified rather
-than assumed: with a lone scsynth.exe running in the Wine prefix, `wine tasklist`
-reports 1 before and **0 after** the sweep.
-
-The first attempt at that test was invalid and worth recording: running
-`sweep_stale` from the *host* Python cannot work, because `taskkill` does not
-exist on Linux -- the 1-to-1 result was my own mistake, not the code. It has to
-run inside the prefix (`wine python.exe -c ...`), which is how the app runs on
-Windows.
-
-`Engine.stop()` only pkilled on POSIX and did nothing on Windows, so a stray
-`scsynth.exe` could keep the WASAPI device open until the next start swept it --
-invariants 19 and 22. The Windows branch now calls the same `sweep_stale`.
-
-## M4 under Wine (partial)
-
-`act reboot` returns the engine to `engine ready (5 tracks)` and state frames
-resume, so the restart path survives on Windows/Wine. `s.quit -> exit` versus
-`taskkill` still needs a real Windows run: Wine hides the difference because the
-process tree is the same.
-
-## Carried into 0.3.0 (decided with the user)
-
-0.2.0 ships with these known and documented rather than fixed:
-
-- **metallic buzz at the auto-dub hand-off** (~10 kHz, ~100 ms). The recording
-  layer is no longer played back while it records (2639b83), which removes the
-  most likely cause -- the write head is derived from the read head, so playback
-  read the sample being written. If it survives that, measure the seam.
-- **the first take can lose its opening ~100 ms** into an overdub (the drum
-  downbeat). Same neighbourhood.
-- **0.3.0 also adds Windows**: WASAPI/ASIO, the Windows paths in the engine
-  (`pkill` in `Engine.stop()`), an installer that has actually been run.
-- The longer-term shape both of these want is the user's design: **one record
-  buffer and one play buffer per layer, swapped at the loop point, mixed only
-  when it is safe** -- instead of reading a buffer that is being written.
-
-## Next: v0.3.0 — Windows
-
-Linux is the supported platform in 0.2.0. Windows is the next release, and the
-bar is not "it compiles" but the same evidence the Linux build carries.
-
-**Audio backend.** WASAPI and ASIO device enumeration; `driver = asio` verified
-against PortAudio's actual device names (`ASIO : <name>`) rather than assumed;
-`hardwareBufferSize` mapped to the ASIO buffer; a device picker that offers only
-what scsynth will accept, instead of ALSA names on a Windows host.
-
-**Engine.** scsynth/sclang start-up and shutdown on Windows paths (`\`
-separators, `sessions/`, the staged home), and `Engine.stop()`'s `pkill` fallback,
-which is Unix-only today — a Windows build must not depend on it.
-
-**Packaging.** PyInstaller onedir plus the Inno Setup per-user installer, verified
-by installing on a clean machine, recording a loop, exporting a mixdown. The
-pipeline already exists — `.github/workflows/windows-experimental.yml` builds on
-`windows-latest` and uploads `-experimental` artefacts — so 0.3.0 starts from a
-working build step, not from an empty workflow.
-
-**Evidence.** `scripts/smoke.py` and `scripts/uicheck.mjs` run on Windows, or a
-documented subset with the reason each check is excluded. The "unverified"
-caveat in the README is removed only when that exists.
-
-**Order.** Wine first — it is cheap and catches path and registry assumptions —
-then a real Windows host.
-
-**Acceptance.** A Windows user installs from the `.exe`, records and overdubs
-five tracks, saves a session, exports a mixdown, and the suite passes — with the
-evidence quoted in the release notes.
+Rules:
+- Measure before touching the audio path. A green suite is not evidence the
+  instrument works.
+- Every milestone ends with a check in scripts/smoke.py that would fail if the
+  feature were removed. Update the counts in AGENTS.md and README.md.
+- Back up sessions/ before a suite run and restore it after; finish every
+  session with python3 scripts/sweep.py.
+- A new state field means engine array + GLOBAL_FIELDS/TRACK_FIELDS + onState,
+  all three, in the same change.
+- Decisions D1 and D3 in §5 block M6; if the user has not answered, the
+  recommended default is what to take. D2 and D4 are already defaulted to
+  "defer" / "decline", so they do not block anything.
+- If something cannot be verified on this machine, say so plainly and leave it a
+  named blocker. Never claim a result you did not measure.
+- Conventional Commits, subject line under 72 characters.
+```

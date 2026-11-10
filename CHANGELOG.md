@@ -4,6 +4,24 @@ All notable changes to Looper OSS. Format: [Keep a Changelog](https://keepachang
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The single
 source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
+## [Unreleased]
+
+### Fixed
+
+- **A config carried over from an older version is now completed, not just
+  copied.** `stage()` has kept `ui/config.json` across updates since 0.2.0 --
+  which is what a musician wants — their bpm, interface and MIDI map — but a
+  file written by 0.1.0 predates the rhythm section, the VST banks and
+  `loop.overdubMode`. Every reader had to be defensive or the engine booted
+  against a missing key, and only the machines that had been running the
+  longest could hit it. `migrate_config` now fills any key the installed
+  build expects from its own shipped defaults; values the user owns always
+  win.
+- **A half-written `ui/config.json` no longer refuses to start.** The bridge
+  copies the file to `config.json.bak` before every write, so the launcher
+  falls back to that copy and says so, instead of stopping at the only
+  failure a musician cannot debug.
+
 ## [0.3.0] — 2026-11-08
 
 **Windows 10 is supported.** Verified on a real machine, not only in Wine: the

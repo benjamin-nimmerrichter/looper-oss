@@ -292,6 +292,42 @@ async def run_tests(c: Client) -> None:
             kept2 = ((new / "sessions" / "autosave" / "take.wav").is_file()
                      and json.loads((new / "ui" / "config.json").read_text()).get("bpm") == 137)
         check("version bump keeps the music", kept2)
+
+        # Carrying the config forward is only safe if the new build can also
+        # *read* it. Take the 0.1.0 shape -- no rhythm section, no VST banks,
+        # no overdubMode -- and require that the staged config comes out with
+        # every key this build ships, while the user's own values survive.
+        with tempfile.TemporaryDirectory() as td:
+            dst = pathlib.Path(td) / "0.1.0"
+            (dst / "ui").mkdir(parents=True)
+            (dst / "sessions").mkdir(parents=True)
+            ancient = json.loads((ROOT / "ui" / "config.json").read_text())
+            for gone in ("rhythm",):
+                ancient.pop(gone, None)
+            ancient["loop"].pop("overdubMode", None)
+            ancient["vst"].pop("banks", None)
+            ancient["version"] = 2
+            ancient["bpm"] = 137
+            ancient["audio"]["device"] = "some other interface"
+            (dst / "ui" / "config.json").write_text(json.dumps(ancient))
+            stage(ROOT, dst)
+            staged = json.loads((dst / "ui" / "config.json").read_text())
+            shipped = json.loads((ROOT / "ui" / "config.json").read_text())
+
+            def holes(want: dict, have: dict, at: str = "") -> list[str]:
+                out = [at + k for k in want if k not in have]
+                for k, v in want.items():
+                    if isinstance(v, dict) and isinstance(have.get(k), dict):
+                        out += holes(v, have[k], f"{at}{k}.")
+                return out
+
+            missing = holes(shipped, staged)
+            completed = (not missing
+                         and staged["bpm"] == 137
+                         and staged["audio"]["device"] == "some other interface"
+                         and staged["loop"]["autoDub"] == 1)
+        check("an old config is completed, not replaced", completed,
+              f"missing {missing[:6]}")
     except Exception as exc:                       # noqa: BLE001 - report, don't crash
         check("update keeps settings and music", False, repr(exc))
 

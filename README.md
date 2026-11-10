@@ -84,7 +84,8 @@ docs/          PROTOCOL.md, CONTROLS.md, AUDIO.md, LICENSING.md, img/ (screensho
 ui/config.json the only config file
 install.sh     one-time setup for a source check-out
 VERSION        the release number, read by scripts/release.py
-goal.md        what was built, in phases, with acceptance criteria
+goal.md        the plan for the next round, milestone by milestone
+docs/goal-*.md what earlier releases were built against, with measured numbers
 FEATURES.md    feature inventory: shipped / planned / backlog
 ```
 
@@ -156,8 +157,9 @@ the GTK 3 + WebKit2GTK closure is **281 MB in 138 libraries** (WebKit alone
 98.6 MB, JavaScriptCore 40.6 MB, ICU 33.1 MB) and SuperCollider's is **477 MB in
 242** (sclang links Qt6WebEngine, 203.7 MB of it). Bundling both would make a
 ~300 MB AppImage that only runs within the same glibc generation. A 12 MB
-download plus one password prompt is the better trade; `goal.md` records the
-numbers and the conditions under which a full bundle would be worth it.
+download plus one password prompt is the better trade; `docs/goal-0.2.md`
+records the numbers and the conditions under which a full bundle would be worth
+it.
 
 You do not hunt for those package names. The app knows what is missing, spells
 it correctly for your distribution, and installs all of it behind one password
@@ -471,7 +473,7 @@ have the UI outline each target and count any that fall below that floor.
 
 ```bash
 ./install.sh                          # .venv + pinned requirements
-./scripts/smoke.py                    # starts its own engine: 63 end-to-end checks
+./scripts/smoke.py                    # starts its own engine: 64 end-to-end checks
 ./scripts/smoke.py --attach            # run against a stack you already started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules ./scripts/uicheck.mjs
 python3 scripts/shots.py              # regenerate docs/img (auto: starts and stops the stack)
@@ -537,5 +539,7 @@ redistributing a pedal built on this actually obliges you to do.
 - `docs/CONTROLS.md` — **every button, slider and knob**, with range, effect and the message it sends
 - `docs/PROTOCOL.md` — every OSC/JSON message, with field order
 - `docs/AUDIO.md` — signal graph, gain staging, latency, CPU numbers
-- `goal.md` — the plan this was built against, phase by phase
+- `goal.md` — the plan the next round is built against, milestone by milestone
+- `docs/goal-*.md` — the plans earlier releases were built against, with the
+  numbers that decided each one
 - `FEATURES.md` — feature inventory and backlog
