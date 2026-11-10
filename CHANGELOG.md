@@ -4,7 +4,7 @@ All notable changes to Looper OSS. Format: [Keep a Changelog](https://keepachang
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The single
 source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
-## [Unreleased]
+## [0.4.0] — 2026-11-10
 
 ### Added
 

@@ -300,8 +300,24 @@ change a free varispeed instead of a re-record. Details and gain staging in
 | **speed** | fx → loop | Varispeed per track, ½ / 1 / 2 / 4 and continuously 0.25–4. At 1 the track reads the master phase and stays locked; anything else free-runs and **re-pitches**, like the hardware's SPEED knob (not time-stretch). |
 | **mark / mark back** | fx → loop | Bookmark the current layer count, then jump straight back to it — no stepping down one layer at a time. The layers above are muted but kept, so redo still walks them back. |
 | **overdub replaces** | setup → loop | A new take mutes the layers it covers instead of layering on top. Their audio is untouched, so **undo** brings them back. |
+| **merge** | track row | Joins that track's layers into one, for when four takes of a drum part are right. Same sum as bounce; the layers above 0 are cleared, so it asks first. Fewer than two layers is refused. |
+| **merge tracks** | service | `svc mergeTracks dst src…` joins only the tracks you name, leaving the rest alone. |
 | **bounce** | setup → session | Sums every track that has layers into track 1 as a single layer, in one loop pass, then clears the sources. |
 | **clear all** | transport | Wipes every track *and* the autosave — a clean slate that cannot come back on restart. Tap twice. |
+
+## Performing: the DJ filter and master FX
+
+The **dj filter** knob sits next to the master fader. Centre is *off* — not a
+filter that happens to be transparent, but the filter out of the path entirely.
+Turn it left and a low pass sweeps down; turn it right and a high pass sweeps up;
+the resonance is `dj resonance` in setup → loop. Double-tap the knob to snap back
+to centre, which is the only thing you want in a hurry mid-song.
+
+Two **master FX** slots live in setup → loop. Each one is a filter, a delay, a
+drive or a tremolo with two knobs labelled for that effect, and they apply to
+everything, after the static high pass/low pass and before the limiter — so a
+resonant sweep is caught rather than clipping. The choice is saved; the knobs are
+live.
 
 ## Drums
 
@@ -384,6 +400,7 @@ looper's fault.
 | **click level** | metronome loudness, on its own bus so it never lands in your loop | 30 % in headphones, 0 % live |
 | **count-in bars** | how many bars the **count-in** button waits before recording starts, 0–8 | 1 |
 | **accent / click** | pitch of the first beat and of the other beats. Higher cuts through a loud room | 1580 Hz / 1050 Hz |
+| **follow link** | Ableton Link: tempo and bar phase come from the peers on your network. Off is the internal clock. On with no peer keeps your own tempo and says `on, no peer` | on if the rest of the rig runs Link |
 
 Tempo itself lives on the main screen: drag the tempo bar, type a number, or tap
 **TAP** in time. Bars per loop is the **1 2 4 8** row next to it — that is the
