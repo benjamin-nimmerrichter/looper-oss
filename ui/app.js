@@ -231,6 +231,12 @@ function handle(m) {
       setBoot(`engine failed to start: ${m.msg}`, false, true);
       console.error("engine boot failed:", m.msg);
       break;
+    case "audio":
+      // the engine opened a different device than the one asked for, or fell
+      // back to the default: the meters can move while nothing is heard
+      toast(`audio: ${m.warn}`);
+      console.error("audio:", m.warn);
+      break;
     default:
       break;
   }

@@ -518,6 +518,35 @@ def resume_drift(last_wall: float, last_mono: float,
     return (wall - last_wall) - (mono - last_mono)
 
 
+def log_size(path: pathlib.Path) -> int:
+    """Byte offset to start reading from, so an old 'engine ready' cannot count."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
+def wait_engine_ready(path: pathlib.Path, since: int, timeout: float = 30.0) -> float | None:
+    """Seconds until the engine says it is ready, or None if it never does.
+
+    A resume is only fixed when the engine comes all the way back: the process
+    being alive proves nothing (invariant 22 -- scsynth survives a suspend
+    against a device that no longer exists). The engine prints one line when it
+    has booted, and this waits for that line rather than for a sleep.
+    """
+    started = time.monotonic()
+    while time.monotonic() - started < timeout:
+        try:
+            with path.open("rb") as fh:
+                fh.seek(since)
+                if b"engine ready" in fh.read():
+                    return time.monotonic() - started
+        except OSError:
+            pass
+        time.sleep(0.25)
+    return None
+
+
 class Engine:
     """SuperCollider, supervised: exit code 42 means 'restart me'."""
 
@@ -795,7 +824,18 @@ def main(argv: list[str] | None = None) -> int:
                 # PipeWire a moment to rebuild its graph before scsynth asks
                 # for the device again.
                 print(f"--- resume detected ({drift:.0f}s asleep): restarting the engine")
+                offset = log_size(engine.log)
                 engine.restart(delay=4.0, count=False)
+                # The restart is not the fix; the engine coming back is. Wait for
+                # its own ready line and say how long it took, so a resume that
+                # half-works is visible in the log instead of being a silence the
+                # player has to diagnose.
+                ready = wait_engine_ready(engine.log, offset, 30.0)
+                if ready is None:
+                    print("--- resume: the engine did NOT report ready within 30 s "
+                          "(check the audio device in logs/engine.log)")
+                else:
+                    print(f"--- resume: engine ready {ready:.1f}s after the relaunch")
                 last_wall, last_mono = time.time(), time.monotonic()
                 continue
 

@@ -66,29 +66,34 @@ if (~isWindows.not) {
 if (~audio[\sampleRate].notNil) { s.options.sampleRate = ~audio[\sampleRate] };
 // "device" is an ALSA hardware name (scsynth -H). JACK/PipeWire has no device:
 // scsynth is simply a node in the graph. So: jack ignores it, alsa requires it.
-~driver = (~audio[\driver] ? "auto").asString.toLower;
-switch (~driver,
-	"alsa", {
-		s.options.device = if (~audio[\device].notNil && ~audio[\device].asString.contains("hw:"),
-			{ ~audio[\device] }, { "default" });
-	},
-	"jack", {
-		s.options.device = nil;
-	},
-	"wasapi", { if (~audio[\device].notNil) { s.options.device = ~audio[\device] } },
-	"mme",    { if (~audio[\device].notNil) { s.options.device = ~audio[\device] } },
-	"asio", {
-		// Windows: PortAudio picks the backend from the device string's prefix.
-		// "ASIO : <name>" is the low-latency path (hardwareBufferSize becomes the
-		// ASIO buffer); MME/WASAPI go through the Windows mixer at 20-40 ms.
-		var d = ~audio[\device];
-		s.options.device = if (d.notNil && d.asString.beginsWith("ASIO"),
-			{ d }, { "ASIO : " ++ (d ? "default") });
-	},
-	{
-		if (~audio[\device].notNil) { s.options.device = ~audio[\device] };
-	}
-);
+// A function, because a boot failure may mean the interface went away over a
+// suspend: the bridge then clears the bad name, and the retry has to re-read it.
+~applyAudioDevice = {
+	~driver = (~audio[\driver] ? "auto").asString.toLower;
+	switch (~driver,
+		"alsa", {
+			s.options.device = if (~audio[\device].notNil && ~audio[\device].asString.contains("hw:"),
+				{ ~audio[\device] }, { "default" });
+		},
+		"jack", {
+			s.options.device = nil;
+		},
+		"wasapi", { if (~audio[\device].notNil) { s.options.device = ~audio[\device] } },
+		"mme",    { if (~audio[\device].notNil) { s.options.device = ~audio[\device] } },
+		"asio", {
+			// Windows: PortAudio picks the backend from the device string's prefix.
+			// "ASIO : <name>" is the low-latency path (hardwareBufferSize becomes the
+			// ASIO buffer); MME/WASAPI go through the Windows mixer at 20-40 ms.
+			var d = ~audio[\device];
+			s.options.device = if (d.notNil && d.asString.beginsWith("ASIO"),
+				{ d }, { "ASIO : " ++ (d ? "default") });
+		},
+		{
+			if (~audio[\device].notNil) { s.options.device = ~audio[\device] };
+		}
+	);
+};
+~applyAudioDevice.value;
 // scsynth is not on PATH on Windows and SC boots the server by its bare name --
 // inside Wine that became "Can't recognize 'scsynth.exe'" and the engine died
 // three times. If an scsynth sits beside the class library, that is the server:
@@ -1976,9 +1981,52 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			~sendMIDIMap.value;
 			~stateLoop.value;
 			~bridge.sendMsg('/ldready', ~nTracks);
+			// The launcher watches this line after a resume: it is the only
+			// signal that the engine came all the way back, not just that the
+			// process is alive. Name what was asked for; the bridge reports what
+			// scsynth actually opened.
+			"*** Looper OSS: engine ready (% tracks, device %)".format(
+				~nTracks, if (s.options.device.notNil, { s.options.device }, { "default" })
+			).postln;
 		} {
 			"*** Looper OSS: could not open the audio device. Is PipeWire/your interface busy?".postln;
 			~bridge.sendMsg('/ldbootfail', "could not open the audio device");
+			// The bridge answers a boot failure by clearing a named device that will
+			// not open -- the shape of a resume that took the interface away -- and
+			// writing a fresh config. Give it a moment, re-read that config and try
+			// ONCE more, instead of leaving a half-booted engine behind (invariant 22:
+			// the process stays alive, so nothing outside can see the silence).
+			fork {
+				var waited = 0;
+				3.wait;
+				if (File.exists(~cfgFile)) {
+					// ~cfgFile.load redefines ~cfg, but ~audio is a copy taken at
+					// file load -- refresh it, or the retry asks for the same dead
+					// device again (which it did).
+					~cfgFile.load;
+					~audio = ~cfg[\audio];
+					~applyAudioDevice.value;
+				};
+				("*** Looper OSS: retrying the audio device, asking for "
+					++ (s.options.device ? "the system default")).postln;
+				s.boot;
+				while { s.serverRunning.not && (waited < 10) } {
+					0.5.wait; waited = waited + 0.5;
+				};
+				if (s.serverRunning) {
+					~boot.value;
+					~recoverAutosave.value;
+					~sendState.value;
+					~sendMIDIMap.value;
+					~stateLoop.value;
+					~bridge.sendMsg('/ldready', ~nTracks);
+					("*** Looper OSS: engine ready (" ++ ~nTracks ++ " tracks, device "
+						++ (s.options.device ? "default") ++ ")").postln;
+				} {
+					"*** Looper OSS: gave up -- no audio device.".postln;
+					~bridge.sendMsg('/ldbootfail', "no audio device");
+				};
+			};
 		};
 	};
 );

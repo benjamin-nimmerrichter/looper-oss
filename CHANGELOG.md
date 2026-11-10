@@ -8,6 +8,17 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ### Fixed
 
+- **A resume is only reported fixed when the engine is actually back (#1).** The
+  suspend watchdog restarted the engine and said so, but nothing checked the
+  result: the process can be alive, the meters moving and no sound coming out.
+  The launcher now waits for the engine's own `engine ready` line — from a byte
+  offset taken before the restart, so an old line cannot satisfy it — and logs
+  how long it took, or that it never arrived. The bridge reports which endpoint
+  the engine is really feeding and warns when it is not the one asked for, or
+  when nothing feeds an output at all. A named device that will not open is
+  cleared once and retried: the engine re-reads the config and tries again.
+  Measured here: `could not open the audio device` → `retrying the audio device,
+  asking for default` → `engine ready (5 tracks, device default)`.
 - **The layer model no longer loses sound (#5).** Four ways it could, all fixed:
   REPLACE mode committed a take that recorded nothing and so muted the whole
   track (the reported "sounds get deleted when a silent part overdubs" — such a

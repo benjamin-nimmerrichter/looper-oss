@@ -261,3 +261,46 @@ The read-back walks the whole layer buffer rather than its first second: a take
 starts wherever the play head is, so the content is not necessarily at index 0
 (which is also why `probe`'s `peak0..peak3`, reading 48 000 frames, can report 0
 for a take that is perfectly audible — it is a diagnostic window, not a verdict).
+
+## Sleep and resume (issue #1)
+
+A suspend tears the audio device down and rebuilds it. `scsynth` survives that
+with no exit code, meters still moving and no sound — so an exit-code watchdog
+cannot see it, and neither can the player.
+
+The launcher detects the sleep without a D-Bus client: `CLOCK_MONOTONIC` stops
+during suspend and `CLOCK_REALTIME` does not, so subtracting one elapsed time
+from the other leaves the sleep duration and ~0 for an ordinary tick. Over 5 s
+(an NTP step is slewed, a sleep is not) it restarts the engine.
+
+**The restart is not the fix; the engine coming back is.** After relaunching, the
+launcher waits for the engine's own `*** Looper OSS: engine ready` line, with a
+byte offset taken before the restart so an old line cannot satisfy it, and logs
+how long it took:
+
+```text
+--- resume detected (600s asleep): restarting the engine
+--- resume: engine ready 2.8s after the relaunch
+```
+
+If the line never arrives the log says so, in those words. That distinction is
+the whole point: "restarted" and "working" are different facts.
+
+Two things then have to be true, and both are checked rather than assumed:
+
+- **Which endpoint the engine feeds.** After every `/ldready` the bridge asks
+  the graph (PipeWire on Linux, scsynth's boot log on Windows, which prints
+  `Out: <backend> : <endpoint>`). It logs the answer and, if it differs from
+  `audio.device`, says so in the UI — the wrong endpoint can be a dead one, with
+  the meters still moving.
+- **That the device opens at all.** A named interface that will not open is the
+  shape of a resume that took it away. The bridge clears `audio.device`, writes
+  a fresh `engine/_config.scd`, and the engine — which already reported the boot
+  failure — waits 3 s, re-reads the config (`~cfgFile.load`, then `~audio =
+  ~cfg[\audio]`, because `~audio` is a copy), and tries once more. One retry,
+  then it reports `gave up` and the UI shows the reason instead of a silent,
+  half-booted engine.
+
+Measured here: a device the system does not have produced, in order,
+`could not open the audio device` → `retrying the audio device, asking for
+default` → `engine ready (5 tracks, device default)`.

@@ -255,6 +255,25 @@ async def run_tests(c: Client) -> None:
     except Exception as exc:                       # noqa: BLE001 - report, don't crash
         check("sleep/resume signal detected", False, repr(exc))
 
+    # Detecting the sleep is half of it: the restart only counts when the engine
+    # says it is back. A stale 'engine ready' from before the restart must not
+    # satisfy the wait, or a resume that never recovered would look fixed.
+    try:
+        from app.main import log_size, wait_engine_ready
+        with tempfile.TemporaryDirectory() as td:
+            logfile = pathlib.Path(td) / "engine.log"
+            logfile.write_text("*** Looper OSS: engine ready (5 tracks)\n")
+            offset = log_size(logfile)                 # the old line is behind it
+            stale = wait_engine_ready(logfile, offset, 0.4) is None
+            with logfile.open("a") as fh:
+                fh.write("*** Looper OSS: engine ready (5 tracks, device default)\n")
+            fresh = wait_engine_ready(logfile, offset, 3.0)
+        check("a resume waits for a fresh 'engine ready'",
+              stale and fresh is not None,
+              f"stale_line_ignored={stale} waited={fresh}")
+    except Exception as exc:                       # noqa: BLE001 - report, don't crash
+        check("a resume waits for a fresh 'engine ready'", False, repr(exc))
+
     # Re-staging is an update, not a reset. A musician's bpm/track count/device
     # live in ui/config.json, and their recordings in sessions/ -- a new build
     # must keep both, while still migrating the old `autoDub: 0` default.

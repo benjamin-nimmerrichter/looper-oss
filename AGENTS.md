@@ -29,7 +29,7 @@ browser (ui/)  ⇄ ws JSON ⇄  bridge (bridge/bridge.py)  ⇄ OSC ⇄  sclang (
 | `ui/app.js` | every control, drawers, boot screen, playhead, keypad | UI behaviour |
 | `ui/controls.js` | the touch primitives: Fader, Knob, Pad, Button, Segmented, Stepper, Select, Meter, `auditTapTargets` | gesture/size rules |
 | `ui/style.css` | layout, `--scale`, `--tap` (48 px floor), grid | anything visual |
-| `scripts/smoke.py` | 70 end-to-end checks, spawns its own engine | behaviour changes (update expectations!) |
+| `scripts/smoke.py` | 71 end-to-end checks, spawns its own engine | behaviour changes (update expectations!) |
 | `scripts/uicheck.mjs` | 16 UI checks + screenshots (needs playwright) | UI layout changes |
 | `scripts/sweep.py` | kills leftover `scsynth`/`sclang`/bridge/UI-server by scanning `/proc` | — |
 | `scripts/release.py` | builds `dist/looper-oss-<ver>.tar.gz` + `.zip` + `SHA256SUMS`, reproducible; refuses to ship runtime state | what a release contains, versioning |
@@ -70,7 +70,7 @@ LOOPER_OSS_RESUME_SIM=600 python3 -m app.main --window none
                                   # say `resume detected` and `engine ready` again
 
 python3 scripts/sweep.py          # kill leftovers (do this after any test run)
-./scripts/smoke.py                # 70 checks, spawns its own stack
+./scripts/smoke.py                # 71 checks, spawns its own stack
 ./scripts/smoke.py --attach       # ...against a stack you started
 PLAYWRIGHT_DIR=/tmp/uitest/node_modules node scripts/uicheck.mjs
 python3 scripts/shots.py          # docs/img screenshots: WebKit snapshot, starts/stops the stack
@@ -187,6 +187,13 @@ SuperCollider and its corners, in the order they bit us. Read before editing
     it. `app/main.py` compares `CLOCK_REALTIME` drift against `CLOCK_MONOTONIC`
     (monotonic stops during suspend) and restarts the engine on >5 s. The session
     comes back **stopped** from autosave — that is intended, not a bug.
+    The restart is not the fix. The launcher then waits for the engine's own
+    `engine ready` line (from a byte offset taken *before* the restart, so a stale
+    line cannot satisfy it) and logs how long it took; if the line never comes it
+    says so. After every ready the bridge also checks *which endpoint* the engine
+    feeds and compares it with `audio.device`. A device that will not open is
+    cleared once and retried — the engine re-reads `_config.scd` and must refresh
+    `~audio` with it, because `~audio` is a copy taken at file load.
 23. **`Buffer.readChannel`'s channel argument is an Integer, not an array.**
     `readChannel(s, path, [0], start, num, action)` compiles and then never calls
     the action: no error, no buffer, no reply. That is how WAV import silently
@@ -235,7 +242,7 @@ SuperCollider and its corners, in the order they bit us. Read before editing
 Before you call a change done:
 
 - [ ] `sclang /tmp/probe.scd` → `0 ERROR`, and the log has no `streamToFloatArray`
-- [ ] `./scripts/smoke.py` → 70/70 (update the expectations if the behaviour changed
+- [ ] `./scripts/smoke.py` → 71/71 (update the expectations if the behaviour changed
       *on purpose* — see §8)
 - [ ] `node scripts/uicheck.mjs` → `UI OK` if you touched the UI
 - [ ] `python3 scripts/sweep.py` → no processes left, user hears nothing

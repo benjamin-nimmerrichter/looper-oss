@@ -8,6 +8,7 @@ Also owns ui/config.json: settings changed in the UI are written back here and
 the generated engine config is refreshed, so a restart picks them up.
 """
 import asyncio
+import contextlib
 import datetime
 import json
 import os
@@ -115,6 +116,8 @@ last_state: dict[str, Any] | None = None
 # must still learn that it booted, or it shows the boot screen for ever.
 engine_ready: dict[str, Any] | None = None
 engine_failed: str | None = None
+# one automatic fallback to the default device per boot, never a loop
+device_retry_done = False
 
 
 # --------------------------------------------------------------------- utils --
@@ -624,28 +627,103 @@ def on_silent(_addr: str, *args: Any) -> None:
           "layer": inum(args[1]) if len(args) > 1 else 0})
 
 
+def opened_device_name() -> str:
+    """The output endpoint scsynth reported opening, as a short name.
+
+    Two sources, because the platforms differ: scsynth's own boot log prints an
+    `Out:` line under PortAudio (Windows), while under JACK/PipeWire it prints
+    `JackDriver: connected ...` and the graph is the only place that knows where
+    the output actually goes. `list_audio_devices` already answers the second
+    question, so this only handles the first.
+    """
+    opened = opened_from_log()
+    for key in ("out", "in"):
+        text = opened.get(key)
+        if text:
+            # "CoreAudio : MacBook Pro Speakers" -> "MacBook Pro Speakers"
+            return text.split(":")[-1].strip() or text.strip()
+    return ""
+
+
+async def report_device() -> None:
+    """Log which endpoint the engine is really feeding, and warn on a mismatch.
+
+    A resume can bring the engine back against a device that is not the one the
+    player chose -- or against a dead one, where the meters still move and
+    nothing is heard. That is the failure this whole milestone is about, so it
+    gets a line in the log and a message in the UI, not a silent fallback.
+    """
+    device = opened_device_name()
+    if not device:
+        try:
+            loop = asyncio.get_running_loop()
+            data = await loop.run_in_executor(None, list_audio_devices)
+            outs = (data.get("links") or {}).get("outputs") or []
+            if outs:
+                # "HD USB Audio Device:playback_FL" -> the node name
+                device = str(outs[0]).split(":")[0].strip()
+        except (RuntimeError, OSError, ValueError) as exc:
+            log(f"cannot read the opened device ({exc})")
+    if not device:
+        # The engine booted but nothing feeds an output: this is the shape of the
+        # post-suspend failure -- the meters move and no sound comes out -- and it
+        # is invisible without asking the graph.
+        log("audio: the engine is running but not connected to any output")
+        push({"t": "audio", "warn": "the engine is running but not connected "
+                                   "to an output -- check the interface"})
+        return
+    log(f"audio: engine is feeding {device}")
+    wanted = str(CFG.get("audio", {}).get("device") or "")
+    if wanted and wanted.split(":")[-1].strip() not in device:
+        log(f"audio: asked for '{wanted}', the engine opened '{device}'")
+        push({"t": "audio", "warn": f"asked for {wanted}, opened {device}"})
+
+
 def on_boot_fail(_addr: str, *args: Any) -> None:
     why = str(args[0]) if args else "unknown"
     log(f"ENGINE BOOT FAILED: {why}")
-    global engine_failed, engine_ready
+    global engine_failed, engine_ready, device_retry_done
     engine_failed = why
     engine_ready = None
     push({"t": "bootfail", "msg": why})
 
+    # A named interface that will not open is usually the one that went away over
+    # a suspend. Retry ONCE with the system default instead of leaving the player
+    # with a half-booted engine and no sound (invariant 22: the process stays
+    # alive, so an exit-code watchdog cannot see this). `reboot` exits the engine
+    # with 42, which the launcher answers with a fresh start that reads the
+    # config we are about to reset.
+    wanted = str(CFG.get("audio", {}).get("device") or "")
+    if wanted and not device_retry_done:
+        device_retry_done = True
+        CFG["audio"]["device"] = ""
+        try:
+            CONFIG_JSON.write_text(json.dumps(CFG, indent=2) + "\n", newline="\n")
+            write_from(str(CONFIG_JSON), str(CONFIG_SCD))
+            log(f"audio device '{wanted}' did not open: retrying with the default")
+            push({"t": "audio", "warn": f"{wanted} did not open -- retrying with the "
+                                       f"system default"})
+            engine.send_message("/ld/act", ["reboot", 0])
+        except OSError as exc:
+            log(f"cannot reset the audio device ({exc})")
+
 
 def on_ready(_addr: str, *args: Any) -> None:
-    global engine_ready, engine_failed
+    global engine_ready, engine_failed, device_retry_done
     tracks = inum(args[0]) if args else N
     engine_ready = {"t": "ready", "tracks": tracks}
     engine_failed = None
+    device_retry_done = False
     log(f"engine ready ({tracks} tracks)")
     push(engine_ready)
+    # which endpoint is it really feeding? asked in the background: pw-dump and
+    # pw-link take a moment, and the ready frame must not wait for them.
+    with contextlib.suppress(RuntimeError):
+        asyncio.ensure_future(report_device())
     # The UI asks for devices when it connects, usually before scsynth has printed
     # its PortAudio table, so the in/out pickers stayed empty. Resend now.
-    try:
+    with contextlib.suppress(RuntimeError):
         asyncio.ensure_future(send_devices())
-    except RuntimeError:
-        pass
     engine.send_message("/ld/svc", ["stats"])
 
 
