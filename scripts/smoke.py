@@ -1138,6 +1138,15 @@ async def run_tests(c: Client) -> None:
     await asyncio.sleep(1.6)
     await c.act("dub", L)
     await asyncio.sleep(1.2)
+    # the source has to actually hold something, or the copy proves nothing
+    src_probe = await probe_l()
+    if not src_probe or src_probe["peaks"][0] < 0.02:
+        await c.svc("testTone", [300, 0.3, 60])
+        await c.act("dub", L)
+        await asyncio.sleep(1.8)
+        await c.act("dub", L)
+        await asyncio.sleep(1.2)
+        src_probe = await probe_l()
     await c.svc("copyTrack", [L, 3])
     cp = await c.wait(lambda m: m.get("t") == "copied", 12)
     p3 = await probe_l() if False else None

@@ -179,9 +179,20 @@ body.no-master #master { display: none; }
   border-radius: var(--radius);
   padding: 0.45rem;
   min-height: 0;
+  /* A column can be shorter than its controls (5 tracks on a 1024x600 panel at
+     a large scale): the pad's 48 px floor then spills over the buttons below it
+     and swallows their taps. Clipping the column keeps every control inside its
+     own box, at the cost of the last row scrolling out of reach -- which the
+     scale slider is there to fix. */
+  overflow: hidden;
   transition: border-color 0.12s;
 }
 .track.selected { border-color: var(--c); background: var(--panel-2); }
+/* Everything that is not the pad paints above it. The pad is position:relative
+   (for its progress bar), so when a short column squeezes its row it used to
+   paint over the buttons below and swallow their taps -- clipping alone did not
+   fix the hit-testing, because the pad is positioned and they were not. */
+.track > *:not(.pad) { position: relative; z-index: 1; }
 
 .tname {
   display: flex;
@@ -416,7 +427,9 @@ body.no-master #master { display: none; }
   min-height: 2rem;
 }
 /* step sequence: eight cells, each a height bar you tap to cycle */
-.steprow { display: grid; grid-template-columns: repeat(4, minmax(var(--tap), 1fr)); gap: 0.25rem; }
+/* auto-fit, not a fixed four: in a narrow card four 48 px cells do not fit
+   and the row ran out to the right of the card (the 'random squares') */
+.steprow { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--tap), 1fr)); gap: 0.25rem; }
 .stepcell {
   min-height: var(--tap);
   border: 1px solid var(--line);
@@ -495,7 +508,8 @@ body.no-master #master { display: none; }
 .knobwrap .read { font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .knobwrap.active .read { color: var(--accent); }
 
-.seg { display: flex; gap: 0.25rem; }
+/* wraps: four 48 px cells are 192 px + gaps and a card can be narrower */
+.seg { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .seg-btn {
   flex: 1;
   min-height: var(--tap);
@@ -639,8 +653,9 @@ body.no-master #master { display: none; }
   min-height: var(--tap);
 }
 .slot.filled { border-style: solid; color: var(--text); }
-.slot .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slot .acts { display: flex; gap: 0.25rem; flex: 0 0 auto; }
+.slot { flex-wrap: wrap; }
+.slot .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.slot .acts { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-left: auto; }
 
 /* every <select> is themed, wherever it is used. A <select> without
    appearance: none paints as a white system widget, and the app has them in
