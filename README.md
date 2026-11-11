@@ -63,6 +63,15 @@ If it's useful, great. If it's broken or annoying, open an issue.
 - **No build step, no framework, no network at runtime.** Offline by
   construction.
 
+**0.4.0 added** — a **DJ filter** knob and **two master FX slots** on the main
+screen, **Ableton Link** (tempo and bar phase from the rest of the rig),
+**merge layers** (four takes into one loop) and **merge tracks by selection**,
+**per-layer mute**, **one-shot playback**, **track copy / swap**, **Auto Rec**
+that actually arms, a **phrase browser**, **per-channel input EQ**, and a rhythm
+**cue send**. It also fixes the layer model losing takes, the audio not coming
+back after a sleep, and the bar ruler hiding behind the playhead. Full detail in
+[`CHANGELOG.md`](CHANGELOG.md).
+
 **0.2 added** — per-track **speed** (varispeed 0.25–4×), **mark / mark back**,
 **replace-overdub**, **bounce all tracks into one**, **clear all**, a
 **synthesised drum engine** (16 kits, 200 patterns, no samples), **four plugin
@@ -390,6 +399,8 @@ looper's fault.
 | **dub decay** | each overdub pass fades the previous layer a little — "sound on sound" fade-out. 0 % keeps everything forever. | 0 %, raise it for ambient layering |
 | **master chain: high pass / low pass** | a filter across the whole mix, for taming rumble or hiss | 0 Hz / 1000 Hz+ is off |
 | **master chain: reverb mix / room size** | one shared reverb; each track has its own send in the fx drawer | 60 % mix, 80 % room |
+| **dj resonance** | how sharp the DJ filter's sweep is; the knob itself is on the main screen | 35 % |
+| **master FX ×2** | two insert slots on the master, each a filter, delay, drive or tremolo with two live knobs | off until you want them |
 
 ### clock — what you play to
 

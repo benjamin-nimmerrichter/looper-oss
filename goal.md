@@ -765,6 +765,36 @@ Stated here so the issue can be answered honestly instead of left open forever.
 
 ---
 
+## What shipped, and the evidence
+
+The plan above is the plan; this is what happened. Each milestone ends with the
+measurement that decided it, because "it compiles" is not a result.
+
+| milestone | outcome |
+| --- | --- |
+| M0 | config carry-over landed; the ruler fix proven in WebKit — 0 of 7 beat marks visible inside the playhead fill before, 7 of 7 after |
+| M1 | six new checks; the pre-fix behaviour was recorded first (silent REPLACE left `gains=[0,1]` with the track muted, a stopped track decayed 1.00 → 0.24, redo promoted a layer mid-take) |
+| M2 | `resume detected (600s asleep)` → `engine ready 2.8s after the relaunch`; the device chain `could not open` → `retrying … default` → `engine ready` |
+| M3 | merge layers sums 0.47+0.63 → 1.59 and refuses below two layers; merge by selection frees the sources and leaves the rest alone |
+| M4 | DJ filter at the master meter: bypass 0.0205 → low pass 0.0001, high pass 0.0122, back 0.0205; a filter slot reads 0.0000 against 0.0156 bypass |
+| M5 | a real second SuperCollider peer: 120 → 140 bpm followed, no peer 120 → 120, off → 120 |
+| M6 | Auto Rec (was dead code), per-layer mute, one-shot, copy/swap, phrase browser, input EQ, rhythm cue; FEATURES.md truth pass; issue #3 answered with what shipped and what is deferred |
+| M7 | 0.4.0, 86/86 checks, UI OK, release check clean, AppImage built and run from the staged home it inherits from 0.3.0 |
+
+Two things the plan did not anticipate, both now invariants:
+
+- **`&&` is not lazy in sclang.** `x.notNil && (t - x)` subtracted from nil, which
+  killed the clock-poll routine on its first tick at every boot and made a double
+  tap on a pedal throw. AGENTS §6.28.
+- **`SendReply` values start at `msg[3]`.** Two handlers read `msg[4]`, so every
+  beat looked like beat 0 and `/ldauto` always pointed at track 0 — Auto Rec could
+  never have worked even once armed. AGENTS §6.1 was right; the code was not.
+
+Decisions taken where the plan left a choice: merge layers is destructive with
+tap-to-arm (the layer stack has no spare slot for the originals), and Link's phase
+lock is beat-resolution with a rate nudge rather than a jump (`AUDIO.md` says so
+plainly).
+
 ## Paste this into `/goal`
 
 ```text
