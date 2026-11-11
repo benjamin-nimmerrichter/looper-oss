@@ -91,6 +91,17 @@ body.no-master #master { display: none; }
   color: var(--dim);
   white-space: nowrap;
 }
+/* A sentence, not a heading: it wraps. `.caption` is nowrap on purpose (a card
+   heading must stay on one line), and a long caption used to run straight out
+   of its card and across its neighbours. */
+.note {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  color: var(--dim);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 .bigvalue {
   font-size: 2.1rem;
@@ -394,6 +405,8 @@ body.no-master #master { display: none; }
   flex-direction: column;
   gap: 0.45rem;
   min-height: 0;
+  min-width: 0;      /* grid children default to min-content: allow shrinking */
+  overflow: hidden;
 }
 .fxcard > .head {
   display: flex;

@@ -57,6 +57,9 @@ let VSTCATALOG = [];
 let MIDIMAP = [];
 let MIDIDEVS = [];
 let selected = 0;
+// which track is waiting to receive a merge: tap merge on it, then on a source
+let mergeInto = null;
+const mergeBtns = [];
 let phase = { value: 0, at: performance.now() };
 let IMPORTS = [];
 let SEQ = [];       // per-track step-sequence patterns (eight values 0..1)   // *.wav sitting in sessions/import/
@@ -356,6 +359,43 @@ function openKeypad({ title, value, min, max, hint, onOk }) {
  * the OS claims the hold and turns it into a right-click / context menu, so the
  * hold never completes -- the same reason the per-track clear is two taps.
  */
+/**
+ * Two-tap track merge: the first track you touch is the destination.
+ *
+ *   1. tap merge on track 1  -> track 1 is armed, its button says where into
+ *   2. tap merge on track 3  -> 3 is summed into 1 and freed; 1 keeps its own
+ *      layers, and both are one layer afterwards
+ *
+ * Tapping the armed track again cancels, so a mis-tap costs one tap, not a
+ * merge. Multi-source is the same gesture repeated: arm 1, tap 3, arm 1, tap 4.
+ */
+function tapMerge(i) {
+  if (mergeInto === null) {
+    mergeInto = i;
+    paintMerge();
+    toast(`track ${i + 1}: tap merge on another track to join it into this one`);
+    return;
+  }
+  if (mergeInto === i) {
+    mergeInto = null;
+    paintMerge();
+    return;
+  }
+  const dst = mergeInto;
+  mergeInto = null;
+  paintMerge();
+  svc("mergeTracks", [dst, dst, i]);
+  toast(`track ${i + 1} → track ${dst + 1}`);
+}
+
+function paintMerge() {
+  mergeBtns.forEach((b, n) => {
+    if (!b) return;
+    b.classList.toggle("on", mergeInto === n);
+    b.textContent = mergeInto === n ? "into" : "merge";
+  });
+}
+
 function confirmButton(label, onConfirm, cls = "") {
   const b = Button({ label, cls });
   let armedAt = 0;
@@ -564,9 +604,13 @@ function buildTracks(n) {
     undo.addEventListener("pointerup", () => act("undo", i));
     const redo = Button({ label: "redo", cls: "tiny" });
     redo.addEventListener("pointerup", () => act("redo", i));
-    // MERGE LAYERS flattens the stack into one layer and zeroes the rest, so it
-    // arms first. It is the only way to get from four takes to one loop.
-    const merge = confirmButton("merge", () => act("mergeLayers", i), "tiny");
+    // MERGE: tap it on the track that should RECEIVE, then on the track that
+    // should be joined into it -- the first one you touched is the destination.
+    // Tapping the armed track again cancels. Flattening a track's own layers
+    // lives in the fx drawer, next to the layer mutes.
+    const merge = Button({ label: "merge", cls: "tiny" });
+    mergeBtns[i] = merge;
+    merge.addEventListener("pointerup", () => tapMerge(i));
     const clear = confirmButton("clear", () => {
       act("clear", i);
       toast(`track ${i + 1} cleared`);
@@ -636,32 +680,6 @@ function openFx(i) {
   body.replaceChildren();
   const t = S ? S.tracks[i] : null;
 
-  // #3: the per-layer mixer, one-shot and Auto Rec. These live on the track
-  // itself, because they are about the material, not about an effect.
-  const layersCard = el("div", "fxcard");
-  const lh = el("div", "head");
-  lh.append(el("div", "caption", "layers"));
-  layersCard.append(lh);
-  const nLayers = t ? t.layers : 0;
-  const rowMute = el("div", "row2");
-  for (let k = 0; k < 4; k++) {
-    const b = Button({ label: `L${k + 1}`, cls: "tiny", toggle: true });
-    if (k >= nLayers) b.classList.add("off");
-    b.addEventListener("pointerup", () => set(`t${i}.lmute`, k));
-    rowMute.append(b);
-  }
-  layersCard.append(settingsRow("mute", rowMute, "tap a layer to mute or unmute it"));
-  const rowFlags = el("div", "row2");
-  const autoB = Button({ label: "auto rec", cls: "tiny", toggle: true });
-  if (Number(getPath(CFG, `t${i}.autoArm`) ?? 0)) autoB.classList.add("on");
-  autoB.addEventListener("pointerup", () => set(`t${i}.autoArm`, autoB.classList.contains("on") ? 0 : 1));
-  const onceB = Button({ label: "one-shot", cls: "tiny", toggle: true });
-  onceB.addEventListener("pointerup", () => set(`t${i}.oneshot`, onceB.classList.contains("on") ? 0 : 1));
-  rowFlags.append(autoB, onceB);
-  layersCard.append(settingsRow("play", rowFlags,
-    "auto rec starts on the first note; one-shot plays one pass and stops"));
-  body.append(layersCard);
-
   const card = (heading) => {
     const c = el("div", "fxcard");
     const h = el("div", "head");
@@ -689,11 +707,33 @@ function openFx(i) {
     return k;
   };
 
+  // ---- layers ----
+  // First, because it is about the material rather than an effect: mute a layer,
+  // flatten them into one, or play the loop once.
+  {
+    const [c, h] = card("layers");
+    toggle(h, t && t.oneshot, "one-shot", `t${i}.oneshot`);
+    const flatten = confirmButton("flatten", () => act("mergeLayers", i), "tiny");
+    h.append(flatten);
+    const row = el("div", "row2");
+    const n = t ? t.layers : 0;
+    for (let k = 0; k < 4; k++) {
+      const b = Button({ label: `L${k + 1}`, cls: "tiny", toggle: true });
+      if (k >= n) b.classList.add("off");
+      b.addEventListener("pointerup", () => set(`t${i}.lmute`, k));
+      row.append(b);
+    }
+    c.append(row);
+    c.append(el("div", "note",
+      "L1–L4 mute one layer · flatten joins them into one (asks first) · "
+      + "one-shot plays one pass and stops"));
+  }
+
   // ---- input FX ----
   {
     const [c, h] = card("input FX");
     if (Number(CFG.loop?.monitor ?? 0) === 0) {
-      c.append(el("div", "caption", "software monitor off — you hear your interface directly"));
+      c.append(el("div", "note", "software monitor off — you hear your interface directly"));
     }
     const sources = inputOptions();
     const pickSource = (v) => set(`t${i}.input`, v);
@@ -747,10 +787,12 @@ function openFx(i) {
       format: (v) => `${(20 * Math.log10(v)).toFixed(0)} dB`,
       onInput: (v) => set(`t${i}.gateThr`, v),
     });
-    const auto = Button({ label: "arm auto-rec", toggle: true, cls: "tiny" });
-    auto.addEventListener("pointerup", () =>
-      set(`t${i}.autoArm`, auto.classList.contains("on") ? 1 : 0));
-    c.append(auto);
+    // Auto Rec: the first sound above the threshold starts a take, so a pedal
+    // player never has to reach for the pad. It disarms itself when it fires.
+    toggle(h, Number(getPath(CFG, `t${i}.autoArm`) ?? 0) === 1,
+      "auto rec", `t${i}.autoArm`);
+    c.append(el("div", "note",
+      "auto rec: the first sound above the threshold starts the take, then disarms"));
   }
 
   // ---- filter ----
