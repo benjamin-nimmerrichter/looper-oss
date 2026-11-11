@@ -1295,7 +1295,7 @@ function renderSettings() {
     const c = card(body, "learn");
     const targets = [];
     for (let i = 0; i < (S ? S.tracks.length : CFG.tracks); i++) {
-      ["press", "stop", "undo", "clear", "merge"].forEach((v) => targets.push(`t${i}.${v}`));
+      ["press", "stop", "undo", "clear", "merge", "auto"].forEach((v) => targets.push(`t${i}.${v}`));
     }
     ["tap", "stopAll", "metro"].forEach((v) => targets.push(`g.${v}`));
     targets.forEach((tgt) => {

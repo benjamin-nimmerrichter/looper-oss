@@ -86,8 +86,5 @@
 		};
 	};
 
-	// no peer is not a failure: Link keeps its own tempo and says so
-	~linkStatus = { |peers, bpm, on| ~bridge.sendMsg('/ldlink', peers, bpm, on) };
-
 	"*** Link: extension present".postln;
 )

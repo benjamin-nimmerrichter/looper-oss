@@ -8,6 +8,33 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
 ### Added
 
+- **Performance FX on the master (#7).** A bipolar **DJ filter** knob on the main
+  screen — centre is a hard bypass, left sweeps a low pass down, right a high pass
+  up, with resonance — and **two master FX slots** (filter, delay, drive,
+  tremolo) with live knobs, saved in the config. Both sit before the limiter, so
+  a resonant sweep is caught rather than clipping. The filter is `MoogFF`, not the
+  `BLowPass` biquads: those recompute coefficients on every change (a sweep
+  changes them every block) and glitch near 0 Hz, both of which their own
+  documentation warns about. The `Knob` primitive gained a centre detent and a
+  double-tap reset, because a performance control you cannot reset mid-song is a
+  trap. Verified at the master meter: bypass 0.0205 → low pass 0.0001, high pass
+  0.0122, back to 0.0205; a filter slot at the bottom of its range reads 0.0000
+  against its bypass.
+- **Ableton Link (#4).** The looper can follow tempo and bar phase from Link
+  peers on the local network — Link ships inside SuperCollider 3.14, so this adds
+  no dependency. Off is the internal clock; on with no peer keeps our own tempo
+  and says so. Link is used as a *reference*, not as the transport (the grid is a
+  server-side `Phasor`), and the phase is corrected by nudging the rate rather
+  than jumping the play head, so a correction cannot click. Verified against a
+  real second SuperCollider peer: 120 → 140 bpm followed within a second, no peer
+  120 → 120, and off restores the configured tempo.
+- **MERGE LAYERS and MERGE TRACKS by selection (#6).** The four layers of a track
+  can be joined into one (`merge` on the track, tap to arm — it is destructive),
+  and `svc mergeTracks dst src…` joins only the tracks you name instead of every
+  track into one. Both reuse the existing bounce sum, so the audio path is the one
+  that was already verified; the sources are freed afterwards and a merge of fewer
+  than two layers is refused rather than silently doing nothing. A MIDI pedal can
+  reach the layer merge as `t{i}.merge`.
 - **The rest of the #3 parity subset, small gaps first.** *Auto Rec* was dead
   code: the detector synth had an `arm` argument that nothing ever set, so the
   feature looked implemented and never armed — it now has a set path, a toggle in
@@ -18,47 +45,9 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
   A *phrase browser* in setup → session lists every slot on disk (tap one to
   load), and `svc inputEq ch hp lp` gives each input channel its own high
   pass/low pass on its input strip, before any track.
-- **Ableton Link (#4).** The looper can follow tempo and bar phase from Link
-  peers on the local network — Link ships inside SuperCollider 3.14, so this adds
-  no dependency. Off is the internal clock; on with no peer keeps our own tempo
-  and says so. Link is used as a *reference*, not as the transport (the grid is a
-  server-side `Phasor`), and the phase is corrected by nudging the rate rather
-  than jumping the play head, so a correction cannot click. Verified against a
-  real second SuperCollider peer: 120 → 140 bpm followed within a second, no peer
-  120 → 120, and off restores the configured tempo.
-- **Performance FX on the master (#7).** A bipolar **DJ filter** knob on the main
-  screen — centre is a hard bypass, left sweeps a low pass down, right a high pass
-  up, with resonance — and **two master FX slots** (filter, delay, drive,
-  tremolo) with live knobs, saved in the config. Both sit before the limiter, so
-  a resonant sweep is caught rather than clipping. The filter is `MoogFF`, not the
-  `BLowPass` biquads: those recompute coefficients on every change (a sweep
-  changes them every block) and glitch near 0 Hz, both of which their own
-  documentation warns about. The `Knob` primitive gained a centre detent and a
-  double-tap reset, because a performance control you cannot reset mid-song is a
-  trap. Verified at the master meter: bypass 0.0062 → low pass 0.0000, high pass
-  0.0035, back to 0.0059; a filter slot at the bottom of its range 0.0000 against
-  0.0156 bypass.
-- **MERGE LAYERS and MERGE TRACKS by selection (#6).** The four layers of a track
-  can be joined into one (`merge` on the track, tap to arm — it is destructive),
-  and `svc mergeTracks dst src…` joins only the tracks you name instead of every
-  track into one. Both reuse the existing bounce sum, so the audio path is the one
-  that was already verified; the sources are freed afterwards and a merge of fewer
-  than two layers is refused rather than silently doing nothing. A MIDI pedal can
-  reach the layer merge as `t{i}.merge`.
 
 ### Fixed
 
-- **A resume is only reported fixed when the engine is actually back (#1).** The
-  suspend watchdog restarted the engine and said so, but nothing checked the
-  result: the process can be alive, the meters moving and no sound coming out.
-  The launcher now waits for the engine's own `engine ready` line — from a byte
-  offset taken before the restart, so an old line cannot satisfy it — and logs
-  how long it took, or that it never arrived. The bridge reports which endpoint
-  the engine is really feeding and warns when it is not the one asked for, or
-  when nothing feeds an output at all. A named device that will not open is
-  cleared once and retried: the engine re-reads the config and tries again.
-  Measured here: `could not open the audio device` → `retrying the audio device,
-  asking for default` → `engine ready (5 tracks, device default)`.
 - **The layer model no longer loses sound (#5).** Four ways it could, all fixed:
   REPLACE mode committed a take that recorded nothing and so muted the whole
   track (the reported "sounds get deleted when a silent part overdubs" — such a
@@ -71,6 +60,17 @@ source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
   take is open, dub decay is per track and skips the recording layer. REPLACE
   also shows a badge on every track header, because a mode that can silence a
   track should not be a drawer-only secret.
+- **A resume is only reported fixed when the engine is actually back (#1).** The
+  suspend watchdog restarted the engine and said so, but nothing checked the
+  result: the process can be alive, the meters moving and no sound coming out.
+  The launcher now waits for the engine's own `engine ready` line — from a byte
+  offset taken before the restart, so an old line cannot satisfy it — and logs
+  how long it took, or that it never arrived. The bridge reports which endpoint
+  the engine is really feeding and warns when it is not the one asked for, or
+  when nothing feeds an output at all. A named device that will not open is
+  cleared once and retried: the engine re-reads the config and tries again.
+  Measured here: `could not open the audio device` → `retrying the audio device,
+  asking for default` → `engine ready (5 tracks, device default)`.
 - **`&&` guards in the engine did nothing, and two threads died for it.** `a && b`
   evaluates `b` in sclang even when `a` is false, so
   `x.notNil && (Main.elapsedTime - x)` subtracted from nil: the clock-poll routine

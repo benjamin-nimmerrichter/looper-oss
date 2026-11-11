@@ -185,7 +185,9 @@ if (~hasVST) {
 ~hasLink   = \LinkClock.asClass.notNil;
 if (~hasLink) {
 	~linkFile = "engine/link.scd".standardizePath;
-	if (File.exists(~linkFile)) { ~linkFile.load };
+	// the flag means "the file loaded", not "the class exists": the state loop
+	// calls ~linkTick, and a nil there would take the whole loop down
+	if (File.exists(~linkFile)) { ~linkFile.load } { ~hasLink = false };
 };
 
 // ------------------------------------------------------------------ defs ----
@@ -772,6 +774,7 @@ if (~hasLink) {
 			state: 0, playing: 0, recOn: 0,
 			vol: 0.8, pan: 0.0, muted: 0, input: 0, gain: 1.0, recGain: 1.0,
 			gateOn: 1, gateThr: 0.02, autoArm: 0, autoThresh: 0.02, oneshot: 0,
+			recPeak: 0, oneshotPass: 0,
 			compOn: 0, compThr: 0.6, compRatio: 0.4,
 			hp: 40, lp: 16000,
 			delayOn: 0, delayBeats: 0.75, delayDecay: 0.4, delayMix: 0.25,
@@ -1241,7 +1244,9 @@ if (~hasLink) {
 			// #7 performance controls. dj is bipolar: 0 is an exact bypass,
 			// negative sweeps a low pass down, positive a high pass up.
 			"dj",          { ~state[\dj] = v.clip(-1, 1); ~master.set(\dj, ~state[\dj]) },
-			"link",        { if (~hasLink) { if (v > 0.5, { ~linkOn.value }, { ~linkOff.value }) } },
+			"link",        { if (~linkOn.notNil) {
+				if (v > 0.5, { ~linkOn.value }, { ~linkOff.value })
+			} },
 			"djRes",       { ~state[\djRes] = v.clip(0, 1);
 				~master.set(\djRes, ~state[\djRes]) },
 			"fx1Type",     { ~master.set(\fx1Type, v.asInteger.clip(0, 4)) },
@@ -1677,7 +1682,14 @@ if (~hasLink) {
 					"undo",  { if (val > 0) { ~undo.value(t) } },
 					"redo",  { if (val > 0) { ~redo.value(t) } },
 					// a pedal can flatten a track's layers; the UI asks first
-					"merge", { if (val > 0) { ~mergeLayers.value(head[1..].asInteger) } }
+					"merge", { if (val > 0) { ~mergeLayers.value(head[1..].asInteger) } },
+					// Auto Rec from a pedal: a note arms (or disarms) the threshold
+					// recorder, so the first sound starts the take (documented in
+					// CONTROLS as t{i}.auto -- it has to exist for that to be true)
+					"auto",  { if (val > 0) {
+						var idx = head[1..].asInteger;
+						~setTrack.value(idx, "autoArm", 1 - (t[\autoArm] ? 0));
+					} }
 				);
 			};
 		};
@@ -1951,7 +1963,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			// moment it closed: a take that ends quietly still recorded something
 			~tracks.do { |tr, i|
 				if (tr[\recOn] == 1) {
-					tr[\recPeak] = tr[\recPeak].max(~peakVals[i] ? 0);
+					tr[\recPeak] = (tr[\recPeak] ? 0).max(~peakVals[i] ? 0);
 				};
 			};
 		};
@@ -2194,7 +2206,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 	};
 
 	// Link is configuration, so a restart comes back the way it was left
-	if (~hasLink && (((~cfg[\clock] ? ())[\link] ? 0) == 1)) { ~linkOn.value };
+	if ((~linkOn.notNil) && (((~cfg[\clock] ? ())[\link] ? 0) == 1)) { ~linkOn.value };
 
 	~stateLoop = {
 		fork {
@@ -2203,7 +2215,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 				~sendState.value;
 				tick = tick + 1;
 				if (tick % 20 == 0) { ~autosaveTick.value };
-				if ((tick % 2 == 0) && ~hasLink) { ~linkTick.value };
+				if ((tick % 2 == 0) && ~linkTick.notNil) { ~linkTick.value };
 				if (tick % 2 == 0) {
 					// plain /b_getn: the reply lands in one persistent responder.
 					// Buffer:getToFloatArray installs a timeout per call and warns
