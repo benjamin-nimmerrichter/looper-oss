@@ -833,3 +833,11 @@ select.sel {
   justify-content: flex-end;
 }
 .slotlist .btn { min-width: var(--tap); }
+
+/* the layer mute bank: two by two, so the four buttons read as one control and
+   never wrap to an odd 3 + 1 at the touch floor */
+.layerbank {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(var(--tap), 1fr));
+  gap: 0.3rem;
+}

@@ -267,8 +267,13 @@ for a take that is perfectly audible — it is a diagnostic window, not a verdic
 `\ld_bounce` sums up to eight buffers with per-buffer gains into one destination
 over one loop pass. Both merges are that same def:
 
-- **Merge tracks** — sources are the named tracks' layers, destination is the
-  target track's layer 0; the sources are freed afterwards.
+- **Merge tracks** — normally *not* a sum at all: the source's layers are
+  **moved** into the destination's free layer slots with `Buffer:copyData`, which
+  is a server-side memcpy — a millisecond, lossless, and it cannot sum past full
+  scale because the layers stay separate and mix at playback as they always do.
+  The destination ends up with more layers (`2L`), which `flatten` joins into
+  one. The summing pass below is only the fallback: no free layer slot, or two
+  tracks whose loops are different lengths.
 - **Merge layers** — sources are *one* track's own layers, destination is its
   layer 0, which is also source 0. Reading and writing the same buffer is safe
   here because the read is a dependency of the write, and it is the same overlap

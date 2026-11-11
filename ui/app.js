@@ -385,7 +385,10 @@ function tapMerge(i) {
   mergeInto = null;
   paintMerge();
   svc("mergeTracks", [dst, dst, i]);
-  toast(`track ${i + 1} → track ${dst + 1}`);
+  // the merge is a layer move, not a sum: nothing is re-rendered, so it is
+  // instant and lossless -- but the destination now holds both as layers, and
+  // "flatten" in its fx drawer turns them into one loop
+  toast(`track ${i + 1} → track ${dst + 1} (as layers; flatten to join)`);
 }
 
 function paintMerge() {
@@ -496,12 +499,10 @@ function buildTransport() {
   countIn.addEventListener("pointerup", () => set("g.countIn", S && S.countIn > 0 ? 0 : 1));
   g3.append(metro, countIn);
 
+  // A group with no duplicate controls: the master fader lives in the footer,
+  // next to the output buses, and there is exactly one of it.
   const g4 = el("div", "group grow");
-  g4.append(el("div", "caption", "master"));
-  const masterFader = Fader({
-    min: 0, max: 1.2, value: 0.8, format: (v) => `${Math.round(v * 100)}`,
-    onInput: (v) => set("g.masterVol", v),
-  });
+  g4.append(el("div", "caption", "performance"));
   // The DJ filter: one bipolar knob, centre is a hard bypass, left sweeps a low
   // pass down, right a high pass up. Built to be grabbed mid-song, so it lives
   // here on the main screen, not in a drawer, and a double tap puts it back to
@@ -516,7 +517,6 @@ function buildTransport() {
     onInput: (v) => set("g.dj", v),
   });
   g4.append(dj);
-  g4.append(masterFader);
 
   // Rhythm engine: 16 synthesised kits, 200 patterns. Driven through the config
   // so it survives a restart, like every other setting.
@@ -540,7 +540,7 @@ function buildTransport() {
   gr.append(rOn, rKit, rPat);
 
   root.append(g0, g1, g2, gpos, g3, gr, g4);
-  ui.transport = { bpmVal, bpmFader, bars, metro, countIn, masterFader, posVal, dj };
+  ui.transport = { bpmVal, bpmFader, bars, metro, countIn, posVal, dj };
 }
 
 /* ----------------------------------------------------------------- tracks -- */
@@ -715,7 +715,9 @@ function openFx(i) {
     toggle(h, t && t.oneshot, "one-shot", `t${i}.oneshot`);
     const flatten = confirmButton("flatten", () => act("mergeLayers", i), "tiny");
     h.append(flatten);
-    const row = el("div", "row2");
+    // 2 x 2, not four in a row: at the touch floor four buttons do not fit a
+    // card this wide, and wrapping to 3 + 1 looked like a mistake.
+    const row = el("div", "layerbank");
     const n = t ? t.layers : 0;
     for (let k = 0; k < 4; k++) {
       const b = Button({ label: `L${k + 1}`, cls: "tiny", toggle: true });
@@ -725,8 +727,7 @@ function openFx(i) {
     }
     c.append(row);
     c.append(el("div", "note",
-      "L1–L4 mute one layer · flatten joins them into one (asks first) · "
-      + "one-shot plays one pass and stops"));
+      "mute one layer · flatten joins them · one-shot plays one pass"));
   }
 
   // ---- input FX ----
@@ -1520,8 +1521,7 @@ function onState(s) {
   ui.transport.bars.setValue(s.bars);
   ui.transport.metro.classList.toggle("on", !!s.metro);
   ui.transport.countIn.classList.toggle("on", !!s.countIn);
-  if (!ui.transport.masterFader.classList.contains("active")) {
-    ui.transport.masterFader.setValue(s.masterVol);
+  {
     if (ui.buses) {
       [s.busA, s.busB, s.busC].forEach((v, k) => {
         if (!ui.buses[k].classList.contains("active")) ui.buses[k].setValue(v);

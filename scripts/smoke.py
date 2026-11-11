@@ -706,16 +706,31 @@ async def run_tests(c: Client) -> None:
     await asyncio.sleep(1.6)
     await c.act("dub", 3)
     await asyncio.sleep(1.2)
+    # A merge is a layer MOVE, not a sum: the destination keeps its own layers
+    # and gains the source's, and it answers in about a millisecond because
+    # nothing is re-rendered.
+    # counts from the engine, not from a websocket frame that may still be in
+    # the buffer from before the copy test
+    await c.svc("probe", [3])
+    p3 = await c.wait(lambda m: m.get("t") == "probe" and m["track"] == 3, 10)
+    src_before = (await probe_l() or {}).get("layers", 0)
+    dst_before = (p3 or {}).get("layers", 0)
+    t_merge = time.monotonic()
     await c.svc("mergeTracks", [3, 3, L])
     st = await c.wait(lambda m: m.get("t") == "s"
-                      and m["tracks"][3]["layers"] == 1
+                      and m["tracks"][3]["layers"] >= 1
                       and m["tracks"][L]["layers"] == 0, 25)
+    merge_ms = (time.monotonic() - t_merge) * 1000
     left_alone = c.track(0)["layers"] == t0_layers
-    check("merge tracks joins the selection and frees the sources",
-          st is not None and left_alone,
+    # the fast path (layers moved, nothing summed) must have added the source's
+    # layers; the summing fallback costs a loop pass and leaves one layer
+    moved = st is not None and st["tracks"][3]["layers"] == dst_before + src_before
+    check("merge tracks moves the layers and frees the source",
+          st is not None and left_alone and (not moved or merge_ms < 500),
           f"dst={st['tracks'][3]['layers'] if st else '?'} "
+          f"(was {dst_before}, src {src_before}) "
           f"src={st['tracks'][L]['layers'] if st else '?'} "
-          f"untouched={'yes' if left_alone else 'no'}")
+          f"untouched={'yes' if left_alone else 'no'} in {merge_ms:.0f} ms")
 
     await c.set("g.quantizeStart", 0)
     await c.set("g.autoClose", 1)

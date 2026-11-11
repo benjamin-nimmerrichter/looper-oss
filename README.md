@@ -309,7 +309,7 @@ change a free varispeed instead of a re-record. Details and gain staging in
 | **speed** | fx → loop | Varispeed per track, ½ / 1 / 2 / 4 and continuously 0.25–4. At 1 the track reads the master phase and stays locked; anything else free-runs and **re-pitches**, like the hardware's SPEED knob (not time-stretch). |
 | **mark / mark back** | fx → loop | Bookmark the current layer count, then jump straight back to it — no stepping down one layer at a time. The layers above are muted but kept, so redo still walks them back. |
 | **overdub replaces** | setup → loop | A new take mutes the layers it covers instead of layering on top. Their audio is untouched, so **undo** brings them back. |
-| **merge** | track row | Tap it on the track that should **receive**, then on the track to join into it — track 1 then track 3 gives one loop on track 1. The armed track says `into`; tapping it again cancels. |
+| **merge** | track row | Tap it on the track that should **receive**, then on the track to join into it — track 1 then track 3 gives track 1 with both recordings, instantly (the layers are copied, not re-rendered). The armed track says `into`; tapping it again cancels. |
 | **flatten** | fx → layers | Joins *that* track's own layers into one, for when four takes of a drum part are right. Same sum as bounce; it asks first, and fewer than two layers is refused. |
 | **merge tracks** | service | `svc mergeTracks dst src…` joins only the tracks you name, leaving the rest alone. |
 | **bounce** | setup → session | Sums every track that has layers into track 1 as a single layer, in one loop pass, then clears the sources. |

@@ -414,7 +414,12 @@ if (~hasLink) {
 			+ (BufRd.ar(1, b2, pos) * g2) + (BufRd.ar(1, b3, pos) * g3)
 			+ (BufRd.ar(1, b4, pos) * g4) + (BufRd.ar(1, b5, pos) * g5)
 			+ (BufRd.ar(1, b6, pos) * g6) + (BufRd.ar(1, b7, pos) * g7);
-		BufWr.ar(sig, dst, pos);
+		// The sum of N layers is N times as loud as one, and at 4 layers that is
+		// well past full scale -- writing it raw made every pass of the merged
+		// loop clip at the master, which sounds like loud digital noise. Same
+		// Compander + clip the master uses: transparent below 0.9, only the peaks
+		// are bent.
+		BufWr.ar(Compander.ar(sig, sig, 0.9, 1, 0.1, 0.001, 0.1).clip2(0.98), dst, pos);
 	}).add;
 
 	// master out + hardware in, in the same buffer (slots 60..63)
@@ -1071,7 +1076,14 @@ if (~hasLink) {
 			srcs.do { |t|
 				if (t !== dst) {
 					if (t[\synth].notNil) {
-						~maxLayers.do { |li| t[\synth].set(("w" ++ li).asSymbol, 0) };
+						// the write gates are not enough: the layers were still
+						// audible at their old gains, so the merged-away track kept
+						// playing its recording after the merge
+						~maxLayers.do { |li|
+							t[\synth].set(("w" ++ li).asSymbol, 0,
+								~gainKeys[li], 0);
+						};
+						t[\synth].set(\playing, 0, \recOn, 0);
 					};
 					t[\gains] = Array.fill(~maxLayers, 0);
 					t[\layerCount] = 0; t[\undone] = 0;
@@ -1126,6 +1138,59 @@ if (~hasLink) {
 			};
 		} {
 			~bridge.sendMsg('/ldmerged', i, 0);
+		};
+	};
+
+	// MERGE TRACKS (#6): the mix already happens at playback, so joining two
+	// tracks needs no arithmetic at all. Move the source's layers into the
+	// destination's free layer slots with a server-side memcpy -- instant,
+	// lossless, and it cannot sum past full scale because the layers stay
+	// separate. The summing pass is only the fallback: no free slot, or two
+	// tracks whose loops are different lengths.
+	~mergeTracks = { |dstIdx, srcIdxs|
+		var dst = ~tracks[dstIdx];
+		if (dst.notNil) {
+			var srcs = (srcIdxs ? []).collect { |k| ~tracks[k.asInteger] }
+				.select { |t| t.notNil && (t !== dst) && (t[\layerCount] > 0) };
+			if (srcs.isEmpty) {
+				~bridge.sendMsg('/ldmerged', dstIdx, 0);
+			} {
+				var need = srcs.inject(0) { |acc, t| acc + t[\layerCount] };
+				var room = dst[\layerCount] + need <= ~maxLayers;
+				var sameLen = srcs.every { |t|
+					(t[\contentLen] - dst[\contentLen]).abs < 2
+				};
+				if (room && sameLen) {
+					var li = dst[\layerCount];
+					// every writer off for the copy: they write their buffers back
+					// every sample and would clobber it
+					dst[\synth].free; dst[\meterSynth].free; dst[\autoSynth].free;
+					srcs.do { |t|
+						t[\synth].free; t[\meterSynth].free; t[\autoSynth].free;
+						t[\bufs].do { |b, k|
+							if (k < t[\layerCount]) {
+								// copyData(buf, dstStartAt, srcStartAt, numSamples):
+								// receiver is the source (AGENTS invariant 6)
+								b.copyData(dst[\bufs][li], 0, 0,
+									dst[\contentLen].asInteger);
+								dst[\gains][li] = t[\gains][k];
+								li = li + 1;
+							};
+						};
+						t[\gains] = Array.fill(~maxLayers, 0);
+						t[\layerCount] = 0; t[\undone] = 0;
+						t[\recOn] = 0; t[\playing] = 0; t[\state] = 0;
+					};
+					dst[\layerCount] = li;
+					dst[\undone] = 0;
+					dst[\state] = if (dst[\playing] == 1, 2, 3);
+					~makeTrackSynth.value(dst, dstIdx);
+					srcs.do { |t| ~makeTrackSynth.value(t, ~tracks.indexOf(t)) };
+					~bridge.sendMsg('/ldmerged', dstIdx, 1);
+				} {
+					~bounce.value(dstIdx, srcIdxs);
+				};
+			};
 		};
 	};
 
@@ -1925,7 +1990,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			"mergeTracks", {
 				var dstIdx = (msg[2] ? 0).asInteger;
 				var srcs = if (msg.size > 3) { msg.copyRange(3, msg.size - 1) } { nil };
-				~bounce.value(dstIdx, srcs !? { |a| a.collect(_.asInteger) });
+				~mergeTracks.value(dstIdx, srcs !? { |a| a.collect(_.asInteger) });
 			},
 			// mute the hardware output without touching internal buses, so a test
 			// can drive a tone through the record path and measure it in silence
