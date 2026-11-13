@@ -2182,7 +2182,12 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 	~clockPollSent = nil;      // explicit: the timeout guard compares against it
 	~clockWatch = Routine {
 		loop {
-			0.05.wait;
+			// 60 Hz, not 20: this poll is the clock's ONLY source when the server's
+			// SendReply does not land (windows, and any session that goes 3 s
+			// without one), and 50 ms is an eighth of a beat at 95 bpm -- the
+			// readout, the metronome's accent and the layer hand-off all inherited
+			// that error. One float per poll, so the traffic is irrelevant.
+			0.016.wait;
 			// the routine starts when the file is read, before the buffers exist
 			// Never have more than one poll outstanding: on Windows a round trip
 			// takes longer than the interval, and the queued replies starved
