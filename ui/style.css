@@ -82,9 +82,11 @@ body.no-master #master { display: none; }
   min-width: 0;
 }
 #transport .group:first-child { border-left: 0; padding-left: 0; }
-#transport { align-items: center; }   /* groups hug their content, centred */
+/* Groups stretch to the row height, so the divider bars between the sections
+   are all the same length; what is centred is the CONTENT inside each group.
+   Shrinking the groups to their content made the dividers uneven. */
+#transport .group { justify-content: center; }
 #transport .group.grow { flex: 1; }
-#transport .tempoRow { display: flex; align-items: baseline; gap: 0.5rem; }
 /* a group whose content is centred rather than filled: the caption stays left,
    the control sits in the middle of the space it was given */
 #transport .group.centre { align-items: center; }

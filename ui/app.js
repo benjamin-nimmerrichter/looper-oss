@@ -476,9 +476,9 @@ function buildTransport() {
   // It sits with the tempo because both are about the grid, and one group fewer
   // leaves more width for everything else.
   const posVal = el("div", "posval", "1·1");
-  const tempoRow = el("div", "tempoRow");
-  tempoRow.append(bpmVal, posVal);
-  g1.append(tempoRow, bpmRow);
+  // under the fader, not beside the number: the number is the tempo, the readout
+  // is where you are in the loop
+  g1.append(bpmVal, bpmRow, posVal);
 
   const g2 = el("div", "group");
   g2.append(el("div", "caption", "bars / loop"));
