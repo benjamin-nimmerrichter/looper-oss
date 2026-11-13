@@ -192,8 +192,10 @@ function handle(m) {
       toast(`track ${m.track + 1}: nothing recorded, take dropped`);
       break;
     case "merged":
-      toast(m.ok ? `track ${m.track + 1}: layers merged`
-                  : `track ${m.track + 1}: nothing to merge`);
+      // 1 = done, 0 = nothing to merge, 2 = no free layer slot on the destination
+      if (m.ok === 1) toast(`track ${m.track + 1}: merged`);
+      else if (m.ok === 2) toast(`track ${m.track + 1}: no free layer — flatten one of them first`);
+      else toast(`track ${m.track + 1}: nothing to merge`);
       break;
     case "saved":
       // slot < 0 is the autosave: silent

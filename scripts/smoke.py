@@ -678,7 +678,10 @@ async def run_tests(c: Client) -> None:
     # each source by an unknown amount: the merged peak must be louder than
     # either layer alone (the sum really happened) and no louder than twice the
     # sum of what was measured (it was written once, not piled up).
-    lo, hi = max(stacked) * 1.05, (stacked[0] + stacked[1]) * 2.0
+    # a flatten sums then normalises by the number of layers, so the merged peak
+    # is the SUM / N (0.82 / 2 = 0.41 here): no clipping, no compressor, and a
+    # documented level change instead of a hidden one
+    lo, hi = (stacked[0] + stacked[1]) * 0.4, (stacked[0] + stacked[1]) * 0.65
     check("merge layers sums the stack into one layer",
           merged is not None and merged.get("ok") == 1 and pr is not None
           and pr["layers"] == 1 and pr["gains"][0] == 1

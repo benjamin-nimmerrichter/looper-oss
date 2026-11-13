@@ -403,7 +403,7 @@ if (~hasLink) {
 	// own buffers back every sample and would overwrite the sum.
 	// Layer 0 is both a source and the destination on purpose: BufRd reads the
 	// old sample before BufWr replaces it, so nothing is zeroed beforehand.
-	SynthDef(\ld_bounce, { |dst = 0, len = 48000, secs = 8,
+	SynthDef(\ld_bounce, { |dst = 0, len = 48000, secs = 8, sources = 1,
 				b0 = 0, b1 = 0, b2 = 0, b3 = 0,
 				b4 = 0, b5 = 0, b6 = 0, b7 = 0,
 				g0 = 1, g1 = 1, g2 = 1, g3 = 1,
@@ -416,10 +416,11 @@ if (~hasLink) {
 			+ (BufRd.ar(1, b6, pos) * g6) + (BufRd.ar(1, b7, pos) * g7);
 		// The sum of N layers is N times as loud as one, and at 4 layers that is
 		// well past full scale -- writing it raw made every pass of the merged
-		// loop clip at the master, which sounds like loud digital noise. Same
-		// Compander + clip the master uses: transparent below 0.9, only the peaks
-		// are bent.
-		BufWr.ar(Compander.ar(sig, sig, 0.9, 1, 0.1, 0.001, 0.1).clip2(0.98), dst, pos);
+		// loop clip at the master, which sounds like loud digital noise. Scaling
+		// by the number of sources keeps it inside the rails with no dynamics at
+		// all: a Compander here was audible as pumping, and a bounce should be a
+		// gain change and nothing else.
+		BufWr.ar((sig * (1 / sources.max(1))).clip2(0.999), dst, pos);
 	}).add;
 
 	// master out + hardware in, in the same buffer (slots 60..63)
@@ -1032,7 +1033,7 @@ if (~hasLink) {
 	// so two of five can be joined and the other three left alone (#6).
 	~bounce = { |dstIdx, srcIdx|
 		var dst = ~tracks[dstIdx];
-		var srcs, bufs = [], gains = [], secs, args, synth;
+		var srcs, bufs = [], gains = [], secs, args, synth, nSrc = 1;
 		// No `^` anywhere here: this runs from an OSC responder, and a non-local
 		// return unwinds that thread without an error (AGENTS.md rule 8).
 		if (dst.notNil) {
@@ -1053,12 +1054,14 @@ if (~hasLink) {
 				};
 			};
 		};
+		nSrc = bufs.size;
 		while { bufs.size < 8 } { bufs = bufs ++ [0]; gains = gains ++ [0] };
 		bufs = bufs.keep(8); gains = gains.keep(8);
 		// stop the destination: its unconditional write-back would clobber the sum
 		dst[\synth].free; dst[\meterSynth].free; dst[\autoSynth].free;
 		dst[\playing] = 0; dst[\recOn] = 0;
-		args = [\dst, dst[\bufs][0].bufnum, \len, dst[\contentLen], \secs, secs];
+		args = [\dst, dst[\bufs][0].bufnum, \len, dst[\contentLen], \secs, secs,
+			\sources, nSrc];
 		8.do { |k|
 			args = args ++ [("b" ++ k).asSymbol, bufs[k], ("g" ++ k).asSymbol, gains[k]];
 		};
@@ -1117,7 +1120,8 @@ if (~hasLink) {
 			// stop the track first: its unconditional write-back would clobber the sum
 			t[\synth].free; t[\meterSynth].free; t[\autoSynth].free;
 			t[\playing] = 0; t[\recOn] = 0;
-			args = [\dst, t[\bufs][0].bufnum, \len, t[\contentLen], \secs, secs];
+			args = [\dst, t[\bufs][0].bufnum, \len, t[\contentLen], \secs, secs,
+				\sources, t[\layerCount]];   // headroom: the sum of N layers / N
 			8.do { |k|
 				args = args ++ [("b" ++ k).asSymbol, bufs[k], ("g" ++ k).asSymbol, gains[k]];
 			};
@@ -1142,11 +1146,17 @@ if (~hasLink) {
 	};
 
 	// MERGE TRACKS (#6): the mix already happens at playback, so joining two
-	// tracks needs no arithmetic at all. Move the source's layers into the
+	// tracks needs no arithmetic at all. The source's layers are copied into the
 	// destination's free layer slots with a server-side memcpy -- instant,
 	// lossless, and it cannot sum past full scale because the layers stay
-	// separate. The summing pass is only the fallback: no free slot, or two
-	// tracks whose loops are different lengths.
+	// separate. There is no summing fallback any more: a merge must never take a
+	// loop pass, and it must never start one behind the player's back.
+	//
+	// Different loop lengths are not a problem: the destination's slot is zeroed
+	// and the source's own content is copied into it, so a shorter take leaves
+	// silence after it (exactly what recording it there would do) and a longer
+	// one is truncated to the phrase. If there is no free slot, the merge is
+	// refused with ok=2 and the UI says "flatten first".
 	~mergeTracks = { |dstIdx, srcIdxs|
 		var dst = ~tracks[dstIdx];
 		if (dst.notNil) {
@@ -1156,11 +1166,10 @@ if (~hasLink) {
 				~bridge.sendMsg('/ldmerged', dstIdx, 0);
 			} {
 				var need = srcs.inject(0) { |acc, t| acc + t[\layerCount] };
-				var room = dst[\layerCount] + need <= ~maxLayers;
-				var sameLen = srcs.every { |t|
-					(t[\contentLen] - dst[\contentLen]).abs < 2
-				};
-				if (room && sameLen) {
+				// no free slot: refuse, do not fall back to a summing pass
+				if (dst[\layerCount] + need > ~maxLayers) {
+					~bridge.sendMsg('/ldmerged', dstIdx, 2);
+				} {
 					var li = dst[\layerCount];
 					// every writer off for the copy: they write their buffers back
 					// every sample and would clobber it
@@ -1169,10 +1178,14 @@ if (~hasLink) {
 						t[\synth].free; t[\meterSynth].free; t[\autoSynth].free;
 						t[\bufs].do { |b, k|
 							if (k < t[\layerCount]) {
-								// copyData(buf, dstStartAt, srcStartAt, numSamples):
-								// receiver is the source (AGENTS invariant 6)
-								b.copyData(dst[\bufs][li], 0, 0,
-									dst[\contentLen].asInteger);
+								// zero the slot first, then copy the source's own
+								// content: a shorter loop leaves silence after it, a
+								// longer one is truncated to the phrase (invariant 6:
+								// copyData(receiver, dstStart, srcStart, count))
+								var n = t[\contentLen].asInteger
+									.min(dst[\contentLen].asInteger);
+								dst[\bufs][li].zero;
+								b.copyData(dst[\bufs][li], 0, 0, n.max(1));
 								dst[\gains][li] = t[\gains][k];
 								li = li + 1;
 							};
@@ -1187,8 +1200,6 @@ if (~hasLink) {
 					~makeTrackSynth.value(dst, dstIdx);
 					srcs.do { |t| ~makeTrackSynth.value(t, ~tracks.indexOf(t)) };
 					~bridge.sendMsg('/ldmerged', dstIdx, 1);
-				} {
-					~bounce.value(dstIdx, srcIdxs);
 				};
 			};
 		};
