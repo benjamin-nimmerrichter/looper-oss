@@ -83,6 +83,10 @@ body.no-master #master { display: none; }
 }
 #transport .group:first-child { border-left: 0; padding-left: 0; }
 #transport .group.grow { flex: 1; }
+/* a group whose content is centred rather than filled: the caption stays left,
+   the control sits in the middle of the space it was given */
+#transport .group.centre { align-items: center; }
+#transport .group.centre .caption { align-self: flex-start; }
 
 .caption {
   font-size: 0.72rem;
@@ -405,6 +409,10 @@ body.no-master #master { display: none; }
   padding: 0.7rem;
   overflow: auto;
   align-content: start;
+  /* not stretch: a stretched card is exactly as tall as its grid row, so a
+     card whose content is taller than its neighbours (loop, plugin slots) was
+     cut off at the bottom instead of making the row taller */
+  align-items: start;
 }
 
 .fxcard {
@@ -417,8 +425,13 @@ body.no-master #master { display: none; }
   gap: 0.45rem;
   min-height: 0;
   min-width: 0;      /* grid children default to min-content: allow shrinking */
-  overflow: hidden;
 }
+.fxcard { height: max-content; }   /* never shorter than its own content */
+/* The card is a flex column, and flex children shrink by default: when the grid
+   handed a card a shorter row, its knobs and notes were squeezed instead of
+   making the row taller, which is how the note under the gate got cut in half.
+   Not shrinking means the card reports its real height and the drawer scrolls. */
+.fxcard > * { flex-shrink: 0; }
 .fxcard > .head {
   display: flex;
   align-items: center;
@@ -508,8 +521,11 @@ body.no-master #master { display: none; }
 .knobwrap .read { font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .knobwrap.active .read { color: var(--accent); }
 
-/* wraps: four 48 px cells are 192 px + gaps and a card can be narrower */
+/* wraps: four 48 px cells are 192 px + gaps and a card can be narrower. Not in
+   the transport, though -- there wrapping turned the 1/2/4/8 row into four rows
+   and pushed the track columns down to 159 px on a 1024 panel. */
 .seg { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+#transport .seg { flex-wrap: nowrap; }
 .seg-btn {
   flex: 1;
   min-height: var(--tap);
@@ -855,4 +871,13 @@ select.sel {
   display: grid;
   grid-template-columns: repeat(2, minmax(var(--tap), 1fr));
   gap: 0.3rem;
+}
+
+/* merge gesture: the track you touched first says FROM, every other track's
+   merge button lights as a target saying INTO -- so the direction is visible
+   before the second tap, not after it */
+.btn.target {
+  border-color: var(--accent);
+  border-style: dashed;
+  color: var(--accent);
 }

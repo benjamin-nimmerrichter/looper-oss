@@ -57,8 +57,8 @@ let VSTCATALOG = [];
 let MIDIMAP = [];
 let MIDIDEVS = [];
 let selected = 0;
-// which track is waiting to receive a merge: tap merge on it, then on a source
-let mergeInto = null;
+// the track you are merging FROM: tap its merge, then the one it goes into
+let mergeFrom = null;
 const mergeBtns = [];
 let phase = { value: 0, at: performance.now() };
 let IMPORTS = [];
@@ -360,42 +360,43 @@ function openKeypad({ title, value, min, max, hint, onOk }) {
  * hold never completes -- the same reason the per-track clear is two taps.
  */
 /**
- * Two-tap track merge: the first track you touch is the destination.
+ * Two-tap track merge, the way a hardware looper does it: what you touch FIRST
+ * is the track that goes away, what you touch SECOND is where it lands.
  *
- *   1. tap merge on track 1  -> track 1 is armed, its button says where into
- *   2. tap merge on track 3  -> 3 is summed into 1 and freed; 1 keeps its own
- *      layers, and both are one layer afterwards
+ *   1. tap merge on track 2  -> 2 lights up ("from"), every other track's merge
+ *                                lights as a target ("into")
+ *   2. tap merge on track 1  -> 2 is merged into 1
  *
- * Tapping the armed track again cancels, so a mis-tap costs one tap, not a
- * merge. Multi-source is the same gesture repeated: arm 1, tap 3, arm 1, tap 4.
+ * Tapping the source again cancels, so a mis-tap costs one tap, not a merge.
  */
 function tapMerge(i) {
-  if (mergeInto === null) {
-    mergeInto = i;
+  if (mergeFrom === null) {
+    mergeFrom = i;
     paintMerge();
-    toast(`track ${i + 1}: tap merge on another track to join it into this one`);
+    toast(`track ${i + 1}: now tap the track it should go into`);
     return;
   }
-  if (mergeInto === i) {
-    mergeInto = null;
+  if (mergeFrom === i) {
+    mergeFrom = null;
     paintMerge();
     return;
   }
-  const dst = mergeInto;
-  mergeInto = null;
+  const src = mergeFrom;
+  mergeFrom = null;
   paintMerge();
-  svc("mergeTracks", [dst, dst, i]);
+  svc("mergeTracks", [i, i, src]);
   // the merge is a layer move, not a sum: nothing is re-rendered, so it is
   // instant and lossless -- but the destination now holds both as layers, and
   // "flatten" in its fx drawer turns them into one loop
-  toast(`track ${i + 1} → track ${dst + 1} (as layers; flatten to join)`);
+  toast(`track ${src + 1} → track ${i + 1} (as layers; flatten to join)`);
 }
 
 function paintMerge() {
   mergeBtns.forEach((b, n) => {
     if (!b) return;
-    b.classList.toggle("on", mergeInto === n);
-    b.textContent = mergeInto === n ? "into" : "merge";
+    b.classList.toggle("on", mergeFrom === n);
+    b.classList.toggle("target", mergeFrom !== null && mergeFrom !== n);
+    b.textContent = mergeFrom === n ? "from" : mergeFrom !== null ? "into" : "merge";
   });
 }
 
@@ -499,14 +500,12 @@ function buildTransport() {
   countIn.addEventListener("pointerup", () => set("g.countIn", S && S.countIn > 0 ? 0 : 1));
   g3.append(metro, countIn);
 
-  // A group with no duplicate controls: the master fader lives in the footer,
-  // next to the output buses, and there is exactly one of it.
-  const g4 = el("div", "group grow");
+  // The performance group: the DJ filter, and nothing else. `centre` centres the
+  // knob in the group instead of letting it sit wherever the caption starts.
+  const g4 = el("div", "group grow centre");
   g4.append(el("div", "caption", "performance"));
-  // The DJ filter: one bipolar knob, centre is a hard bypass, left sweeps a low
-  // pass down, right a high pass up. Built to be grabbed mid-song, so it lives
-  // here on the main screen, not in a drawer, and a double tap puts it back to
-  // centre.
+  // One bipolar knob: centre is a hard bypass, left sweeps a low pass down,
+  // right a high pass up, and a double tap puts it back to centre.
   const dj = Knob({
     min: -1, max: 1, value: 0, center: 0, label: "dj filter",
     format: (v) => {
@@ -520,7 +519,7 @@ function buildTransport() {
 
   // Rhythm engine: 16 synthesised kits, 200 patterns. Driven through the config
   // so it survives a restart, like every other setting.
-  const gr = el("div", "group");
+  const gr = el("div", "group grow");
   gr.append(el("div", "caption", "rhythm"));
   const rOn = Button({ label: "drums", toggle: true, cls: "tiny" });
   if (Number(CFG.rhythm?.on)) rOn.classList.add("on");
@@ -812,6 +811,11 @@ function openFx(i) {
     // step sequence: eight eighth-notes stepping the low pass upward. Tap a cell
     // to cycle it 0 -> 0.25 -> 0.5 -> 0.75 -> 1; the bar is its height.
     toggle(h, t && t.seqOn, "seq", `t${i}.seqOn`);
+    // The squares are a step sequence, not decoration: eight eighth-notes, each
+    // cell's height is how far it pushes the low pass up on that step.
+    c.append(el("div", "note",
+      "step: eight eighth-note steps that push the low pass up · tap a cell to "
+      + "cycle it · seq turns it on"));
     const seqRow = el("div", "steprow");
     const steps = SEQ[i] || (SEQ[i] = [0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25]);
     for (let st = 0; st < 8; st++) {
