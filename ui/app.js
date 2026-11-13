@@ -266,23 +266,6 @@ function handle(m) {
       setBoot(`engine failed to start: ${m.msg}`, false, true);
       console.error("engine boot failed:", m.msg);
       break;
-    case "beat": {
-      const per = (S && S.beatsPerBar) || 4;
-      const total = Math.max(1, ((S && S.bars) || 4) * per);
-      const idx = ((Number(m.beat) || 0) % total + total) % total;
-      gridPos = idx / total;
-      gridAt = performance.now();
-      if (ui.transport?.posVal) {
-        ui.transport.posVal.textContent =
-          `${Math.floor(idx / per) + 1}·${(idx % per) + 1}`;
-      }
-      break;
-    }
-    case "wrap":
-      gridPos = 0;
-      gridAt = performance.now();
-      if (ui.transport?.posVal) ui.transport.posVal.textContent = "1·1";
-      break;
     case "link": {
       const el2 = document.getElementById("linkstatus");
       if (el2) {
@@ -1590,21 +1573,17 @@ function onState(s) {
 //   * the PLAY HEAD steps with it, on the same beat. Discrete on purpose: it
 //     jumps to the next beat instead of sliding, so it shows where the loop is
 //     rather than approximating it.
-// the grid position, driven by /ldbeat and /ldwrap events instead of the 20 Hz
-// state frame: at 95 bpm a frame is an eighth of a beat of lag at every boundary
-let gridPos = 0;
-let gridAt = 0;
 function tick() {
   if (S && ui.playheadFill) {
     const per = S.beatsPerBar || 4;
     const total = Math.max(1, (S.bars || 4) * per);
     const engine = Number.isFinite(S.phase) ? S.phase : 0;
 
-    // The grid position comes from the beat/wrap events (a few ms after the
-    // audio), and only falls back to the state frame if they stop arriving.
-    const fresh = performance.now() - gridAt < 2000;
-    playPos = fresh ? gridPos : engine;
-    if (!fresh && ui.transport?.posVal) {
+    // The readout and the head follow the engine's own phase from the state
+    // frame: up to ~50 ms behind, which is invisible for a bar·beat display and,
+    // unlike deriving it from the beat events, cannot miscount at the loop point.
+    playPos = engine;
+    if (ui.transport?.posVal) {
       const idx = Math.round(engine * total) % total;
       const text = `${Math.floor(idx / per) + 1}·${(idx % per) + 1}`;
       if (ui.transport.posVal.textContent !== text) ui.transport.posVal.textContent = text;

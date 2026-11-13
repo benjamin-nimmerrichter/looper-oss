@@ -30,8 +30,8 @@
     "overdubMode": 0
   },
   "clock": {
-    "clickVol": 0.3,
-    "countInBars": 1,
+    "clickVol": 1.0,
+    "countInBars": 0,
     "accentHz": 1580,
     "clickHz": 1050,
     "link": 0
