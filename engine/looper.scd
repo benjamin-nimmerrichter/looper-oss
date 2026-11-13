@@ -257,9 +257,10 @@ if (~hasLink) {
 				delayOn = 0, delayBeats = 0.75, delayDecay = 0.4, delayMix = 0.25,
 				revSend = 0.0, beatLen = 0.5, loopSec = 8,
 				fadeIn = 0, fadeOut = 0, vB0 = 0, vB1 = 0, vB2 = 0, vB3 = 0,
-				peakBuf = 0|
+				peakBuf = 0, autoClose = 0|
 
 			var tph, tphFree, pos, wpos, raw, gateEnv, gate, sig, sigR, layers, src,
+			    wrapTrig, commitGlow,
 			    wraps,
 			    seqStep, seqVal,
 			    dl, wet, dst, fades, st, seam, xfd, rpos, playGain;
@@ -317,9 +318,19 @@ if (~hasLink) {
 					1, compRatio.clip(0.05, 1), 0.01, 0.12)]);
 			sig     = (sig * recGain).tanh;
 
+			// The loop point is sample-accurate HERE, but sclang learns about it
+			// from a 20 Hz poll (or a SendReply that may never arrive), so the
+			// layer that just finished -- which is muted, because a recording layer
+			// has gain 0 -- stays silent for 50-150 ms after the boundary. That is
+			// what swallowed the downbeat of a take. Unmute it on the wrap itself,
+			// long enough for sclang's commit to agree with us.
+			wrapTrig   = Changed.kr(A2K.kr(tph < 0.5)) * A2K.kr(tph < 0.5);
+			commitGlow = Trig1.kr(wrapTrig * recOn * w0 * autoClose, 0.5);
+
 			// ---- layers ----
 			layers =
-				(~lerpRead.value(b0, rpos, contentLen) * LagUD.kr(g0, 0.01, 0.01)) +
+				(~lerpRead.value(b0, rpos, contentLen)
+					* LagUD.kr(g0, 0.01, 0.01).max(commitGlow)) +
 				(~lerpRead.value(b1, rpos, contentLen) * LagUD.kr(g1, 0.01, 0.01)) +
 				(~lerpRead.value(b2, rpos, contentLen) * LagUD.kr(g2, 0.01, 0.01)) +
 				(~lerpRead.value(b3, rpos, contentLen) * LagUD.kr(g3, 0.01, 0.01));
@@ -638,7 +649,8 @@ if (~hasLink) {
 			\vol, t[\vol], \pan, t[\pan], \gateOn, t[\gateOn],
 			\gateThr, t[\gateThr], \hp, t[\hp], \lp, t[\lp],
 			\input, t[\input], \delayDecay, t[\delayDecay], \playing, 0,
-			\monitor, ~state[\monitor], \peakBuf, ~peakBuf.bufnum
+			\monitor, ~state[\monitor], \peakBuf, ~peakBuf.bufnum,
+			\autoClose, (~state[\autoClose] ? 1)
 		];
 		4.do { |li|
 			var b = if (li < ~maxLayers, { t[\bufs][li].bufnum }, { ~scratch.bufnum });
@@ -1360,7 +1372,8 @@ if (~hasLink) {
 				~state[\monitor] = v.clip(0, 1.5);
 				~tracks.do { |t| t[\synth].set(\monitor, ~state[\monitor]) };
 			},
-			"autoClose",   { ~state[\autoClose] = v.asInteger },
+			"autoClose",   { ~state[\autoClose] = v.asInteger;
+				~tracks.do { |t| t[\synth].set(\autoClose, v.asInteger) } },
 			"autoDub",     { ~state[\autoDub] = v.asInteger },
 			"autosave",    {
 				~state[\autosave] = v.asInteger;
