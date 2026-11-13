@@ -120,7 +120,9 @@ body.no-master #master { display: none; }
 
 /* loop position as bar·beat, beside the clock */
 .posval {
-  font-size: 1.35rem;
+  /* same size as the tempo number: the bar·beat readout is a primary display,
+     not a footnote under it */
+  font-size: 2.1rem;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;

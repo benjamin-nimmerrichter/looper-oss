@@ -463,7 +463,7 @@ function buildTransport() {
   bpmRow.style.display = "flex";
   bpmRow.style.gap = "0.4rem";
   const bpmFader = Fader({
-    min: 40, max: 240, value: 120, format: (v) => `${Math.round(v)}`,
+    min: 40, max: 240, value: 120, format: () => "",   // the number above is it
     onInput: (v) => set("g.bpm", Math.round(v)),
   });
   bpmFader.style.flex = "1";
@@ -1514,9 +1514,6 @@ function onState(s) {
   S = s;
   if (first || ui.tracks.length !== s.tracks.length) buildTracks(s.tracks.length);
 
-  // Engine phase is a beat-stepped target. We store it and let tick() ease
-  // toward it: no dead reckoning, so with no new points the bar stands still.
-  phase = { value: s.phase ?? 0, at: performance.now() };
   ui.master.inL?.set(s.inL ?? 0);
   ui.master.inR?.set(s.inR ?? 0);
   ui.master.out?.set(Math.max(s.masterL ?? 0, s.masterR ?? 0));
@@ -1573,29 +1570,23 @@ function onState(s) {
 //   * the NUMBERS are the engine's beat, snapped. They change on the beat and on
 //     nothing else, so what you read is what you are hearing -- the old code
 //     eased them from beat to beat, which made them roll and made you miss one.
-//   * the PLAY HEAD advances with the grid at the reported tempo and snaps to
-//     the engine on every beat, so it is smooth *and* exact. No easing lag: at
-//     240 bpm a beat is 250 ms and a visible chase would be a lie.
+//   * the PLAY HEAD steps with it, on the same beat. Discrete on purpose: it
+//     jumps to the next beat instead of sliding, so it shows where the loop is
+//     rather than approximating it.
 let lastBeatPhase = -1;
-let lastBeatAt = 0;
-function tick(now) {
-  const at = now || performance.now();
+function tick() {
   if (S && ui.playheadFill) {
     const per = S.beatsPerBar || 4;
     const total = Math.max(1, (S.bars || 4) * per);
     const engine = Number.isFinite(S.phase) ? S.phase : 0;
 
-    // a new beat from the engine: take its position as the truth
+    // Discrete, like the numbers: the head sits on the beat the engine reports
+    // and jumps to the next one. No dead reckoning between beats, so what you
+    // see is the beat that is actually playing.
     if (engine !== lastBeatPhase) {
       lastBeatPhase = engine;
-      lastBeatAt = at;
       playPos = engine;
-    } else if (at - lastBeatAt < 1500) {
-      // between beats, advance by the grid so the line moves instead of stepping
-      const dt = Math.min(0.1, (at - (tick.last || at)) / 1000);
-      playPos = (playPos + dt * (Number(S.bpm) || 120) / 60 / total) % 1;
     }
-    tick.last = at;
 
     ui.playheadFill.style.width = `${(playPos * 100).toFixed(2)}%`;
     if (ui.playheadTicks) {
