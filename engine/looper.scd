@@ -301,7 +301,9 @@ if (~hasLink) {
 			raw     = Select.ar(K2A.ar(input),
 				~inputChannels.value ++ [In.ar(testBus, 1)]) * gain;
 			gateEnv = Amplitude.kr(raw, 0.002, 0.05);
-			gate    = Select.kr(gateOn, [1, LagUD.kr((gateEnv > gateThr), 0.003, 0.06)]);
+			// 0.2 ms open (was 3 ms): the gate's job is to close on silence, not to
+			// round off the attack of the first note in a take
+			gate    = Select.kr(gateOn, [1, LagUD.kr((gateEnv > gateThr), 0.0002, 0.06)]);
 			sig     = BHiPass.ar(raw, hp.clip(10, 20000), 0.707);
 			// step sequence: eight eighth-notes stepping the low pass upward, so a
 			// static filter can move with the loop. One buffer of 8 values per track.
@@ -329,7 +331,10 @@ if (~hasLink) {
 			// ramp is the punch-out fade. ~commit drops recOn first and closes the
 			// write gate 30 ms later, so a take never ends in a step to zero. Steady
 			// state is recOn == 1, so the ramp does not touch the body of a take.
-			sigR = sig * LagUD.kr(recOn, 0.003, 0.003);
+			// No fade IN: a take must capture its first transient at full level.
+			// The 3 ms release is the punch-out fade and stays; the attack is a
+			// fifth of a millisecond, which is below anything audible as a ramp.
+			sigR = sig * LagUD.kr(recOn, 0.0002, 0.003);
 			// what the write head is being fed, polled at 10 Hz by sclang: a take
 			// is judged silent at commit from this, not by streaming its buffer
 			// back while something else may be reading it
