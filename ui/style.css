@@ -885,3 +885,7 @@ select.sel {
   border-style: dashed;
   color: var(--accent);
 }
+
+/* the bar·beat readout sits bottom-right of the tempo section, diagonally
+   opposite the tempo number, so the two never crowd each other */
+#transport .posval.tempoPos { align-self: flex-end; }

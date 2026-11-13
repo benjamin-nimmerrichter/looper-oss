@@ -60,7 +60,6 @@ let selected = 0;
 // the track you are merging FROM: tap its merge, then the one it goes into
 let mergeFrom = null;
 const mergeBtns = [];
-let phase = { value: 0, at: performance.now() };
 let IMPORTS = [];
 let SEQ = [];       // per-track step-sequence patterns (eight values 0..1)   // *.wav sitting in sessions/import/
 // The bar eases toward the engine's loop points and stops when they stop moving.
@@ -478,6 +477,7 @@ function buildTransport() {
   const posVal = el("div", "posval", "1·1");
   // under the fader, not beside the number: the number is the tempo, the readout
   // is where you are in the loop
+  posVal.classList.add("tempoPos");   // bottom-right, opposite the bpm number
   g1.append(bpmVal, bpmRow, posVal);
 
   const g2 = el("div", "group");
@@ -1568,24 +1568,44 @@ function onState(s) {
 }
 
 /* ------------------------------------------------------------------- loop -- */
-function tick() {
+// The play head and the bar·beat readout are driven differently on purpose.
+//
+//   * the NUMBERS are the engine's beat, snapped. They change on the beat and on
+//     nothing else, so what you read is what you are hearing -- the old code
+//     eased them from beat to beat, which made them roll and made you miss one.
+//   * the PLAY HEAD advances with the grid at the reported tempo and snaps to
+//     the engine on every beat, so it is smooth *and* exact. No easing lag: at
+//     240 bpm a beat is 250 ms and a visible chase would be a lie.
+let lastBeatPhase = -1;
+let lastBeatAt = 0;
+function tick(now) {
+  const at = now || performance.now();
   if (S && ui.playheadFill) {
-    // shortest way round the loop, then ease
-    let d = (phase.value ?? 0) - playPos;
-    d = ((d + 0.5) % 1) - 0.5;
-    playPos = d > -0.0005 && d < 0.0005 ? phase.value : ((playPos + d * 0.14) % 1 + 1) % 1;
+    const per = S.beatsPerBar || 4;
+    const total = Math.max(1, (S.bars || 4) * per);
+    const engine = Number.isFinite(S.phase) ? S.phase : 0;
+
+    // a new beat from the engine: take its position as the truth
+    if (engine !== lastBeatPhase) {
+      lastBeatPhase = engine;
+      lastBeatAt = at;
+      playPos = engine;
+    } else if (at - lastBeatAt < 1500) {
+      // between beats, advance by the grid so the line moves instead of stepping
+      const dt = Math.min(0.1, (at - (tick.last || at)) / 1000);
+      playPos = (playPos + dt * (Number(S.bpm) || 120) / 60 / total) % 1;
+    }
+    tick.last = at;
+
     ui.playheadFill.style.width = `${(playPos * 100).toFixed(2)}%`;
     if (ui.playheadTicks) {
-      const per = S.beatsPerBar || 4;
       ui.playheadTicks.style.setProperty("--bars", String(Math.max(1, S.bars || 4)));
-      ui.playheadTicks.style.setProperty("--beats", String(Math.max(1, (S.bars || 4) * per)));
+      ui.playheadTicks.style.setProperty("--beats", String(total));
     }
     if (ui.transport?.posVal) {
-      const per = S.beatsPerBar || 4;
-      const total = Math.max(1, (S.bars || 4) * per);
-      const idx = Math.floor(playPos * total) % total;
+      // snapped: straight from the engine's beat, never from the play head
+      const idx = Math.round(engine * total) % total;
       const text = `${Math.floor(idx / per) + 1}·${(idx % per) + 1}`;
-      // only touch the DOM when the beat actually changes
       if (ui.transport.posVal.textContent !== text) ui.transport.posVal.textContent = text;
     }
   }
