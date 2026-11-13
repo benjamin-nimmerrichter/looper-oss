@@ -2080,7 +2080,9 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		// same def does not survive the trip, the beat itself does
 		~beatInLoop = ((~beatInLoop ? -1) + 1) % beatsPerLoop;
 		~state[\phase] = ~beatInLoop / beatsPerLoop;
-		~bridge.sendMsg('/ldbeat', beat);
+		// loop-relative index, so the readout can be driven by this event instead
+		// of waiting for the next state frame
+		~bridge.sendMsg('/ldbeat', ~beatInLoop);
 		if (~countInLeft.notNil) {
 			if (beat == 0 && (~countInStarted ? false).not) {
 				~countInStarted = true;

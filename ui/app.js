@@ -266,6 +266,23 @@ function handle(m) {
       setBoot(`engine failed to start: ${m.msg}`, false, true);
       console.error("engine boot failed:", m.msg);
       break;
+    case "beat": {
+      const per = (S && S.beatsPerBar) || 4;
+      const total = Math.max(1, ((S && S.bars) || 4) * per);
+      const idx = ((Number(m.beat) || 0) % total + total) % total;
+      gridPos = idx / total;
+      gridAt = performance.now();
+      if (ui.transport?.posVal) {
+        ui.transport.posVal.textContent =
+          `${Math.floor(idx / per) + 1}·${(idx % per) + 1}`;
+      }
+      break;
+    }
+    case "wrap":
+      gridPos = 0;
+      gridAt = performance.now();
+      if (ui.transport?.posVal) ui.transport.posVal.textContent = "1·1";
+      break;
     case "link": {
       const el2 = document.getElementById("linkstatus");
       if (el2) {
@@ -1573,31 +1590,30 @@ function onState(s) {
 //   * the PLAY HEAD steps with it, on the same beat. Discrete on purpose: it
 //     jumps to the next beat instead of sliding, so it shows where the loop is
 //     rather than approximating it.
-let lastBeatPhase = -1;
+// the grid position, driven by /ldbeat and /ldwrap events instead of the 20 Hz
+// state frame: at 95 bpm a frame is an eighth of a beat of lag at every boundary
+let gridPos = 0;
+let gridAt = 0;
 function tick() {
   if (S && ui.playheadFill) {
     const per = S.beatsPerBar || 4;
     const total = Math.max(1, (S.bars || 4) * per);
     const engine = Number.isFinite(S.phase) ? S.phase : 0;
 
-    // Discrete, like the numbers: the head sits on the beat the engine reports
-    // and jumps to the next one. No dead reckoning between beats, so what you
-    // see is the beat that is actually playing.
-    if (engine !== lastBeatPhase) {
-      lastBeatPhase = engine;
-      playPos = engine;
+    // The grid position comes from the beat/wrap events (a few ms after the
+    // audio), and only falls back to the state frame if they stop arriving.
+    const fresh = performance.now() - gridAt < 2000;
+    playPos = fresh ? gridPos : engine;
+    if (!fresh && ui.transport?.posVal) {
+      const idx = Math.round(engine * total) % total;
+      const text = `${Math.floor(idx / per) + 1}·${(idx % per) + 1}`;
+      if (ui.transport.posVal.textContent !== text) ui.transport.posVal.textContent = text;
     }
 
     ui.playheadFill.style.width = `${(playPos * 100).toFixed(2)}%`;
     if (ui.playheadTicks) {
       ui.playheadTicks.style.setProperty("--bars", String(Math.max(1, S.bars || 4)));
       ui.playheadTicks.style.setProperty("--beats", String(total));
-    }
-    if (ui.transport?.posVal) {
-      // snapped: straight from the engine's beat, never from the play head
-      const idx = Math.round(engine * total) % total;
-      const text = `${Math.floor(idx / per) + 1}·${(idx % per) + 1}`;
-      if (ui.transport.posVal.textContent !== text) ui.transport.posVal.textContent = text;
     }
   }
   requestAnimationFrame(tick);
