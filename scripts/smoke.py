@@ -289,10 +289,12 @@ async def run_tests(c: Client) -> None:
             (dst / "sessions" / "keep.wav").write_bytes(b"x")
             stage(ROOT, dst)
             cfg = json.loads(cfg_path.read_text())
+            from app.main import CONFIG_VERSION  # noqa: PLC0415
             kept = ((dst / "sessions" / "keep.wav").is_file()
-                    and cfg["bpm"] == 133
-                    and cfg["loop"]["autoDub"] == 1
-                    and cfg["version"] == 3)
+                    and cfg["bpm"] == 133                    # the user's own value
+                    and cfg["loop"]["autoDub"] == 1          # the 0.1.0 default fix
+                    and cfg["clock"]["countInBars"] == 0     # count-in ships off now
+                    and cfg["version"] == CONFIG_VERSION)
         check("update keeps settings and music", kept)
 
         # a new version is a new staged home: it must inherit the old one
@@ -1139,6 +1141,10 @@ async def run_tests(c: Client) -> None:
     await c.set(f"t{L}.gateThr", 0.02)
     await c.set(f"t{L}.gateOn", 0)
     await c.set(f"t{L}.input", testin)
+    # start the take on the bar line, or its content sits somewhere in the middle
+    # of the buffer and `probe` (which reads the first 48000 frames) cannot see it
+    await c.set("g.quantizeStart", 1)
+    await asyncio.sleep(0.3)
     await c.svc("testTone", [300, 0.3, 60])
     await c.act("dub", L)
     await c.wait(lambda m: m.get("t") == "s" and m["tracks"][L]["state"] == 1, 12)
@@ -1154,6 +1160,7 @@ async def run_tests(c: Client) -> None:
         await c.act("dub", L)
         await asyncio.sleep(1.2)
         src_probe = await probe_l()
+    await c.set("g.quantizeStart", 0)
     await c.svc("copyTrack", [L, 3])
     cp = await c.wait(lambda m: m.get("t") == "copied", 12)
     p3 = await probe_l() if False else None

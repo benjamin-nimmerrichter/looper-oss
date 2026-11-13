@@ -2073,18 +2073,22 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		};
 	}, '/b_setn');
 
-	~fireBeat = { |beat|
+	// `exactBeats` is the transport's own beat count (0 .. bars*beatsPerBar) as it
+	// was written into ~clockBuf. Everything below is arithmetic on it: the phase
+	// is `beats / beatsPerLoop` and the index is `beats % beatsPerLoop`. There is
+	// no counter to drift or double-step, which is what made a basic
+	// "count up by one, modulo four" display wrong at every loop point.
+	~fireBeat = { |beat, exactBeats|
 		var beatsPerLoop = (~state[\bars] * ~state[\beatsPerBar]).max(1);
+		var b;
 		~beatCount = (~beatCount ? 0) + 1;   // diagnostics: is anything arriving?
-		// beat index inside the loop, counted here: a second SendReply value in the
-		// same def does not survive the trip, the beat itself does
-		~beatInLoop = ((~beatInLoop ? -1) + 1) % beatsPerLoop;
-		~state[\phase] = ~beatInLoop / beatsPerLoop;
-		// loop-relative index, so the readout can be driven by this event instead
-		// of waiting for the next state frame
+		b = if (exactBeats.notNil) { exactBeats.asFloat % beatsPerLoop }
+			{ ((~beatInLoop ? -1) + 1) % beatsPerLoop };
+		~beatInLoop = b.floor.asInteger;
+		~state[\phase] = b / beatsPerLoop;
 		~bridge.sendMsg('/ldbeat', ~beatInLoop);
 		if (~countInLeft.notNil) {
-			if (beat == 0 && (~countInStarted ? false).not) {
+			if (((b.floor % ~state[\beatsPerBar].max(1)) == 0) && (~countInStarted ? false).not) {
 				~countInStarted = true;
 				~countInLeft = ~state[\countIn] * ~state[\beatsPerBar];
 				~transport.set(\countIn, 1);
@@ -2105,7 +2109,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			// SendReply layout is [cmdName, nodeID, replyID, v1, ...]: the first
 			// value is msg[3], not msg[4] (AGENTS invariant 1). Reading msg[4] gave
 			// nil, so every beat looked like beat 0.
-			~fireBeat.value((msg[3] ? 0).asInteger);
+			~fireBeat.value((msg[3] ? 0).asInteger);   // no float here: fallback
 		};
 	}, '/ldbeat');
 
@@ -2224,7 +2228,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 						~fireWrap.value;
 					} {
 						if (beats.floor != ~pollBeats.floor) {
-							~fireBeat.value(beats.floor.asInteger % ~state[\beatsPerBar]);
+							~fireBeat.value(nil, beats);
 						};
 					};
 				};

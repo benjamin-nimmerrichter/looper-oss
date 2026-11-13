@@ -123,7 +123,7 @@ def resolve_home(bundled: bool) -> pathlib.Path:
     return target
 
 
-CONFIG_VERSION = 3   # bump when a shipped default changes meaning
+CONFIG_VERSION = 4   # bump when a shipped default changes meaning
 
 
 def fill_defaults(cfg: dict, defaults: dict) -> list[str]:
@@ -183,8 +183,14 @@ def migrate_config(path: pathlib.Path, defaults: pathlib.Path | None = None) -> 
         version = 0
     if version < CONFIG_VERSION:
         loop = cfg.get("loop")
-        if isinstance(loop, dict):
+        if version < 3 and isinstance(loop, dict):
             loop["autoDub"] = 1      # 0.1.0 shipped this off; the RC-505 carries on
+        clock = cfg.get("clock")
+        if version < 4 and isinstance(clock, dict):
+            # count-in shipped at 1 bar, so a fresh take waited a bar nobody asked
+            # for and the transport button lit up on its own. Off is the default
+            # now; say so once, at the update.
+            clock["countInBars"] = 0
         cfg["version"] = CONFIG_VERSION
     if json.dumps(cfg, sort_keys=True) == before:
         return
