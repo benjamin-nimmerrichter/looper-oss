@@ -420,7 +420,10 @@ if (~hasLink) {
 		// by the number of sources keeps it inside the rails with no dynamics at
 		// all: a Compander here was audible as pumping, and a bounce should be a
 		// gain change and nothing else.
-		BufWr.ar((sig * (1 / sources.max(1))).clip2(0.999), dst, pos);
+		// 1/sqrt(N), not 1/N: this is a realtime looper, not a mastering chain --
+		// a bounce should keep most of its level and spend a little headroom, and
+		// the input is gain staged anyway
+		BufWr.ar((sig * (1 / sources.max(1).sqrt)).clip2(0.999), dst, pos);
 	}).add;
 
 	// master out + hardware in, in the same buffer (slots 60..63)
@@ -446,7 +449,7 @@ if (~hasLink) {
 		// The device decides how they reach hardware: 6+ outputs get a pair each,
 		// 4 gets A and (B+C), anything less folds all three into 0/1.
 		var a, b, c, rv, wet, click, rhy, mfx, lim, outA, outB, nOut;
-		var djLpFreq, djHpFreq, djGain, perfFn, slotFn;
+		var djLpFreq, djHpFreq, djGain, djRq, perfFn, slotFn;
 		nOut  = (~audio[\out] ? 2).asInteger;
 		a     = In.ar(busA, 32).clump(2).sum * gA;
 		b     = In.ar(busB, 32).clump(2).sum * gB;
@@ -467,12 +470,19 @@ if (~hasLink) {
 		// must never reach 0 or the output glitches and can go very loud.
 		// MoogFF is a state-variable design made for sweeping; its gain is the
 		// resonance, 0..4.
-		djLpFreq = (20000 * (1 + dj).clip(0, 1).squared).clip(20, 20000);
-		djHpFreq = (20 * ((20000 / 20) ** dj.clip(0, 1))).clip(20, 20000);
-		djGain   = djRes.clip(0, 1).linexp(0, 1, 1, 3.6);
+		// Exponential travel both ways -- 20 Hz to 20 kHz and back in the same
+		// number of turns -- which is what makes a DJ filter feel even; a squared
+		// curve spends most of its travel near the top and does nothing at the end.
+		djLpFreq = (20 * (1000 ** (1 + dj))).clip(20, 20000);   // dj 0 -> -1
+		djHpFreq = (20 * (1000 ** dj)).clip(20, 20000);         // dj 0 -> +1
+		djGain   = djRes.clip(0, 1).linexp(0, 1, 1, 3.6);       // MoogFF resonance
+		djRq     = djRes.clip(0, 1).linlin(0, 1, 0.9, 0.25);    // BHiPass 1/Q
 		perfFn   = { |x|
 			var lp   = MoogFF.ar(x, LagUD.kr(djLpFreq, 0.02, 0.06), djGain);
-			var hp   = x - MoogFF.ar(x, LagUD.kr(djHpFreq, 0.02, 0.06), djGain);
+			// a real high pass, not "the low pass subtracted from the input":
+			// that trick has a weak slope and a phase-reversed bump, so the right
+			// half of the knob barely did anything
+			var hp   = BHiPass.ar(x, LagUD.kr(djHpFreq, 0.02, 0.06), djRq);
 			var pick = Select.ar(K2A.ar(dj < 0), [hp, lp]);
 			Select.ar(K2A.ar(dj.abs > 0.001), [x, pick])
 		};

@@ -471,7 +471,14 @@ function buildTransport() {
   const tap = Button({ label: "tap", cls: "tiny" });
   tap.addEventListener("pointerup", () => svc("tap"));
   bpmRow.append(bpmFader, tap);
-  g1.append(bpmVal, bpmRow);
+  // Where you are in the loop, in the units you count in: the engine already
+  // ships `phase` plus bars/beatsPerBar, so this is arithmetic, not protocol.
+  // It sits with the tempo because both are about the grid, and one group fewer
+  // leaves more width for everything else.
+  const posVal = el("div", "posval", "1·1");
+  const tempoRow = el("div", "tempoRow");
+  tempoRow.append(bpmVal, posVal);
+  g1.append(tempoRow, bpmRow);
 
   const g2 = el("div", "group");
   g2.append(el("div", "caption", "bars / loop"));
@@ -482,14 +489,6 @@ function buildTransport() {
   });
   g2.append(bars);
 
-  // Where you are in the loop, in the units you count in. The engine already
-  // ships `phase` (0..1 over the whole loop) plus bars/beatsPerBar, so this is
-  // arithmetic, not protocol. It follows the same eased position as the
-  // playhead, so the number and the blue line can never disagree.
-  const gpos = el("div", "group");
-  gpos.append(el("div", "caption", "position"));
-  const posVal = el("div", "posval", "1·1");
-  gpos.append(posVal);
 
   const g3 = el("div", "group");
   g3.append(el("div", "caption", "clock"));
@@ -540,7 +539,7 @@ function buildTransport() {
   });
   gr.append(rOn, rKit, rPat);
 
-  root.append(g0, g1, g2, gpos, g3, gr, g4);
+  root.append(g0, g1, g2, g3, gr, g4);
   ui.transport = { bpmVal, bpmFader, bars, metro, countIn, posVal, dj };
 }
 
