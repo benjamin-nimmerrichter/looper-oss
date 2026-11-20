@@ -197,7 +197,7 @@ if (~hasLink) {
 	SynthDef(\ld_transport, { |clockBuf = 0, phaseBus, clickBus, rate = 0.001,
 			beatsPerBar = 4, bars = 4, metro = 1, countIn = 0,
 			clickAmp = 0.3, accentHz = 1580, clickHz = 1050, reportRate = 15|
-		var ph, phKr, beats, beatTr, isBarTop, freq, click, wrap, playClick;
+		var ph, phKr, beats, beatTr, isBarTop, freq, click, wrap, wraps, playClick;
 		ph    = Phasor.ar(0, rate, 0, 1, 0);
 		phKr  = A2K.kr(ph);
 		beats = phKr * (beatsPerBar * bars).max(1);
@@ -206,13 +206,21 @@ if (~hasLink) {
 		freq     = Select.kr(isBarTop, [clickHz, accentHz]);
 		click    = SinOsc.ar(freq) * EnvGen.ar(Env.perc(0.0005, 0.05), beatTr);
 		wrap     = Changed.kr(phKr < 0.5) * (phKr < 0.5);
+		wraps    = PulseCount.kr(wrap);
 		playClick = (metro + countIn).clip(0, 1) * clickAmp;
 		Out.ar(phaseBus, ph);
-		// the pollable copy of the clock: SendReply is not delivered everywhere
+		// The pollable copy of the clock: SendReply is not delivered everywhere.
+		// Frame 0 is the beat count as a Float, frame 1 how often the loop has
+		// wrapped. The wrap is COUNTED here, not guessed at the other end: "did I
+		// sample beats < 0.5?" loses a wrap with one dropped reply, and a lost
+		// wrap is a take that never closes. A counter cannot be missed.
 		BufWr.kr(beats, clockBuf, 0);
+		BufWr.kr(wraps, clockBuf, 1);
 		Out.ar(clickBus, (click * playClick) ! 2);
 
-		SendReply.kr(beatTr, '/ldbeat', [(beats.floor % beatsPerBar)]);
+		// the loop-relative beat index (0 .. bars*beatsPerBar-1), so the receiver
+		// does arithmetic on the transport's own count and keeps no counter
+		SendReply.kr(beatTr, '/ldbeat', [beats.floor]);
 		SendReply.kr(wrap, '/ldwrap');
 	}).add;
 
@@ -241,11 +249,11 @@ if (~hasLink) {
 		[sum] ++ ins
 	};
 
-	SynthDef(\ld_track, { |outBus, revBus, phaseBus, idx = 0,
+	SynthDef(\ld_track, { |outBus, revBus, phaseBus, recBus = 0, idx = 0,
 				b0 = 0, b1 = 0, b2 = 0, b3 = 0,
 				g0 = 0, g1 = 0, g2 = 0, g3 = 0,
 				testBus = 0, scratch = 0, recOn = 0, playing = 0,
-				w0 = 0, w1 = 0, w2 = 0, w3 = 0,
+				recL0 = 0, needPasses = 1, t_recTrig = 0,
 				loopLen = 48000, contentLen = 48000, loopRatio = 1, speed = 1,
 				xfade = 64, recordOffset = 0, reverse = 0,
 				vol = 0.8, pan = 0, muted = 0, monitor = 0.8,
@@ -260,10 +268,9 @@ if (~hasLink) {
 				peakBuf = 0, autoClose = 0|
 
 			var tph, tphFree, pos, wpos, raw, gateEnv, gate, sig, sigR, layers, src,
-			    wrapTrig, commitGlow,
-			    wraps,
+			    wrapAr, passCount, l0Done, g0Eff,
 			    seqStep, seqVal,
-			    dl, wet, dst, fades, st, seam, xfd, rpos, playGain;
+			    dl, wet, dst, fades, st, panSm, pL, pR, seam, xfd, rpos, playGain;
 
 			// track phase. At speed 1 the position comes straight from the master
 			// phase, so every track stays locked to the same grid and cannot drift.
@@ -288,15 +295,15 @@ if (~hasLink) {
 			seam = 0.5 - (0.5 * (pi * seam).cos);
 			rpos = Select.ar(K2A.ar(reverse), [pos, (contentLen - 1) - pos]);
 			rpos = rpos.clip(0, (contentLen - 1).max(1));
-			wpos = ((rpos - recordOffset) % contentLen).clip(0, (contentLen - 1).max(1));
+			// Add contentLen before modulo so positive recordOffset never produces a
+			// negative C-remainder that clips to index 0.
+			wpos = (((rpos - recordOffset) + contentLen) % contentLen).clip(0, (contentLen - 1).max(1));
 			// BufWr truncates its index and float lands at 383998.9999 for the final
 			// sample, so the last frame was never written and kept the buffer's zero.
 			// Rounding the write index covers 0 .. contentLen-1 exactly.
 			wpos = (wpos + 0.5).floor;
 
 			// ---- input FX (before the write head) ----
-			// input 3 is an internal test bus: it lets the record path be verified
-			// with a known signal instead of a microphone. The UI never offers it.
 			// index n + 1 is the internal test bus (the record path can be verified
 			// with a known signal instead of a microphone); the UI never offers it
 			raw     = Select.ar(K2A.ar(input),
@@ -318,43 +325,30 @@ if (~hasLink) {
 					1, compRatio.clip(0.05, 1), 0.01, 0.12)]);
 			sig     = (sig * recGain).tanh;
 
-			// The loop point is sample-accurate HERE, but sclang learns about it
-			// from a 20 Hz poll (or a SendReply that may never arrive), so the
-			// layer that just finished -- which is muted, because a recording layer
-			// has gain 0 -- stays silent for 50-150 ms after the boundary. That is
-			// what swallowed the downbeat of a take. Unmute it on the wrap itself,
-			// long enough for sclang's commit to agree with us.
-			wrapTrig   = Changed.kr(A2K.kr(tph < 0.5)) * A2K.kr(tph < 0.5);
-			commitGlow = Trig1.kr(wrapTrig * recOn * w0 * autoClose, 0.5);
+			// Publish processed input + write index + phase for \ld_rec (which ONLY
+			// exists while this track is actively recording -- zero idle BufWr/RAM thrash).
+			Out.ar(recBus, [sig, wpos, tph]);
+
+			// Peak of what the write head is being fed, polled at 20 Hz by sclang:
+			// a take is judged silent at commit from this.
+			sigR = sig * LagUD.kr(recOn, 0.0002, 0.003);
+			BufWr.kr(Amplitude.kr(sigR, 0.002, 0.08), peakBuf, idx);
+
+			// Sample-accurate loop-point unmute for Layer 0: matches \ld_rec's exact
+			// sample-accurate wrap stop, so b0 stops writing and starts playing on the
+			// same sample with zero simultaneous read/write metallic buzz and zero
+			// muted downbeat while waiting for sclang's commit.
+			wrapAr    = (Delay1.ar(tph) - tph) > 0.5;
+			passCount = PulseCount.ar(wrapAr, K2A.ar(t_recTrig));
+			l0Done    = (passCount >= needPasses) * K2A.ar(recL0 * autoClose);
+			g0Eff     = K2A.ar(LagUD.kr(g0, 0.01, 0.01)).max(l0Done);
 
 			// ---- layers ----
 			layers =
-				(~lerpRead.value(b0, rpos, contentLen)
-					* LagUD.kr(g0, 0.01, 0.01).max(commitGlow)) +
+				(~lerpRead.value(b0, rpos, contentLen) * g0Eff) +
 				(~lerpRead.value(b1, rpos, contentLen) * LagUD.kr(g1, 0.01, 0.01)) +
 				(~lerpRead.value(b2, rpos, contentLen) * LagUD.kr(g2, 0.01, 0.01)) +
 				(~lerpRead.value(b3, rpos, contentLen) * LagUD.kr(g3, 0.01, 0.01));
-
-			// One writer per layer, each bound to its OWN buffer when the synth is
-			// built -- no runtime buffer switching. w<i> selects "record the input"
-			// vs "write my own content back", and writing back is a no-op.
-			// sigR carries the 3 ms record ramp and IS written into the buffer: that
-			// ramp is the punch-out fade. ~commit drops recOn first and closes the
-			// write gate 30 ms later, so a take never ends in a step to zero. Steady
-			// state is recOn == 1, so the ramp does not touch the body of a take.
-			// No fade IN: a take must capture its first transient at full level.
-			// The 3 ms release is the punch-out fade and stays; the attack is a
-			// fifth of a millisecond, which is below anything audible as a ramp.
-			sigR = sig * LagUD.kr(recOn, 0.0002, 0.003);
-			// what the write head is being fed, polled at 10 Hz by sclang: a take
-			// is judged silent at commit from this, not by streaming its buffer
-			// back while something else may be reading it
-			BufWr.kr(Amplitude.kr(sigR, 0.002, 0.08), peakBuf, idx);
-			BufWr.ar(Select.ar(K2A.ar(w0), [BufRd.ar(1, b0, wpos, 1, 1), sigR]), b0, wpos);
-			BufWr.ar(Select.ar(K2A.ar(w1), [BufRd.ar(1, b1, wpos, 1, 1), sigR]), b1, wpos);
-			BufWr.ar(Select.ar(K2A.ar(w2), [BufRd.ar(1, b2, wpos, 1, 1), sigR]), b2, wpos);
-			BufWr.ar(Select.ar(K2A.ar(w3), [BufRd.ar(1, b3, wpos, 1, 1), sigR]), b3, wpos);
-
 
 			src = (layers * seam) + (sig * monitor * LagUD.kr(recOn, 0.01, 0.01));
 
@@ -371,22 +365,78 @@ if (~hasLink) {
 			dst = dst * Select.ar(K2A.ar((fadeIn + fadeOut) > 0), [DC.ar(1.0), fades]);
 
 			playGain = LagUD.kr(playing, 0.005, 0.005) * (1 - LagUD.kr(muted, 0.01, 0.01));
-			// mono source -> both channels explicitly, then equal-power pan.
-			// Pan2 alone left a mono source only on the left channel in practice.
 			dst = dst * playGain * LagUD.kr(vol, 0.01, 0.01);
-			st = [
-				dst * ((1 - LagUD.kr(pan, 0.01, 0.01)) * 0.5).sqrt,
-				dst * ((1 + LagUD.kr(pan, 0.01, 0.01)) * 0.5).sqrt
-			];
+			panSm = LagUD.kr(pan, 0.01, 0.01);
+			pL = ((1 - panSm) * 0.5).sqrt;
+			pR = ((1 + panSm) * 0.5).sqrt;
+			// Handle both stereo (when VST inserts are compiled in) and mono cleanly:
+			// nesting [dst * pL, dst * pR] when dst is already [L, R] caused double
+			// Out.ar (+3 dB) and broke panning.
+			st = if (dst.isArray && { dst.size == 2 }) {
+				[dst[0] * (pL * 1.41421356).min(1.0), dst[1] * (pR * 1.41421356).min(1.0)]
+			} {
+				[dst * pL, dst * pR]
+			};
 
 			Out.ar(outBus, st);
-			Out.ar(revBus, st.sum * LagUD.kr(revSend, 0.02, 0.02));
+			Out.ar(revBus, st * LagUD.kr(revSend, 0.02, 0.02));
 			// cue: an independent send to the cue bus (output C), so a track
 			// can be monitored without being in the main mix
 			Out.ar(cueBus, st * LagUD.kr(cueOn * cueSend, 0.02, 0.02));
 		}).add;
 	};
 	~trackDef.value(~vstPost);
+
+	// ---- dedicated per-take recorder ---------------------------------------
+	// Spawned ONLY while a track is recording (zero idle BufWr/RAM thrash across
+	// tracks, zero write-back clobbering on import/copy/merge).
+	//
+	// Three key guarantees:
+	//  1. Additive overdub: adds sigR onto the existing sample (on pass 1 the
+	//     buffer was zeroed so existing == 0; on pass 2+ turning off recording
+	//     late adds silence onto your first kick instead of erasing it!).
+	//  2. Gap-fill: if BPM increase / speed > 1 / Link nudge steps wpos by 2..4
+	//     samples, fills the skipped sample(s) instead of leaving metallic 0-holes.
+	//  3. Sample-accurate auto-close / auto-dub handoff: stops writing b0 and
+	//     frees itself on the exact wrap sample (zero read/write race with b0),
+	//     while an armed next-layer \ld_rec starts on that exact same sample.
+	SynthDef(\ld_rec, { |recBus = 0, buf = 0, contentLen = 48000,
+			recOn = 1, stopAtWrap = 0, waitWraps = 0, needPasses = 1,
+			freeNow = 0, killNow = 0|
+		var busIn   = In.ar(recBus, 3);
+		var sig     = busIn[0];
+		var wpos    = busIn[1];
+		var tph     = busIn[2];
+		var wrapAr  = (Delay1.ar(tph) - tph) > 0.5;
+		var passes  = PulseCount.ar(wrapAr);
+		var stopped = (passes >= needPasses) * stopAtWrap;
+		var active  = (passes >= waitWraps) * (1 - stopped) * (1 - K2A.ar(killNow));
+		var env     = LagUD.ar(K2A.ar(recOn), 0.0002, 0.003);
+		var sigR    = sig * env * active;
+		var prevPos = Delay1.ar(wpos);
+		var prevSig = Delay1.ar(sigR);
+		var first   = Impulse.ar(0);
+		var sameIdx = ((wpos - prevPos).abs < 0.5) * (1 - first);
+		var existing = BufRd.ar(1, buf, wpos, 1, 1);
+		var mixed   = Select.ar(sameIdx, [(existing + sigR).clip2(0.999), existing]);
+		var outVal  = Select.ar(active, [existing, mixed]);
+
+		var fStep    = (wpos - prevPos + contentLen) % contentLen;
+		var bStep    = (prevPos - wpos + contentLen) % contentLen;
+		var isFwdGap = active * (1 - first) * (fStep >= 1.5) * (fStep <= 4.5);
+		var isBwdGap = active * (1 - first) * (bStep >= 1.5) * (bStep <= 4.5);
+		var hasGap   = (isFwdGap + isBwdGap).clip(0, 1);
+		var gapPos   = Select.ar(isBwdGap, [
+			(wpos - 1 + contentLen) % contentLen,
+			(wpos + 1) % contentLen
+		]);
+		var gapOld   = BufRd.ar(1, buf, gapPos, 1, 1);
+		var gapMix   = (gapOld + ((sigR + prevSig) * 0.5)).clip2(0.999);
+		BufWr.ar(Select.ar(hasGap, [gapOld, gapMix]), buf, gapPos);
+		BufWr.ar(outVal, buf, wpos);
+
+		FreeSelf.kr(A2K.kr(stopped) + TDelay.kr(freeNow, 0.02) + killNow);
+	}).add;
 
 	// ---- meters -------------------------------------------------------------
 	// These are separate tiny defs on purpose: the same SendReply inside the big
@@ -534,10 +584,18 @@ if (~hasLink) {
 		outA = a + (if (nOut < 4) { b } { DC.ar(0) })
 			+ (if (nOut < 6) { c } { DC.ar(0) });
 		outB = b + (if (nOut < 6) { c } { DC.ar(0) });
-		Out.ar(0, lim.(outA));
-		if (nOut >= 4) { Out.ar(2, lim.(outB)) };
-		if (nOut >= 6) { Out.ar(4, lim.(c)) };
-		Out.ar(masterBus, lim.(a + b + c));
+		// On a 2-channel device outA IS (a + b + c): run the master FX/limiter
+		// chain once instead of instantiating every master UGen twice.
+		if (nOut < 4) {
+			var mainOut = lim.(outA);
+			Out.ar(0, mainOut);
+			Out.ar(masterBus, mainOut);
+		} {
+			Out.ar(0, lim.(outA));
+			Out.ar(2, lim.(outB));
+			if (nOut >= 6) { Out.ar(4, lim.(c)) };
+			Out.ar(masterBus, lim.(a + b + c));
+		};
 	}).add;
 
 	// ---- rhythm engine ------------------------------------------------------
@@ -560,10 +618,10 @@ if (~hasLink) {
 		var perc = SinOsc.ar(420) * EnvGen.kr(Env.perc(0.001, 0.07), hit.value(3));
 		var sig = (kick * 0.9) + (snare * 0.6) + (hat * 0.32) + (perc * 0.4);
 		sig = (sig * (1 + drive)).tanh;
-		Out.ar(outBus, sig * amp);
+		Out.ar(outBus, (sig * amp) ! 2);
 		// cue: the drums can be monitored without being in the main mix (#3).
 		// Bus C's last pair, so it does not take a track's slot.
-		Out.ar(cueBus, sig * amp * LagUD.kr(cueOn, 0.02, 0.05));
+		Out.ar(cueBus, (sig * amp * LagUD.kr(cueOn, 0.02, 0.05)) ! 2);
 	}).add;
 
 	// ---- input mixer --------------------------------------------------------
@@ -637,6 +695,7 @@ if (~hasLink) {
 	~makeTrackSynth = { |t, i|
 		var args = [
 			\outBus, ~busFor.value(t[\route]) + (i * 2), \revBus, ~revBus,
+			\recBus, ~recBus.index + (i * 3),
 			\cueBus, ~busC.index + (i * 2), \cueOn, t[\cueOn], \cueSend, t[\cueSend],
 			\seqBuf, ~seqBufs[i].bufnum, \seqOn, t[\seqOn],
 			\phaseBus, ~phaseBus, \idx, i, \testBus, ~testBus,
@@ -654,8 +713,7 @@ if (~hasLink) {
 		];
 		4.do { |li|
 			var b = if (li < ~maxLayers, { t[\bufs][li].bufnum }, { ~scratch.bufnum });
-			args = args ++ [~layerKeys[li], b, ~gainKeys[li], 0,
-				("w" ++ li).asSymbol, 0];
+			args = args ++ [~layerKeys[li], b, ~gainKeys[li], 0];
 		};
 		t[\synth] = Synth(\ld_track, args, ~grpTracks, \addToTail);
 		t[\meterSynth] = Synth(\ld_meter,
@@ -667,7 +725,7 @@ if (~hasLink) {
 			~grpTracks, \addToTail);
 		// the args above carry the static setup; live state is pushed back on top
 		~maxLayers.do { |k| t[\synth].set(~gainKeys[k], t[\gains][k]) };
-		t[\synth].set(\playing, t[\playing], \recOn, 0);
+		t[\synth].set(\playing, t[\playing], \recOn, 0, \recL0, 0);
 	};
 
 	// ---- rhythm engine: kits and patterns ----------------------------------
@@ -726,6 +784,8 @@ if (~hasLink) {
 		s.sync;
 
 	~phaseBus  = Bus.audio(s, 1);
+	// per-track internal record bus: [sig, wpos, tph] feeding \ld_rec
+	~recBus    = Bus.audio(s, ~maxTracks * 3);
 	// three stereo output buses, each wide enough for every track's pair
 	~busA      = Bus.audio(s, ~maxTracks * 2);
 	~busB      = Bus.audio(s, ~maxTracks * 2);
@@ -803,7 +863,8 @@ if (~hasLink) {
 		(
 			idx: i,
 			bufs: [], gains: Array.fill(~maxLayers, 0),
-			layerCount: 0, undone: 0, passes: 0,
+			layerCount: 0, undone: 0, passes: 0, needPasses: 1,
+			autoDubTake: false, recSynth: nil, nextRecSynth: nil,
 			state: 0, playing: 0, recOn: 0,
 			vol: 0.8, pan: 0.0, muted: 0, input: 0, gain: 1.0, recGain: 1.0,
 			gateOn: 1, gateThr: 0.02, autoArm: 0, autoThresh: 0.02, oneshot: 0,
@@ -865,31 +926,90 @@ if (~hasLink) {
 
 // ------------------------------------------------------------- actions ------
 (
-	~startRec = { |t|
+	~stopRecSynths = { |t, fade = false|
+		if (t[\nextRecSynth].notNil) {
+			t[\nextRecSynth].set(\recOn, 0, \killNow, 1);
+			t[\nextRecSynth] = nil;
+		};
+		if (t[\recSynth].notNil) {
+			if (fade) {
+				// 3 ms punch-out ramp into the buffer, then self-free 20 ms later
+				t[\recSynth].set(\recOn, 0, \freeNow, 1);
+			} {
+				t[\recSynth].set(\recOn, 0, \killNow, 1);
+			};
+			t[\recSynth] = nil;
+		};
+	};
+
+	~startRec = { |t, fromWrap = false, isAutoDub = false|
 		~state[\gridOn] = 1; ~applyRate.value;     // a take needs the clock
 		if (t[\layerCount] < ~maxLayers) {
 			var li  = t[\layerCount];
 			var buf = t[\bufs][li];
-			if (t[\layerCount] == 0) {
+			var ph  = ((~state[\phase] ? 0) * t[\loopRatio]) % 1;
+			var needPasses = 1;
+			var stopAtWrap = 0;
+			var rec0, rec1, nextBuf;
+			~stopRecSynths.value(t, false);
+			if (li == 0) {
 				// first layer freezes this track's sample length => varispeed later
 				t[\contentLen] = ~contentLenNow.value(t);
 				t[\synth].set(\contentLen, t[\contentLen]);
+				stopAtWrap = (~state[\autoClose] ? 1);
+				// Pre-roll guard: tapping REC in the final quarter of the loop
+				// (anticipating beat 1) must not auto-close 0.2 s later and split
+				// the take across two buffers.
+				if (fromWrap.not && { (~state[\quantizeStart] ? 0) == 0 } && { ph > 0.75 }) {
+					needPasses = 2;
+				};
 			};
-			buf.zero;
 			// Erasing this layer invalidates every redo above it: the content those
 			// layers pointed at is gone, so a later REDO would restore a gain for an
 			// empty buffer and the track would look like it lost a take. The undo
 			// stack is a property of the buffers, not a counter.
 			t[\undone] = 0;
-			// The layer being recorded must NOT be played back: wpos is derived from
-			// rpos, so the play head reads the very sample the write head is writing
-			// in the same block, and UGen order inside a synth is unspecified --
-			// that overlap is a one-sample mismatch, audible as HF distortion at the
-			// seam. Silent while it records (you hear the committed layers plus your
-			// dry monitor), gain restored by ~commit at the boundary.
 			t[\gains][li] = 0;
-			t[\synth].set(~gainKeys[li], 0);
-			t[\synth].set(("w" ++ li).asSymbol, 1, \recOn, 1, \playing, 1);
+			t[\needPasses] = needPasses;
+			t[\autoDubTake] = isAutoDub;
+			t[\synth].set(
+				~gainKeys[li], 0,
+				\recOn, 1, \playing, 1,
+				\recL0, if (li == 0, 1, 0),
+				\needPasses, needPasses,
+				\t_recTrig, 1
+			);
+			// Spawn \ld_rec atomically via buf.zero's completionMessage so /b_zero
+			// on the NRT thread can never race and erase the start of the take.
+			rec0 = Synth.basicNew(\ld_rec, s);
+			buf.zero(rec0.newMsg(t[\synth], [
+				\recBus, ~recBus.index + (t[\idx] * 3),
+				\buf, buf.bufnum,
+				\contentLen, t[\contentLen],
+				\recOn, 1,
+				\stopAtWrap, stopAtWrap,
+				\waitWraps, 0,
+				\needPasses, needPasses
+			], \addAfter));
+			t[\recSynth] = rec0;
+			// Seamless autoDub handoff: pre-zero layer 1 and arm a second \ld_rec
+			// that starts writing on the exact wrap sample rec0 stops, eliminating
+			// both the 256-sample gap at the start of layer 1 and any read/write race.
+			if ((li == 0) && { stopAtWrap == 1 } && { (~state[\autoDub] ? 1) == 1 }
+				&& { (li + 1) < ~maxLayers }) {
+				nextBuf = t[\bufs][li + 1];
+				rec1 = Synth.basicNew(\ld_rec, s);
+				nextBuf.zero(rec1.newMsg(t[\synth], [
+					\recBus, ~recBus.index + (t[\idx] * 3),
+					\buf, nextBuf.bufnum,
+					\contentLen, t[\contentLen],
+					\recOn, 1,
+					\stopAtWrap, 0,
+					\waitWraps, needPasses,
+					\needPasses, 999999
+				], \addAfter));
+				t[\nextRecSynth] = rec1;
+			};
 			t[\recOn] = 1; t[\playing] = 1; t[\state] = 1;
 			t[\passes] = 0;
 			t[\recPeak] = 0;
@@ -898,49 +1018,56 @@ if (~hasLink) {
 
 	~commit = { |t, atBoundary = false|
 		var li = t[\layerCount];
+		var dropSilentAuto = false;
 		if (t[\recOn] == 1) {
 			if (atBoundary) {
-				// the loop joins itself here: no fade, the seam window handles it
-				t[\synth].set(("w" ++ li).asSymbol, 0, \recOn, 0);
+				// rec0 already stopped and freed itself on the exact wrap sample
+				t[\recSynth] = nil;
+				t[\synth].set(\recOn, 0, \recL0, 0);
 			} {
-				// punch-out mid-pass: fade the input into the buffer first, or the
-				// take ends in a step from full level to zero (an audible click)
-				t[\synth].set(\recOn, 0);
-				{ t[\synth].set(("w" ++ li).asSymbol, 0) }.defer(0.03);
+				// punch-out mid-pass: 3 ms fade-out into buffer, then self-free
+				~stopRecSynths.value(t, true);
+				t[\synth].set(\recOn, 0, \recL0, 0);
 			};
 			t[\recOn] = 0;
-			t[\layerCount] = li + 1;
-			t[\undone] = 0;
-			t[\gains][li] = 1;
-			t[\synth].set(~gainKeys[li], 1);
-			if ((~state[\overdubMode] ? 0) == 1) {
-				// REPLACE: this take covers the ones below it. The content stays in
-				// the buffers, so undo puts it back.
-				~maxLayers.do { |k|
-					if (k < li) { t[\gains][k] = 0; t[\synth].set(~gainKeys[k], 0) };
-				};
-				// ... but a take that recorded NOTHING must not silence the track.
-				// That is the reported "sounds get deleted when a silent part
-				// overdubs": nothing was gained and everything below was muted.
-				// ~recPeak is the running max of what the write head was fed (the
-				// track synth publishes it into ~peakBuf, polled at 20 Hz), so this
-				// is a number already in hand -- no buffer read, no verdict taken
-				// from a window that might miss the take.
-				if ((li > 0) && ((t[\recPeak] ? 0) < 0.01)) {
-					t[\layerCount] = li;
-					t[\gains][li] = 0;
-					t[\synth].set(~gainKeys[li], 0);
+			// If autoDub automatically rolled into an extra layer and the user
+			// tapped stop slightly late without playing anything into it, drop
+			// that silent extra layer instead of wasting a layer slot.
+			dropSilentAuto = atBoundary.not && { t[\autoDubTake] == true }
+				&& { li > 0 } && { (t[\recPeak] ? 0) < 0.005 };
+			t[\autoDubTake] = false;
+			if (dropSilentAuto) {
+				t[\gains][li] = 0;
+				t[\synth].set(~gainKeys[li], 0);
+				t[\state] = 2;
+			} {
+				t[\layerCount] = li + 1;
+				t[\undone] = 0;
+				t[\gains][li] = 1;
+				t[\synth].set(~gainKeys[li], 1);
+				if ((~state[\overdubMode] ? 0) == 1) {
+					// REPLACE: this take covers the ones below it. The content stays in
+					// the buffers, so undo puts it back.
 					~maxLayers.do { |k|
-						if (k < li) {
-							t[\gains][k] = 1;
-							t[\synth].set(~gainKeys[k], 1);
-						};
+						if (k < li) { t[\gains][k] = 0; t[\synth].set(~gainKeys[k], 0) };
 					};
-					t[\state] = if (li > 0, 2, 0);
-					~bridge.sendMsg('/ldsilent', t[\idx] ? 0, li);
+					// ... but a take that recorded NOTHING must not silence the track.
+					if ((li > 0) && { (t[\recPeak] ? 0) < 0.01 }) {
+						t[\layerCount] = li;
+						t[\gains][li] = 0;
+						t[\synth].set(~gainKeys[li], 0);
+						~maxLayers.do { |k|
+							if (k < li) {
+								t[\gains][k] = 1;
+								t[\synth].set(~gainKeys[k], 1);
+							};
+						};
+						t[\state] = if (li > 0, 2, 0);
+						~bridge.sendMsg('/ldsilent', t[\idx] ? 0, li);
+					};
 				};
+				t[\state] = 2;
 			};
-			t[\state] = 2;
 		};
 	};
 
@@ -1004,11 +1131,12 @@ if (~hasLink) {
 	};
 
 	~clearTrack = { |t|
-		~maxLayers.do { |li| t[\synth].set(("w" ++ li).asSymbol, 0) };
-		t[\synth].set(\recOn, 0, \playing, 0);
+		~stopRecSynths.value(t, false);
+		t[\synth].set(\recOn, 0, \recL0, 0, \playing, 0);
 		~maxLayers.do { |li| t[\synth].set(~gainKeys[li], 0) };
 		t[\gains] = Array.fill(~maxLayers, 0);
 		t[\layerCount] = 0; t[\undone] = 0; t[\passes] = 0;
+		t[\autoDubTake] = false;
 		t[\recOn] = 0; t[\playing] = 0; t[\state] = 0;
 		t[\contentLen] = ~contentLenNow.value(t);
 		t[\synth].set(\contentLen, t[\contentLen]);
@@ -1106,14 +1234,11 @@ if (~hasLink) {
 			srcs.do { |t|
 				if (t !== dst) {
 					if (t[\synth].notNil) {
-						// the write gates are not enough: the layers were still
-						// audible at their old gains, so the merged-away track kept
-						// playing its recording after the merge
+						~stopRecSynths.value(t, false);
 						~maxLayers.do { |li|
-							t[\synth].set(("w" ++ li).asSymbol, 0,
-								~gainKeys[li], 0);
+							t[\synth].set(~gainKeys[li], 0);
 						};
-						t[\synth].set(\playing, 0, \recOn, 0);
+						t[\synth].set(\playing, 0, \recOn, 0, \recL0, 0);
 					};
 					t[\gains] = Array.fill(~maxLayers, 0);
 					t[\layerCount] = 0; t[\undone] = 0;
@@ -1259,22 +1384,31 @@ if (~hasLink) {
 		};
 	};
 
-	// TRACK SWAP (#3): three copies through the spare buffer, state included.
+	// TRACK SWAP (#3): three copies per layer through the spare buffer, state included.
 	~swapTracks = { |ia, ib|
 		var a = ~tracks[ia], b = ~tracks[ib];
 		if ((a.notNil) && (b.notNil) && (a !== b)) {
-			var n = a[\contentLen].min(b[\contentLen]).asInteger;
+			var n = a[\contentLen].max(b[\contentLen]).asInteger.min(~maxFrames);
 			var la = a[\layerCount], lb = b[\layerCount];
 			var ga = a[\gains].copy, gb = b[\gains].copy;
 			var pa = a[\playing], pb = b[\playing];
+			var ca = a[\contentLen], cb = b[\contentLen];
+			~stopRecSynths.value(a, false);
+			~stopRecSynths.value(b, false);
 			a[\synth].free; a[\meterSynth].free; a[\autoSynth].free;
 			b[\synth].free; b[\meterSynth].free; b[\autoSynth].free;
-			a[\bufs].do { |buf, li| buf.copyData(~scratch, 0, 0, n) };      // a -> spare
-			b[\bufs].do { |buf, li| buf.copyData(a[\bufs][li], 0, 0, n) };  // b -> a
-			a[\bufs].do { |buf, li| ~scratch.copyData(buf, 0, 0, n) };      // spare -> b
+			~maxLayers.do { |li|
+				a[\bufs][li].copyData(~scratch, 0, 0, n);          // a[li] -> spare
+				b[\bufs][li].copyData(a[\bufs][li], 0, 0, n);      // b[li] -> a[li]
+				~scratch.copyData(b[\bufs][li], 0, 0, n);          // spare -> b[li]
+			};
 			a[\layerCount] = lb; b[\layerCount] = la;
 			a[\gains] = gb; b[\gains] = ga;
 			a[\playing] = pb; b[\playing] = pa;
+			a[\contentLen] = cb; b[\contentLen] = ca;
+			a[\recOn] = 0; b[\recOn] = 0;
+			a[\state] = if (lb > 0, if (pb == 1, 2, 3), 0);
+			b[\state] = if (la > 0, if (pa == 1, 2, 3), 0);
 			a[\undone] = 0; b[\undone] = 0;
 			~makeTrackSynth.value(a, ia);
 			~makeTrackSynth.value(b, ib);
@@ -1647,8 +1781,9 @@ if (~hasLink) {
 				// the right side is the lazy form (AGENTS invariant 28).
 				if (src.notNil && { src.numFrames > 0 }) {
 					n = src.numFrames.min(t[\contentLen]).asInteger;
+					~stopRecSynths.value(t, false);
 					~maxLayers.do { |li|
-						t[\synth].set(("w" ++ li).asSymbol, 0, ~gainKeys[li], 0);
+						t[\synth].set(~gainKeys[li], 0);
 						t[\gains][li] = 0;
 					};
 					t[\bufs][0].zero;
@@ -1656,7 +1791,7 @@ if (~hasLink) {
 					t[\gains][0] = 1;
 					t[\layerCount] = 1; t[\undone] = 0;
 					t[\recOn] = 0; t[\playing] = 1; t[\state] = 2;
-					t[\synth].set(~gainKeys[0], 1, \playing, 1, \recOn, 0);
+					t[\synth].set(~gainKeys[0], 1, \playing, 1, \recOn, 0, \recL0, 0);
 				};
 				if (src.notNil) { src.free };
 				~bridge.sendMsg('/ldimport', idx, name.asString, n);
@@ -2073,17 +2208,15 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		};
 	}, '/b_setn');
 
-	// `exactBeats` is the transport's own beat count (0 .. bars*beatsPerBar) as it
-	// was written into ~clockBuf. Everything below is arithmetic on it: the phase
-	// is `beats / beatsPerLoop` and the index is `beats % beatsPerLoop`. There is
-	// no counter to drift or double-step, which is what made a basic
+	// `exactBeats` is the transport's own beat count -- the same number from both
+	// sources below: the loop-relative beat index `beats.floor` (0 .. n-1).
+	// Everything else is arithmetic on it: the phase is `beats / beatsPerLoop`.
+	// There is no counter here to drift or double-step, which is what made a basic
 	// "count up by one, modulo four" display wrong at every loop point.
-	~fireBeat = { |beat, exactBeats|
+	~fireBeat = { |exactBeats|
 		var beatsPerLoop = (~state[\bars] * ~state[\beatsPerBar]).max(1);
-		var b;
+		var b = (exactBeats ? 0).asFloat % beatsPerLoop;
 		~beatCount = (~beatCount ? 0) + 1;   // diagnostics: is anything arriving?
-		b = if (exactBeats.notNil) { exactBeats.asFloat % beatsPerLoop }
-			{ ((~beatInLoop ? -1) + 1) % beatsPerLoop };
 		~beatInLoop = b.floor.asInteger;
 		~state[\phase] = b / beatsPerLoop;
 		~bridge.sendMsg('/ldbeat', ~beatInLoop);
@@ -2098,7 +2231,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 					var p = ~pending;
 					~countInLeft = nil; ~countInStarted = false; ~pending = nil;
 					~transport.set(\countIn, 0);
-					if (p.notNil) { ~startRec.value(p) };
+					if (p.notNil) { ~startRec.value(p, true, false) };
 				};
 			};
 		};
@@ -2109,7 +2242,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			// SendReply layout is [cmdName, nodeID, replyID, v1, ...]: the first
 			// value is msg[3], not msg[4] (AGENTS invariant 1). Reading msg[4] gave
 			// nil, so every beat looked like beat 0.
-			~fireBeat.value((msg[3] ? 0).asInteger);   // no float here: fallback
+			~fireBeat.value((msg[3] ? 0).asInteger);
 		};
 	}, '/ldbeat');
 
@@ -2132,18 +2265,34 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 		if (~pending.notNil && ~countInLeft.isNil) {
 			var p = ~pending;
 			~pending = nil;
-			~startRec.value(p);
+			~startRec.value(p, true, false);
 		} {
 			~tracks.do { |t|
 				if (t[\recOn] == 1) {
 					t[\passes] = t[\passes] + 1;
-					if ((t[\layerCount] == 0) && (t[\passes] >= 1)
-						&& (~state[\autoClose] == 1)) {
+					if ((t[\layerCount] == 0) && { t[\passes] >= (t[\needPasses] ? 1) }
+						&& { (~state[\autoClose] ? 1) == 1 }) {
 						~commit.value(t, true);
 						// hardware behaviour: the take closes and recording carries
 						// straight on as an overdub, so nothing is lost at the seam
-						if ((~state[\autoDub] == 1) && (t[\layerCount] < ~maxLayers)) {
-							~startRec.value(t);
+						if (((~state[\autoDub] ? 1) == 1) && { t[\layerCount] < ~maxLayers }) {
+							if (t[\nextRecSynth].notNil) {
+								// Promote the pre-armed seamless recorder already writing layer 1
+								t[\recSynth] = t[\nextRecSynth];
+								t[\nextRecSynth] = nil;
+								t[\gains][t[\layerCount]] = 0;
+								t[\synth].set(~gainKeys[t[\layerCount]], 0, \recOn, 1, \playing, 1);
+								t[\recOn] = 1; t[\playing] = 1; t[\state] = 1;
+								t[\passes] = 0; t[\recPeak] = 0;
+								t[\autoDubTake] = true;
+							} {
+								~startRec.value(t, true, true);
+							};
+						} {
+							if (t[\nextRecSynth].notNil) {
+								t[\nextRecSynth].set(\recOn, 0, \killNow, 1);
+								t[\nextRecSynth] = nil;
+							};
 						};
 					};
 				};
@@ -2182,6 +2331,7 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 	// count into a buffer, so the same /b_getn poll the meters use can carry the
 	// clock. Replies win when they exist; this only acts after a second of silence.
 	~pollBeats = nil;
+	~pollWraps = nil;          // the transport's own wrap count, frame 1
 	~clockPollBusy = false;
 	~clockPollSent = nil;      // explicit: the timeout guard compares against it
 	~clockWatch = Routine {
@@ -2205,13 +2355,13 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			if (~clockBuf.notNil && (~clockPollBusy != true)) {
 				~clockPollBusy = true;
 				~clockPollSent = Main.elapsedTime;
-				s.sendMsg('/b_getn', ~clockBuf.bufnum, 0, 1);
+				s.sendMsg('/b_getn', ~clockBuf.bufnum, 0, 2);   // beats, wraps
 			};
 		};
 	};   // started with the transport, not at file load
 
 	OSCdef(\ldClockData, { |msg|
-		var beats, settled;
+		var beats, wraps, settled, wrapped, moved;
 		// Any arithmetic error in this responder freezes the clock, so every
 		// value it compares is initialised before the routine starts (below).
 		if (~clockBuf.notNil && (msg[1] == ~clockBuf.bufnum) && (msg[2] == 0)) {
@@ -2223,16 +2373,24 @@ MIDIdef.cc(\ldCC, { |val, num, chan, src|
 			if (settled) {
 				~clockPollMode = true;
 				beats = (msg[4] ? 0).asFloat;
-				if (~pollBeats.notNil) {
-					if ((beats < ~pollBeats) && (beats < 0.5) && (~pollBeats > 0.5)) {
-						~fireWrap.value;
-					} {
-						if (beats.floor != ~pollBeats.floor) {
-							~fireBeat.value(nil, beats);
-						};
-					};
+				wraps = (msg[5] ? 0).asInteger;
+				wrapped = false;
+				// `&&`/`||` are NOT lazy in sclang (invariant 28): the nil test is a
+				// block, or both sides of the next expression get evaluated anyway
+				if (~pollBeats.notNil && { ~pollWraps.notNil }) {
+					wrapped = wraps != ~pollWraps;
+					moved = wrapped || (beats.floor != ~pollBeats.floor);
+				} {
+					moved = true;      // first reply: publish where we are
 				};
+				// The wrap first (it resets ~beatInLoop and closes takes), THEN the
+				// beat: the pass boundary is itself a beat, and skipping it left the
+				// readout stuck on the last beat of the loop -- 1·4, held for a whole
+				// beat, then 1·2, with 1·1 never shown.
+				if (wrapped) { ~fireWrap.value };
+				if (moved) { ~fireBeat.value(beats) };
 				~pollBeats = beats;
+				~pollWraps = wraps;
 			};
 		};
 	}, '/b_setn');

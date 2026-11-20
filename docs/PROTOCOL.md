@@ -31,7 +31,7 @@ two-line test before wiring it into the UI.
 | message | values | notes |
 | --- | --- | --- |
 | `/ldstate` | 28 global + 32 per track, see below | 20 Hz |
-| `/ldbeat` | `beat in bar` | on every beat |
+| `/ldbeat` | `beat` | on every beat: the loop-relative index `0 .. bars×beatsPerBar-1` |
 | `/ldwrap` | — | loop boundary |
 
 Four replies are **internal to sclang** and deliberately *not* forwarded to the
@@ -45,6 +45,17 @@ SynthDefs): `\ld_meter` writes `BufWr.kr` into a 64-frame buffer, sclang sends
 `/b_getn` at 10 Hz, and one persistent `/b_setn` responder stores the values that
 `/ldstate` then carries. Slots 0–59 are per track (4 each: L, R, sum); slots
 60–63 are master L/R and hardware input L/R.
+
+**The clock is polled the same way, and polled values win.** `\ld_transport`
+keeps an 8-frame buffer: frame 0 is the beat count as a Float, frame 1 how often
+the loop has wrapped (`PulseCount.kr`). sclang polls `0, 2` at 60 Hz and reads the
+wrap from the **counter**, not from "did I catch beats < 0.5" — a window like that
+is lost with one dropped reply, and a lost wrap is a take that never closes.
+`/ldbeat` and `/ldwrap` still arrive through `SendReply` where the server delivers
+them, but any session that goes 3 s without a reply latches onto the poll and
+stays there (the choice is sticky, so a stray reply cannot switch it back and
+lurch the clock). Both sources send the same number — the transport's own beat
+count — so the receiver keeps no counter of its own.
 | `/ldstats` | `cpu, sr, blockSize, hwBuffer, latency, running, vst, vstCount` | on request |
 | `/ldvst` | `csv` | `slot\|name\|bypass\|window` per slot, tracks split by `;` |
 | `/ldvstcatalog` | `csv` | plugin keys separated by `;` |
@@ -84,9 +95,11 @@ Everything appended since 0.1.0 sits at the end, so a reader that ignores the
 tail still works.
 
 `inL/inR` are the hardware input peaks, `masterL/masterR` the master output,
-`phase` the loop position 0..1. `phase` is counted from the beat replies and
-reset on `/ldwrap`, so it covers the whole loop; the UI dead-reckons between
-20 Hz frames for a smooth playhead.
+`phase` the loop position 0..1. `phase` is arithmetic on the transport's beat
+count (`(beats mod beatsPerLoop) / beatsPerLoop`), so it covers the whole loop
+without a counter that could drift, and the loop boundary is a position like any
+other: `phase` reaches `0` on the first beat of the new pass. It steps once per
+beat; the UI renders the bar·beat readout and the play head from it directly.
 
 Per track (32), repeated for every track:
 

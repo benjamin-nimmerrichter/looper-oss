@@ -36,7 +36,7 @@ Wire messages are described in `docs/PROTOCOL.md`; `set` means
 | control | type | range / default | what it does | wire | engine |
 | --- | --- | --- | --- | --- | --- |
 | track number + `2L · 1 undo · HOT` | read-out | — | Layers committed, how many are undoable, `HOT` when the layer sum is near clipping. | — | state `layers`, `undoDepth`, `layerPeak` |
-| **the big pad** (RC-505 *track button*) | pad | — | Context-sensitive: **EMPTY** → record layer 1 · **RECORDING** → close the take · **PLAYING** → record another layer (overdub) · **STOPPED** → resume playback (does *not* start a new take). Colour: grey empty, red recording, green playing, amber overdub, dim stopped. | `act press` | `~press` |
+| **the big pad** (RC-505 *track button*) | pad | — | Context-sensitive: **EMPTY** → record layer 1 · **RECORDING / OVERDUB** → close the take · **PLAYING** → stop · **STOPPED** → resume playback (does *not* start a new take). Colour: grey empty, red recording (layer 1), amber overdub (layers 2–4), green playing, dim stopped. | `act press` | `~press` |
 | **STOP** | button | — | Commits a take in progress, then sets `playing` 0. Layer content is kept. | `act stop` | `~stopTrack` → state 3 |
 | **FX** | button | — | Opens the per-track FX drawer (§3) for this track. | — | — |
 | volume fader | fader | 0–1.4, default 0.8 | Track output level, smoothed 10 ms. | `set t{i}.vol` | `\ld_track` `vol` |

@@ -6,7 +6,7 @@
 (
 	// ---- the insert slots inside the track chain ----------------------------
 	~vstPost = { |src, bypasses|
-		var out = src;
+		var out = if (src.isArray, { src }, { [src, src] });
 		~vstIds.do { |id, i|
 			out = VSTPlugin.ar(out, 2, id: id, bypass: bypasses[i]);
 		};
@@ -234,7 +234,7 @@
 			var lines = List.new;
 			File.mkdir(dir);
 			~tracks.do { |t, i|
-				3.do { |sl|
+				~vstIds.size.do { |sl|
 					var key = ~vstKey.value(t, sl);
 					lines.add("%\t%\t%".format(i, sl, key));
 					if (key.size > 0) {

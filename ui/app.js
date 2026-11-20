@@ -66,6 +66,9 @@ let SEQ = [];       // per-track step-sequence patterns (eight values 0..1)   //
 // (It used to add elapsed time itself, so it kept moving even with the engine off.)
 let playPos = 0;
 let settingsTab = "audio";
+let fxTab = "input";
+let midiLearnScope = "t0";
+let importTrack = 0;
 
 const ui = { transport: {}, tracks: [], master: {} };
 
@@ -672,317 +675,373 @@ function buildMaster() {
 }
 
 /* -------------------------------------------------------------- fx drawer -- */
+const FX_TABS = [
+  { id: "input", label: "input & out" },
+  { id: "loop", label: "loop & layers" },
+  { id: "fx", label: "filter & fx" },
+  { id: "plugins", label: "plugins" },
+];
+
 function openFx(i) {
   selected = i;
   const drawer = document.getElementById("fx");
+  const colours = CFG.colours || ["#4a9de0"];
+  const trackColor = colours[i % colours.length];
+  drawer.style.setProperty("--c", trackColor);
   drawer.querySelector("h2").textContent = `track ${i + 1}`;
+
+  // Track switcher pills in header so you can move between tracks without closing
+  const pills = drawer.querySelector(".track-pills");
+  if (pills) {
+    pills.replaceChildren();
+    const nTracks = S ? S.tracks.length : (CFG.tracks || 5);
+    for (let k = 0; k < nTracks; k++) {
+      const p = el("button", `track-pill${k === i ? " on" : ""}`, `T${k + 1}`);
+      p.type = "button";
+      p.style.setProperty("--tc", colours[k % colours.length]);
+      p.addEventListener("pointerup", () => openFx(k));
+      pills.append(p);
+    }
+  }
+
+  // Signal-flow tabs: Input & Out | Loop & Layers | Filter & FX | Plugins
+  const tabs = drawer.querySelector(".tabs");
+  if (tabs) {
+    tabs.replaceChildren();
+    FX_TABS.forEach((tab) => {
+      const b = Button({ label: tab.label, cls: `tiny${tab.id === fxTab ? " on" : ""}` });
+      b.dataset.tab = tab.id;
+      b.addEventListener("pointerup", () => {
+        fxTab = tab.id;
+        openFx(i);
+      });
+      tabs.append(b);
+    });
+  }
+
   const body = drawer.querySelector(".body");
   body.replaceChildren();
+  body.classList.remove("single");
   const t = S ? S.tracks[i] : null;
 
-  const card = (heading) => {
+  const makeCard = (parent, heading) => {
     const c = el("div", "fxcard");
     const h = el("div", "head");
-    const cap = el("div", "caption", heading);
-    h.append(cap);
-    c.append(h);
-    body.append(c);
-    return [c, h];
+    h.append(el("div", "caption", heading));
+    const acts = el("div", "head-acts");
+    h.append(acts);
+    const inner = el("div", "card-body");
+    c.append(h, inner);
+    parent.append(c);
+    return [inner, acts];
   };
   const knobs = (parent) => {
     const k = el("div", "knobs");
     parent.append(k);
     return k;
   };
-  const toggle = (head, on, label, path) => {
-    const b = Button({ label, toggle: true, cls: "tiny" });
+  const toggle = (head, on, label, path, onOffLabels = false) => {
+    const b = Button({ label: onOffLabels ? (on ? "on" : "off") : label, toggle: true, cls: "tiny" });
     if (on) b.classList.add("on");
-    b.addEventListener("pointerup", () => set(path, b.classList.contains("on") ? 1 : 0));
+    b.addEventListener("pointerup", () => {
+      const v = b.classList.contains("on") ? 1 : 0;
+      if (onOffLabels) b.textContent = v ? "on" : "off";
+      set(path, v);
+    });
     head.append(b);
     return b;
   };
-  const knob = (parent, cfg) => {
-    const k = Knob({ ...cfg, value: t ? t[cfg.key] : cfg.value });
-    knobs(parent).append(k);
-    return k;
-  };
 
-  // ---- layers ----
-  // First, because it is about the material rather than an effect: mute a layer,
-  // flatten them into one, or play the loop once.
-  {
-    const [c, h] = card("layers");
-    toggle(h, t && t.oneshot, "one-shot", `t${i}.oneshot`);
-    const flatten = confirmButton("flatten", () => act("mergeLayers", i), "tiny");
-    h.append(flatten);
-    // 2 x 2, not four in a row: at the touch floor four buttons do not fit a
-    // card this wide, and wrapping to 3 + 1 looked like a mistake.
-    const row = el("div", "layerbank");
-    const n = t ? t.layers : 0;
-    for (let k = 0; k < 4; k++) {
-      const b = Button({ label: `L${k + 1}`, cls: "tiny", toggle: true });
-      if (k >= n) b.classList.add("off");
-      b.addEventListener("pointerup", () => set(`t${i}.lmute`, k));
-      row.append(b);
-    }
-    c.append(row);
-    c.append(el("div", "note",
-      "mute one layer · flatten joins them · one-shot plays one pass"));
-  }
+  if (fxTab === "input") {
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
 
-  // ---- input FX ----
-  {
-    const [c, h] = card("input FX");
-    if (Number(CFG.loop?.monitor ?? 0) === 0) {
-      c.append(el("div", "note", "software monitor off — you hear your interface directly"));
-    }
-    const sources = inputOptions();
-    const pickSource = (v) => set(`t${i}.input`, v);
-    c.append(sources.length <= 4
-      ? Segmented({ options: sources, value: t ? t.input : 0, onPick: pickSource })
-      : Select({ options: sources, value: t ? t.input : 0, onPick: pickSource }));
-    const k = knobs(c);
-    k.append(Knob({
-      label: "gain", min: 0, max: 2, value: t ? t.gain : 1,
-      format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.gain`, v),
-    }));
-    k.append(Knob({
-      label: "comp thr", min: 0.05, max: 0.95, value: t ? t.compThr : 0.6,
-      format: (v) => `${Math.round(v * 100)}%`,
-      onInput: (v) => set(`t${i}.compThr`, v),
-    }));
-    k.append(Knob({
-      label: "comp", min: 0.05, max: 1, value: t ? t.compRatio : 0.4,
-      format: (v) => `${(1 / v).toFixed(1)}:1`,
-      onInput: (v) => set(`t${i}.compRatio`, v),
-    }));
-    toggle(h, t && t.compOn, "compressor", `t${i}.compOn`);
-    k.append(Knob({
-      label: "rec level", min: 0, max: 1.5, value: t ? t.recGain : 1,
-      format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.recGain`, v),
-    }));
-  }
-
-  // ---- output ----
-  {
-    const [c, h] = card("output");
-    c.append(Segmented({
-      options: [{ label: "A", value: 0 }, { label: "B", value: 1 }, { label: "C", value: 2 }],
-      value: t ? t.route : 0,
-      onPick: (v) => set(`t${i}.route`, v),
-    }));
-    toggle(h, t && t.cueOn, "cue", `t${i}.cueOn`);
-    knobs(c).append(Knob({
-      label: "cue send", min: 0, max: 1.2, value: t ? t.cueSend : 0.6,
-      format: (v) => `${Math.round(v * 100)}%`,
-      onInput: (v) => set(`t${i}.cueSend`, v),
-    }));
-  }
-
-  // ---- gate ----
-  {
-    const [c, h] = card("noise gate");
-    toggle(h, t && t.gateOn, t && t.gateOn ? "on" : "off", `t${i}.gateOn`);
-    knob(c, {
-      key: "gateThr", label: "threshold", min: 0.002, max: 0.4, value: 0.02, curve: 2,
-      format: (v) => `${(20 * Math.log10(v)).toFixed(0)} dB`,
-      onInput: (v) => set(`t${i}.gateThr`, v),
-    });
-    // Auto Rec: the first sound above the threshold starts a take, so a pedal
-    // player never has to reach for the pad. It disarms itself when it fires.
-    toggle(h, Number(getPath(CFG, `t${i}.autoArm`) ?? 0) === 1,
-      "auto rec", `t${i}.autoArm`);
-    c.append(el("div", "note",
-      "auto rec: the first sound above the threshold starts the take, then disarms"));
-  }
-
-  // ---- filter ----
-  {
-    const [c, h] = card("filter");
-    const k = knobs(c);
-    k.append(Knob({
-      label: "high pass", min: 20, max: 2000, value: t ? t.hp : 40, curve: 2.4,
-      format: (v) => `${Math.round(v)} Hz`, onInput: (v) => set(`t${i}.hp`, Math.round(v)),
-    }));
-    k.append(Knob({
-      label: "low pass", min: 400, max: 18000, value: t ? t.lp : 16000, curve: 2.4,
-      format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`),
-      onInput: (v) => set(`t${i}.lp`, Math.round(v)),
-    }));
-    // step sequence: eight eighth-notes stepping the low pass upward. Tap a cell
-    // to cycle it 0 -> 0.25 -> 0.5 -> 0.75 -> 1; the bar is its height.
-    toggle(h, t && t.seqOn, "seq", `t${i}.seqOn`);
-    // The squares are a step sequence, not decoration: eight eighth-notes, each
-    // cell's height is how far it pushes the low pass up on that step.
-    c.append(el("div", "note",
-      "step: eight eighth-note steps that push the low pass up · tap a cell to "
-      + "cycle it · seq turns it on"));
-    const seqRow = el("div", "steprow");
-    const steps = SEQ[i] || (SEQ[i] = [0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25]);
-    for (let st = 0; st < 8; st++) {
-      const cell = el("button", "stepcell");
-      cell.type = "button";
-      cell.style.setProperty("--h", String(steps[st]));
-      if (steps[st] > 0) cell.classList.add("on");
-      cell.addEventListener("pointerup", () => {
-        steps[st] = steps[st] >= 1 ? 0 : Math.round((steps[st] + 0.25) * 100) / 100;
-        cell.style.setProperty("--h", String(steps[st]));
-        cell.classList.toggle("on", steps[st] > 0);
-        svc("seq", [i, steps.join(",")]);
-      });
-      seqRow.append(cell);
-    }
-    c.append(seqRow);
-  }
-
-  // ---- loop ----
-  {
-    const [c] = card("loop");
-    c.append(Segmented({
-      options: RATIOS, value: t ? t.loopRatio : 1,
-      onPick: (v) => set(`t${i}.loopRatio`, v),
-    }));
-    // Speed is varispeed: 1 is grid-locked, anything else free-runs the track
-    // at its own rate, so it re-pitches like the hardware's SPEED knob.
-    c.append(Segmented({
-      options: SPEEDS, value: t ? t.speed : 1,
-      onPick: (v) => set(`t${i}.speed`, v),
-    }));
-    // MARK BACK drops straight to a bookmarked layer count instead of stepping
-    // down one layer at a time; MARK sets the bookmark where you are now.
-    const markRow = el("div", "row2");
-    const mark = Button({ label: "mark", cls: "tiny" });
-    mark.addEventListener("pointerup", () => {
-      act("mark", i);
-      toast(`mark set at ${t ? t.layers : 0} layers`);
-    });
-    const back = Button({ label: "mark back", cls: "tiny" });
-    back.addEventListener("pointerup", () => {
-      act("markBack", i);
-      toast("back to the mark");
-    });
-    markRow.append(mark, back);
-    c.append(markRow);
-    const row = el("div", "row2");
-    const rev = Button({ label: "reverse", toggle: true, cls: "tiny" });
-    if (t && t.reverse) rev.classList.add("on");
-    rev.addEventListener("pointerup", () =>
-      set(`t${i}.reverse`, rev.classList.contains("on") ? 1 : 0));
-    const fadeReset = Button({ label: "fades 0", cls: "tiny" });
-    fadeReset.addEventListener("pointerup", () => {
-      set(`t${i}.fadeIn`, 0);
-      set(`t${i}.fadeOut`, 0);
-    });
-    row.append(rev, fadeReset);
-    c.append(row);
-    const k = knobs(c);
-    k.append(Knob({
-      label: "speed", min: 0.25, max: 4, value: t ? t.speed : 1, curve: 2,
-      format: (v) => `${Number(v).toFixed(2)}×`,
-      onInput: (v) => set(`t${i}.speed`, v),
-    }));
-    k.append(Knob({
-      label: "fade in", min: 0, max: 5, value: t ? t.fadeIn : 0, curve: 2,
-      format: (v) => `${v.toFixed(2)} s`, onInput: (v) => set(`t${i}.fadeIn`, v),
-    }));
-    k.append(Knob({
-      label: "fade out", min: 0, max: 5, value: t ? t.fadeOut : 0, curve: 2,
-      format: (v) => `${v.toFixed(2)} s`, onInput: (v) => set(`t${i}.fadeOut`, v),
-    }));
-  }
-
-  // ---- delay ----
-  {
-    const [c, h] = card("delay");
-    toggle(h, t && t.delayOn, t && t.delayOn ? "on" : "off", `t${i}.delayOn`);
-    const k = knobs(c);
-    k.append(Knob({
-      label: "time", min: 0.06, max: 2, value: t ? t.delayBeats : 0.75, curve: 1.8,
-      format: (v) => `${v.toFixed(2)} bt`, onInput: (v) => set(`t${i}.delayBeats`, v),
-    }));
-    k.append(Knob({
-      label: "decay", min: 0.05, max: 8, value: t ? t.delayDecay : 0.4, curve: 2,
-      format: (v) => `${v.toFixed(2)} s`, onInput: (v) => set(`t${i}.delayDecay`, v),
-    }));
-    k.append(Knob({
-      label: "mix", min: 0, max: 1, value: t ? t.delayMix : 0.25,
-      format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.delayMix`, v),
-    }));
-  }
-
-  // ---- reverb send ----
-  {
-    const [c] = card("reverb");
-    knob(c, {
-      key: "revSend", label: "send", min: 0, max: 1, value: 0,
-      format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.revSend`, v),
-    });
-  }
-
-  // ---- plugin slots ----
-  {
-    const [c] = card("plugin slots");
-    const list = el("div", "slots");
-    const csv = (VST || "").split(";")[i] || "";
-    const slots = csv.split(",").map((x) => x.split("|"));
-    for (let s = 0; s < (STATS.slots || 4); s++) {
-      const row = el("div", "slot");
-      const name = slots[s] && slots[s][1] ? slots[s][1] : "";
-      const bypassed = slots[s] && String(slots[s][2]) === "1";
-      if (name) row.classList.add("filled");
-      const nm = el("span", "nm", name || `slot ${s + 1} — empty`);
-      const acts = el("div", "acts");
-      if (name) {
-        const ed = Button({ label: "ui", cls: "tiny" });
-        ed.addEventListener("pointerup", () => svc("vstEditor", [i, s]));
-        const by = Button({ label: "byp", cls: "tiny", toggle: true });
-        if (bypassed) by.classList.add("on");
-        // toggle latches; momentary is live only while the button is held
-        const momentary = String((slots[s] && slots[s][4]) || "0") === "1";
-        if (momentary) {
-          by.addEventListener("pointerdown", () => svc("vstBypass", [i, s, 0]));
-          by.addEventListener("pointerup", () => svc("vstBypass", [i, s, 1]));
-        } else {
-          by.addEventListener("pointerup", () =>
-            svc("vstBypass", [i, s, by.classList.contains("on") ? 1 : 0]));
-        }
-        const md = Button({ label: "mom", cls: "tiny", toggle: true });
-        if (momentary) md.classList.add("on");
-        md.addEventListener("pointerup", () =>
-          svc("vstMode", [i, s, md.classList.contains("on") ? 1 : 0]));
-        const rm = Button({ label: "x", cls: "tiny" });
-        rm.addEventListener("pointerup", () => svc("vstClose", [i, s]));
-        acts.append(ed, by, md, rm);
-      } else {
-        const pick = Select({
-          options: [{ label: "load…", value: "" }].concat(
-            (VSTCATALOG.length ? VSTCATALOG : ["(no plugins found)"]).map((n) => ({ label: n, value: n })),
-          ),
-          value: "",
-          onPick: (v) => {
-            if (v) svc("vstOpen", [i, s, v]);
-          },
-        });
-        acts.append(pick);
+    // ---- input source, gain & compressor ----
+    {
+      const [c, h] = makeCard(left, "input & compressor");
+      toggle(h, t && t.compOn, "compressor", `t${i}.compOn`);
+      if (Number(CFG.loop?.monitor ?? 0) === 0) {
+        c.append(el("div", "note", "software monitor off — you hear your interface directly"));
       }
-      row.append(nm, acts);
-      list.append(row);
+      const sources = inputOptions();
+      const pickSource = (v) => set(`t${i}.input`, v);
+      c.append(sources.length <= 4
+        ? Segmented({ options: sources, value: t ? t.input : 0, onPick: pickSource })
+        : Select({ options: sources, value: t ? t.input : 0, onPick: pickSource }));
+      const k = knobs(c);
+      k.append(Knob({
+        label: "gain", min: 0, max: 2, value: t ? t.gain : 1,
+        format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.gain`, v),
+      }));
+      k.append(Knob({
+        label: "rec level", min: 0, max: 1.5, value: t ? t.recGain : 1,
+        format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.recGain`, v),
+      }));
+      k.append(Knob({
+        label: "comp thr", min: 0.05, max: 0.95, value: t ? t.compThr : 0.6,
+        format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.compThr`, v),
+      }));
+      k.append(Knob({
+        label: "comp ratio", min: 0.05, max: 1, value: t ? t.compRatio : 0.4,
+        format: (v) => `${(1 / v).toFixed(1)}:1`, onInput: (v) => set(`t${i}.compRatio`, v),
+      }));
     }
-    c.append(list);
-    // Four FX banks: s1..s4 store the current slots, l1..l4 recall them.
-    const bankRow = el("div", "row2");
-    for (let b = 0; b < 4; b++) {
-      const sv = Button({ label: `s${b + 1}`, cls: "tiny" });
-      sv.addEventListener("pointerup", () => svc("vstBankSave", [i, b]));
-      const ld = Button({ label: `l${b + 1}`, cls: "tiny" });
-      ld.addEventListener("pointerup", () => svc("vstBankLoad", [i, b]));
-      bankRow.append(sv, ld);
+
+    // ---- noise gate & auto-rec ----
+    {
+      const [c, h] = makeCard(right, "noise gate & auto-rec");
+      toggle(h, t && t.gateOn, "on", `t${i}.gateOn`, true);
+      toggle(h, Number(getPath(CFG, `t${i}.autoArm`) ?? 0) === 1, "auto rec", `t${i}.autoArm`);
+      knobs(c).append(Knob({
+        label: "threshold", min: 0.002, max: 0.4, value: t ? t.gateThr : 0.02, curve: 2,
+        format: (v) => `${(20 * Math.log10(v)).toFixed(0)} dB`,
+        onInput: (v) => set(`t${i}.gateThr`, v),
+      }));
+      c.append(el("div", "note",
+        "auto rec arms this track so the first sound above the gate threshold starts recording"));
     }
-    c.append(bankRow, el("div", "caption", "banks: s = store, l = recall"));
-    if (STATS.vst !== 1) {
-      c.append(el("div", "caption", "VSTPlugin extension not loaded"));
-    } else if (!VSTCATALOG.length) {
-      c.append(el("div", "caption", `scanning ${STATS.vstCount} plugins…`));
+
+    // ---- output bus & cue ----
+    {
+      const [c, h] = makeCard(right, "output routing & cue");
+      toggle(h, t && t.cueOn, "cue", `t${i}.cueOn`);
+      c.append(Segmented({
+        options: [{ label: "bus A (main)", value: 0 }, { label: "bus B", value: 1 }, { label: "bus C", value: 2 }],
+        value: t ? t.route : 0,
+        onPick: (v) => set(`t${i}.route`, v),
+      }));
+      knobs(c).append(Knob({
+        label: "cue send", min: 0, max: 1.2, value: t ? t.cueSend : 0.6,
+        format: (v) => `${Math.round(v * 100)}%`,
+        onInput: (v) => set(`t${i}.cueSend`, v),
+      }));
+    }
+  }
+
+  if (fxTab === "loop") {
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
+
+    // ---- layers ----
+    {
+      const [c, h] = makeCard(left, "layers & playback");
+      toggle(h, t && t.oneshot, "one-shot", `t${i}.oneshot`);
+      const flatten = confirmButton("flatten", () => act("mergeLayers", i), "tiny");
+      h.append(flatten);
+      const row = el("div", "layerbank");
+      const n = t ? t.layers : 0;
+      for (let k = 0; k < 4; k++) {
+        const b = Button({ label: `layer ${k + 1}`, cls: "tiny", toggle: true });
+        if (k >= n) b.classList.add("off");
+        b.addEventListener("pointerup", () => set(`t${i}.lmute`, k));
+        row.append(b);
+      }
+      c.append(row);
+      c.append(el("div", "subhead", "mark back"));
+      const markRow = el("div", "row2");
+      const mark = Button({ label: "set mark", cls: "tiny" });
+      mark.addEventListener("pointerup", () => {
+        act("mark", i);
+        toast(`mark set at ${t ? t.layers : 0} layers`);
+      });
+      const back = Button({ label: "mark back", cls: "tiny" });
+      back.addEventListener("pointerup", () => {
+        act("markBack", i);
+        toast("back to the mark");
+      });
+      markRow.append(mark, back);
+      c.append(markRow);
+      c.append(el("div", "note",
+        "tap a layer to mute/unmute · flatten sums layers into L1 · mark back jumps to a bookmarked layer count"));
+    }
+
+    // ---- time, speed & fades ----
+    {
+      const [c, h] = makeCard(right, "time, varispeed & fades");
+      toggle(h, t && t.reverse, "reverse", `t${i}.reverse`);
+      const fadeReset = Button({ label: "fades 0", cls: "tiny" });
+      fadeReset.addEventListener("pointerup", () => {
+        set(`t${i}.fadeIn`, 0);
+        set(`t${i}.fadeOut`, 0);
+      });
+      h.append(fadeReset);
+      c.append(el("div", "subhead", "loop length subdivision"));
+      c.append(Segmented({
+        options: RATIOS, value: t ? t.loopRatio : 1,
+        onPick: (v) => set(`t${i}.loopRatio`, v),
+      }));
+      c.append(el("div", "subhead", "varispeed presets"));
+      c.append(Segmented({
+        options: SPEEDS, value: t ? t.speed : 1,
+        onPick: (v) => set(`t${i}.speed`, v),
+      }));
+      const k = knobs(c);
+      k.append(Knob({
+        label: "speed", min: 0.25, max: 4, value: t ? t.speed : 1, curve: 2,
+        format: (v) => `${Number(v).toFixed(2)}×`,
+        onInput: (v) => set(`t${i}.speed`, v),
+      }));
+      k.append(Knob({
+        label: "fade in", min: 0, max: 5, value: t ? t.fadeIn : 0, curve: 2,
+        format: (v) => `${v.toFixed(2)} s`, onInput: (v) => set(`t${i}.fadeIn`, v),
+      }));
+      k.append(Knob({
+        label: "fade out", min: 0, max: 5, value: t ? t.fadeOut : 0, curve: 2,
+        format: (v) => `${v.toFixed(2)} s`, onInput: (v) => set(`t${i}.fadeOut`, v),
+      }));
+    }
+  }
+
+  if (fxTab === "fx") {
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
+
+    // ---- filter & step sequencer ----
+    {
+      const [c, h] = makeCard(left, "filter & step sequencer");
+      toggle(h, t && t.seqOn, "seq", `t${i}.seqOn`);
+      const k = knobs(c);
+      k.append(Knob({
+        label: "high pass", min: 20, max: 2000, value: t ? t.hp : 40, curve: 2.4,
+        format: (v) => `${Math.round(v)} Hz`, onInput: (v) => set(`t${i}.hp`, Math.round(v)),
+      }));
+      k.append(Knob({
+        label: "low pass", min: 400, max: 18000, value: t ? t.lp : 16000, curve: 2.4,
+        format: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`),
+        onInput: (v) => set(`t${i}.lp`, Math.round(v)),
+      }));
+      c.append(el("div", "subhead", "8-step low-pass sequence"));
+      const seqRow = el("div", "steprow");
+      const steps = SEQ[i] || (SEQ[i] = [0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25]);
+      for (let st = 0; st < 8; st++) {
+        const cell = el("button", "stepcell");
+        cell.type = "button";
+        cell.style.setProperty("--h", String(steps[st]));
+        if (steps[st] > 0) cell.classList.add("on");
+        cell.addEventListener("pointerup", () => {
+          steps[st] = steps[st] >= 1 ? 0 : Math.round((steps[st] + 0.25) * 100) / 100;
+          cell.style.setProperty("--h", String(steps[st]));
+          cell.classList.toggle("on", steps[st] > 0);
+          svc("seq", [i, steps.join(",")]);
+        });
+        seqRow.append(cell);
+      }
+      c.append(seqRow);
+      c.append(el("div", "note",
+        "tap any step to cycle its cutoff lift (0–100%), enable seq above to animate the filter"));
+    }
+
+    // ---- delay & reverb send ----
+    {
+      const [c, h] = makeCard(right, "delay & reverb send");
+      toggle(h, t && t.delayOn, "on", `t${i}.delayOn`, true);
+      const k = knobs(c);
+      k.append(Knob({
+        label: "delay time", min: 0.06, max: 2, value: t ? t.delayBeats : 0.75, curve: 1.8,
+        format: (v) => `${v.toFixed(2)} bt`, onInput: (v) => set(`t${i}.delayBeats`, v),
+      }));
+      k.append(Knob({
+        label: "decay", min: 0.05, max: 8, value: t ? t.delayDecay : 0.4, curve: 2,
+        format: (v) => `${v.toFixed(2)} s`, onInput: (v) => set(`t${i}.delayDecay`, v),
+      }));
+      k.append(Knob({
+        label: "delay mix", min: 0, max: 1, value: t ? t.delayMix : 0.25,
+        format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.delayMix`, v),
+      }));
+      k.append(Knob({
+        label: "reverb send", min: 0, max: 1, value: t ? t.revSend : 0,
+        format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => set(`t${i}.revSend`, v),
+      }));
+      c.append(el("div", "note",
+        "reverb sends into the shared master FreeVerb2 (adjust room size & mix in Setup → Loop)"));
+    }
+  }
+
+  if (fxTab === "plugins") {
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
+
+    // ---- plugin insert slots ----
+    {
+      const [c] = makeCard(left, "vst insert chain");
+      const list = el("div", "slots");
+      const csv = (VST || "").split(";")[i] || "";
+      const slots = csv.split(",").map((x) => x.split("|"));
+      for (let s = 0; s < (STATS.slots || 4); s++) {
+        const row = el("div", "slot");
+        const name = slots[s] && slots[s][1] ? slots[s][1] : "";
+        const bypassed = slots[s] && String(slots[s][2]) === "1";
+        if (name) row.classList.add("filled");
+        const numBadge = el("span", "slot-num", String(s + 1));
+        const nm = el("span", "nm", name || `empty slot ${s + 1}`);
+        const acts = el("div", "acts");
+        if (name) {
+          const ed = Button({ label: "ui", cls: "tiny" });
+          ed.addEventListener("pointerup", () => svc("vstEditor", [i, s]));
+          const by = Button({ label: "byp", cls: "tiny", toggle: true });
+          if (bypassed) by.classList.add("on");
+          const momentary = String((slots[s] && slots[s][4]) || "0") === "1";
+          if (momentary) {
+            by.addEventListener("pointerdown", () => svc("vstBypass", [i, s, 0]));
+            by.addEventListener("pointerup", () => svc("vstBypass", [i, s, 1]));
+          } else {
+            by.addEventListener("pointerup", () =>
+              svc("vstBypass", [i, s, by.classList.contains("on") ? 1 : 0]));
+          }
+          const md = Button({ label: "mom", cls: "tiny", toggle: true });
+          if (momentary) md.classList.add("on");
+          md.addEventListener("pointerup", () =>
+            svc("vstMode", [i, s, md.classList.contains("on") ? 1 : 0]));
+          const rm = Button({ label: "×", cls: "tiny danger" });
+          rm.addEventListener("pointerup", () => svc("vstClose", [i, s]));
+          acts.append(ed, by, md, rm);
+        } else {
+          const pick = Select({
+            options: [{ label: "load plugin…", value: "" }].concat(
+              (VSTCATALOG.length ? VSTCATALOG : ["(no plugins found)"]).map((n) => ({ label: n, value: n })),
+            ),
+            value: "",
+            onPick: (v) => {
+              if (v && v !== "(no plugins found)") svc("vstOpen", [i, s, v]);
+            },
+          });
+          acts.append(pick);
+        }
+        row.append(numBadge, nm, acts);
+        list.append(row);
+      }
+      c.append(list);
+      if (STATS.vst !== 1) {
+        c.append(el("div", "note", "VSTPlugin extension is not loaded on this SuperCollider installation"));
+      } else if (!VSTCATALOG.length) {
+        c.append(el("div", "note", `scanning ${STATS.vstCount} plugins…`));
+      }
+    }
+
+    // ---- FX banks ----
+    {
+      const [c] = makeCard(right, "plugin banks");
+      c.append(el("div", "note",
+        "store the 4 insert slots into a bank or recall a saved chain for this track"));
+      for (let b = 0; b < 4; b++) {
+        const sv = Button({ label: "store", cls: "tiny" });
+        sv.addEventListener("pointerup", () => {
+          svc("vstBankSave", [i, b]);
+          toast(`track ${i + 1}: stored bank ${b + 1}`);
+        });
+        const ld = Button({ label: "recall", cls: "tiny" });
+        ld.addEventListener("pointerup", () => {
+          svc("vstBankLoad", [i, b]);
+          toast(`track ${i + 1}: recalled bank ${b + 1}`);
+        });
+        const ctl = el("div", "ctl");
+        ctl.append(sv, ld);
+        c.append(settingsRow(`bank ${b + 1}`, ctl));
+      }
     }
   }
 
@@ -1003,20 +1062,20 @@ function openSettings() {
 
 function settingsRow(label, ctl, hint) {
   const r = el("div", "cfgrow");
-  // The hint belongs to the *label*, not to the control: if it trails the
-  // control every row with a hint pushes its number left by the hint's width,
-  // and the numbers stop forming a column.
   const left = el("div", "lblcol");
   left.append(el("span", "lbl", label));
   if (hint) left.append(el("span", "hint", hint));
-  const wrap = el("div", "ctl");
-  wrap.append(ctl);
+  const wrap = ctl.classList?.contains("ctl") ? ctl : el("div", "ctl");
+  if (wrap !== ctl) wrap.append(ctl);
   r.append(left, wrap);
   return r;
 }
 
-function rowStepper(label, path, { min, max, step, format, src = "cfg", hint }) {
-  const value = Number(getPath(CFG, path) ?? min);
+function rowStepper(label, path, { min, max, step, format, src = "cfg", hint, fallback }) {
+  const raw = src === "set"
+    ? (S && S[path] != null ? S[path] : fallback)
+    : getPath(CFG, path);
+  const value = Number(raw ?? fallback ?? min);
   const s = Stepper({
     min, max, step, value, format: format || ((v) => String(v)),
     onInput: (v) => (src === "cfg" ? cfgSet(path, v) : set(`g.${path}`, v)),
@@ -1037,11 +1096,15 @@ function rowToggle(label, path, { src = "cfg", hint } = {}) {
   return settingsRow(label, b, hint);
 }
 
-function rowSelect(label, path, options, { src = "cfg", hint } = {}) {
+function rowSelect(label, path, options, { src = "cfg", hint, onChange } = {}) {
   const value = getPath(CFG, path) ?? "";
   const s = Select({
     options, value: String(value ?? ""),
-    onPick: (v) => (src === "cfg" ? cfgSet(path, v) : set(`g.${path}`, v)),
+    onPick: (v) => {
+      if (src === "cfg") cfgSet(path, v);
+      else set(`g.${path}`, v);
+      if (onChange) onChange(v);
+    },
   });
   return settingsRow(label, s, hint);
 }
@@ -1056,23 +1119,46 @@ function card(parent, heading) {
   const c = el("div", "fxcard");
   const h = el("div", "head");
   h.append(el("div", "caption", heading));
-  c.append(h);
+  const inner = el("div", "card-body");
+  c.append(h, inner);
   parent.append(c);
-  return c;
+  return inner;
 }
+
+const SETUP_TABS = [
+  { id: "audio", label: "audio" },
+  { id: "loop", label: "loop & master" },
+  { id: "clock", label: "clock" },
+  { id: "midi", label: "midi" },
+  { id: "session", label: "session" },
+  { id: "ui", label: "ui" },
+  { id: "505", label: "505 guide" },
+];
+
+const MIDI_ACTION_LABELS = {
+  press: "rec / play / stop",
+  stop: "stop track",
+  undo: "undo layer",
+  clear: "clear track",
+  merge: "flatten layers",
+  auto: "arm auto-rec",
+  tap: "tap tempo",
+  stopAll: "stop all tracks",
+  metro: "toggle metronome",
+};
 
 function renderSettings() {
   const drawer = document.getElementById("settings");
   drawer.querySelector("h2").textContent = "setup";
   const tabs = drawer.querySelector(".tabs");
   tabs.replaceChildren();
-  ["audio", "loop", "clock", "ui", "midi", "session", "505"].forEach((t) => {
-    const b = Button({ label: t, cls: `tiny${t === settingsTab ? " on" : ""}` });
-    b.dataset.tab = t;
+  SETUP_TABS.forEach((tab) => {
+    const b = Button({ label: tab.label, cls: `tiny${tab.id === settingsTab ? " on" : ""}` });
+    b.dataset.tab = tab.id;
     b.addEventListener("pointerup", () => {
-      settingsTab = t;
-      if (t === "audio") send({ op: "devices" });
-      if (t === "midi") svc("midiMap");
+      settingsTab = tab.id;
+      if (tab.id === "audio") send({ op: "devices" });
+      if (tab.id === "midi") { svc("midiMap"); svc("midiDevs"); }
       renderSettings();
     });
     tabs.append(b);
@@ -1080,32 +1166,32 @@ function renderSettings() {
 
   const body = drawer.querySelector(".body");
   body.replaceChildren();
+  body.classList.toggle("single", settingsTab === "ui");
 
   if (settingsTab === "audio") {
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
+
     const drv = String(CFG.audio?.driver ?? "auto");
     const dev = CFG.audio?.device ?? null;
 
-    const c = card(body, "driver");
-    // The bridge sends the drivers that exist on this machine; the fallback is
-    // the Linux set so an older bridge still renders something sane.
+    const c = card(left, "driver & latency");
     const drivers = ui.drivers || [
       { label: "auto (jack if present)", value: "auto" },
       { label: "jack / pipewire", value: "jack" },
       { label: "alsa (direct)", value: "alsa" },
     ];
-    c.append(rowSelect("driver", "audio.driver", drivers, { hint: "restart" }));
-    c.append(el("div", "caption",
+    c.append(rowSelect("driver", "audio.driver", drivers, { hint: "requires restart" }));
+    c.append(el("div", "note",
       ui.platform === "windows"
         ? (drv === "asio"
-            ? "ASIO takes the device exclusively: lowest latency, nothing else can play meanwhile"
-            : "WASAPI is the normal Windows path; the device below chooses the endpoint")
+            ? "ASIO takes the device exclusively for lowest latency; nothing else can play meanwhile"
+            : "WASAPI is the normal Windows path; choose the endpoint below")
         : (drv === "alsa"
-            ? "alsa talks to the hardware directly; nothing else can use it while running"
-            : "scsynth joins the PipeWire graph as a node — there is no device to choose")));
+            ? "ALSA opens the hardware directly; nothing else can use it while running"
+            : "scsynth joins the PipeWire graph as a node — route ports in qpwgraph")));
 
-    // A device is meaningful for ALSA on Linux, and for every Windows backend:
-    // there the string is the endpoint ("Windows WASAPI : Speakers ..."), which
-    // scsynth passes straight to PortAudio.
     if (ui.platform === "windows" ? drv !== "auto" : drv === "alsa") {
       const win = ui.platform === "windows";
       const pool = win
@@ -1117,10 +1203,8 @@ function renderSettings() {
       c.append(rowSelect("device", "audio.device", opts,
         { hint: win ? "endpoint · restart" : "hw:N,M · restart" }));
     } else if (dev) {
-      // never leave a PipeWire node name in audio.device: it would be handed to
-      // ALSA on the next start and scsynth would die with "couldn't initialize audio"
       c.append(settingsRow("device", el("span", "num", String(dev))));
-      c.append(rowButton("device", "clear", () => {
+      c.append(rowButton("stale device", "clear", () => {
         cfgSet("audio.device", null);
         CFG.audio.device = null;
         toast("device cleared — restart to apply");
@@ -1128,24 +1212,21 @@ function renderSettings() {
       }, "only ALSA uses this"));
     }
 
-    // Under JACK/PipeWire scsynth follows the graph period; SC's own block size is
-    // ignored. This is the real latency control.
-    const qCard = card(body, "latency (pipewire)");
-    const qsr = Number(CFG.audio?.sampleRate ?? 48000) || 48000;
-    const qNow = Number(CFG.audio?.quantum ?? 0) || 0;
-    const qOpts = [{ label: "leave alone", value: 0 }].concat(
-      [64, 128, 256, 512, 1024].map((n) => ({
-        label: `${n} frames · ${((n / qsr) * 1000).toFixed(1)} ms`, value: n,
-      })),
-    );
-    qCard.append(rowSelect("quantum", "audio.quantum", qOpts, { hint: "restart the engine" }));
-    qCard.append(el("div", "caption", qNow
-      ? `period ${((qNow / qsr) * 1000).toFixed(1)} ms · round trip ≈ ${(((2 * qNow) / qsr) * 1000).toFixed(1)} ms`
-      : "unforced — PipeWire decides (usually 1024 ≈ 21 ms)"));
-    qCard.append(el("div", "caption",
-      "one period of latency per buffer; lower it before blaming the looper"));
+    if (ui.platform !== "windows") {
+      const qsr = Number(CFG.audio?.sampleRate ?? 48000) || 48000;
+      const qNow = Number(CFG.audio?.quantum ?? 0) || 0;
+      const qOpts = [{ label: "leave alone", value: 0 }].concat(
+        [64, 128, 256, 512, 1024].map((n) => ({
+          label: `${n} frames · ${((n / qsr) * 1000).toFixed(1)} ms`, value: n,
+        })),
+      );
+      c.append(rowSelect("pipewire quantum", "audio.quantum", qOpts, { hint: "restart to apply" }));
+      c.append(el("div", "note", qNow
+        ? `period ${((qNow / qsr) * 1000).toFixed(1)} ms · round trip ≈ ${(((2 * qNow) / qsr) * 1000).toFixed(1)} ms · raise to 256 if you hear dropouts with many tracks`
+        : "unforced — PipeWire decides (usually 1024 ≈ 21 ms)"));
+    }
 
-    const io = card(body, "engine io");
+    const io = card(left, "engine i/o");
     io.append(
       rowStepper("sample rate", "audio.sampleRate", {
         min: 0, max: 192000, step: 1000,
@@ -1157,20 +1238,8 @@ function renderSettings() {
       rowStepper("outputs", "audio.out", { min: 1, max: 16, step: 1, hint: "restart" }),
     );
 
-    // where the audio actually goes, read from the live graph (only meaningful
-    // when scsynth is a JACK/PipeWire node)
-    if (drv !== "alsa") {
-    const g = card(body, "connections (pw-link)");
-    const ins = ui.devices?.links?.inputs || [];
-    const outs = ui.devices?.links?.outputs || [];
-    g.append(el("div", "caption", `in  ← ${ins.length ? ins.join("  ·  ") : "nothing connected"}`));
-    g.append(el("div", "caption", `out → ${outs.length ? outs.join("  ·  ") : "nothing connected"}`));
-    g.append(el("div", "caption", "reroute in qpwgraph; then press refresh"));
-    g.append(rowButton("graph", "refresh", () => send({ op: "devices" })));
-    }
-
-    const s = card(body, "engine");
-    const info = el("div", "caption", "");
+    const s = card(right, "engine status");
+    const info = el("div", "stat-strip", "");
     info.id = "statsline";
     s.append(info);
     renderStats();
@@ -1178,49 +1247,75 @@ function renderSettings() {
       rowButton("engine", "restart", () => {
         toast("restarting engine…");
         send({ op: "restart" });
-      }, "re-reads config"),
-      rowButton("latency", "measure", () => svc("stats"), "round trip estimate"),
+      }, "re-reads audio & track config"),
+      rowButton("stats", "refresh", () => svc("stats"), "cpu & latency estimate"),
     );
+
+    if (drv !== "alsa") {
+      const g = card(right, "live connections (pipewire)");
+      const ins = ui.devices?.links?.inputs || [];
+      const outs = ui.devices?.links?.outputs || [];
+      const inBox = el("div", "link-item");
+      inBox.append(el("div", "caption", "inputs feeding SuperCollider"));
+      inBox.append(el("div", "link-val", ins.length ? ins.join("  ·  ") : "nothing connected"));
+      const outBox = el("div", "link-item");
+      outBox.append(el("div", "caption", "outputs from SuperCollider"));
+      outBox.append(el("div", "link-val", outs.length ? outs.join("  ·  ") : "nothing connected"));
+      g.append(inBox, outBox);
+      g.append(rowButton("graph", "refresh links", () => send({ op: "devices" }),
+        "reroute ports in qpwgraph, then refresh"));
+    }
   }
 
   if (settingsTab === "loop") {
-    const c = card(body, "looping");
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
+
+    const c = card(left, "looping & recording");
     c.append(
       rowStepper("tracks", "tracks", { min: 1, max: 16, step: 1, hint: "restart" }),
       rowStepper("layers / track", "maxLayers", { min: 1, max: 4, step: 1, hint: "restart" }),
       rowStepper("max loop", "loop.maxSeconds", {
         min: 4, max: 120, step: 4, format: (v) => `${v}s`, hint: "restart",
       }),
-      rowStepper("crossfade", "loop.crossfadeMs", {
+      rowStepper("seam crossfade", "loop.crossfadeMs", {
         min: 0.1, max: 50, step: 0.1, format: (v) => `${v.toFixed(1)} ms`,
       }),
       rowStepper("record offset", "loop.recordOffset", {
         min: -4096, max: 4096, step: 8, format: (v) => `${v} smp`,
+        hint: "compensate interface latency",
       }),
-      // the readout must stay narrow enough for the value column, so the
-      // explanation lives in the hint rather than in the number
       rowStepper("input monitor", "loop.monitor", {
         min: 0, max: 1.5, step: 0.1,
         format: (v) => (v === 0 ? "off" : `${Math.round(v * 100)}%`),
-        hint: "0 = hear the loop only, never the dry input",
+        hint: "0 = loop only (use direct interface monitoring)",
       }),
-      rowToggle("auto-close 1st layer", "loop.autoClose"),
-      rowToggle("continue into overdub", "loop.autoDub"),
+      rowToggle("auto-close 1st layer", "loop.autoClose", {
+        hint: "close layer 1 automatically at the loop boundary",
+      }),
+      rowToggle("continue into overdub", "loop.autoDub", {
+        hint: "roll straight into layer 2 after layer 1 closes",
+      }),
       rowToggle("overdub replaces", "loop.overdubMode", {
-        hint: "new take mutes what it covers; undo brings it back",
+        hint: "new take mutes layers below; undo restores them",
       }),
-      rowToggle("quantize start", "loop.quantizeStart"),
+      rowToggle("quantize start", "loop.quantizeStart", {
+        hint: "wait for bar 1 before recording starts",
+      }),
       rowStepper("dub decay", "loop.dubDecay", {
         min: 0, max: 0.95, step: 0.05, format: (v) => `${Math.round(v * 100)}%`,
+        hint: "fade playing layers each pass",
       }),
     );
-    const m = card(body, "master chain");
+
+    const m = card(right, "master chain");
     m.append(
       rowStepper("high pass", "masterHp", {
-        min: 0, max: 2000, step: 10, src: "set", format: (v) => `${v} Hz`,
+        min: 0, max: 2000, step: 10, src: "set", fallback: 0, format: (v) => `${v} Hz`,
       }),
       rowStepper("low pass", "masterLp", {
-        min: 1000, max: 19000, step: 250, src: "set", format: (v) => `${v} Hz`,
+        min: 1000, max: 19000, step: 250, src: "set", fallback: 18000, format: (v) => `${v} Hz`,
       }),
       rowStepper("reverb mix", "loop.revMix", {
         min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%`,
@@ -1228,17 +1323,17 @@ function renderSettings() {
       rowStepper("room size", "loop.room", {
         min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%`,
       }),
-      // the DJ knob's resonance lives here; the knob itself is on the main
-      // screen, because that is where a hand is
       rowStepper("dj resonance", "master.djRes", {
         min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%`,
       }),
     );
 
-    // Two master FX slots. `type` is a config value (it is setup, and survives a
-    // restart); the two knobs are live parameters of the chosen effect.
-    const fxc = card(body, "master FX");
+    const fxc = card(right, "master fx slots");
     FX_TYPES.forEach((name, slot) => {
+      const slotType = Math.round(Number(getPath(CFG, `master.fx${slot + 1}Type`) ?? 0));
+      const box = el("div", "mfx-slot");
+      const top = el("div", "mfx-top");
+      top.append(el("span", "lbl", name));
       const opts = [
         { label: "off", value: 0 },
         { label: "filter", value: 1 },
@@ -1248,56 +1343,64 @@ function renderSettings() {
       ];
       const sel = Select({
         options: opts,
-        value: Math.round(Number(getPath(CFG, `master.fx${slot + 1}Type`) ?? 0)),
-        onPick: (v) => cfgSet(`master.fx${slot + 1}Type`, Number(v)),
+        value: slotType,
+        onPick: (v) => {
+          const nv = Number(v);
+          CFG.master = { ...(CFG.master || {}), [`fx${slot + 1}Type`]: nv };
+          cfgSet(`master.fx${slot + 1}Type`, nv);
+          renderSettings();
+        },
       });
-      fxc.append(settingsRow(`${name}`, sel));
-      // the knobs are labelled by what they do *for the chosen type*: one set of
-      // controls that means the right thing is better than five dead pairs
-      const labels = FX_KNOBS[Number(getPath(CFG, `master.fx${slot + 1}Type`) ?? 0)];
+      top.append(sel);
+      box.append(top);
+      const labels = FX_KNOBS[slotType] || FX_KNOBS[0];
+      const krow = el("div", "knobs");
       ["A", "B"].forEach((k, idx) => {
-        fxc.append(
-          settingsRow(`  ${labels[idx]}`, Knob({
-            min: 0, max: 1, value: Number(getPath(CFG, `master.fx${slot + 1}${k}`) ?? 0.5),
-            label: `${name} ${labels[idx]}`,
-            format: (v) => `${Math.round(v * 100)}%`,
-            onInput: (v) => {
-              set(`g.fx${slot + 1}${k}`, v);
-              cfgSet(`master.fx${slot + 1}${k}`, v);
-            },
-          })),
-        );
+        krow.append(Knob({
+          min: 0, max: 1, value: Number(getPath(CFG, `master.fx${slot + 1}${k}`) ?? 0.5),
+          label: labels[idx],
+          format: (v) => `${Math.round(v * 100)}%`,
+          onInput: (v) => {
+            set(`g.fx${slot + 1}${k}`, v);
+            cfgSet(`master.fx${slot + 1}${k}`, v);
+          },
+        }));
       });
+      box.append(krow);
+      fxc.append(box);
     });
   }
 
   if (settingsTab === "clock") {
-    const c = card(body, "metronome");
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
+
+    const c = card(left, "metronome");
     c.append(
       rowStepper("click level", "clock.clickVol", {
         min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%`,
       }),
       rowStepper("count-in bars", "clock.countInBars", { min: 0, max: 8, step: 1 }),
-      rowStepper("accent", "clock.accentHz", {
+      rowStepper("accent pitch", "clock.accentHz", {
         min: 200, max: 4000, step: 20, format: (v) => `${v} Hz`, hint: "restart",
       }),
-      rowStepper("click", "clock.clickHz", {
+      rowStepper("click pitch", "clock.clickHz", {
         min: 200, max: 4000, step: 20, format: (v) => `${v} Hz`, hint: "restart",
       }),
     );
-    // Ableton Link: tempo and phase in from the rest of the rig. Off means the
-    // internal clock with no residue; on with no peer keeps our own tempo.
-    const lk = card(body, "ableton link");
+
+    const lk = card(right, "ableton link");
     lk.append(rowToggle("follow link", "clock.link", {
-      hint: "tempo and bar phase from Link peers on the network",
+      hint: "sync tempo and bar phase with Link peers on your local network",
     }));
-    const status = el("div", "caption", "no peer");
+    const status = el("div", "stat-strip", "no peer");
     status.id = "linkstatus";
     lk.append(settingsRow("status", status));
   }
 
   if (settingsTab === "ui") {
-    const c = card(body, "display");
+    const c = card(body, "display & touch");
     const scale = el("div", "ctl");
     const sf = Fader({
       min: 0.75, max: 1.75, value: Number(CFG.ui?.scale ?? 1),
@@ -1309,21 +1412,26 @@ function renderSettings() {
       },
     });
     scale.append(sf);
-    c.append(settingsRow("scale", scale), 
-      rowToggle("show master bar", "ui.showMaster"),
+    c.append(
+      settingsRow("scale", scale, "scales every control proportionally"),
+      rowToggle("show master bar", "ui.showMaster", { hint: "hide footer for extra track height" }),
       rowButton("display", "fullscreen", () => {
         if (document.fullscreenElement) document.exitFullscreen();
         else document.documentElement.requestFullscreen?.();
       }),
-      rowButton("targets", "check 48px", () => {
+      rowButton("touch targets", "check 48px", () => {
         const r = auditTapTargets(48);
         toast(r.bad.length ? `${r.bad.length} too small` : `all ${r.total} targets ok`);
-      }, "dev overlay (d)"),
+      }, "toggle dev overlay with key d"),
     );
   }
 
   if (settingsTab === "midi") {
-    const d = card(body, "input");
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
+
+    const d = card(left, "midi input");
     const devSel = Select({
       options: [{ label: "all sources", value: -1 }].concat(
         MIDIDEVS.map((x) => ({ label: x.name, value: x.idx })),
@@ -1337,75 +1445,102 @@ function renderSettings() {
       },
     });
     d.append(settingsRow("device", devSel, `${MIDIDEVS.length} sources`));
-    d.append(rowButton("map", "default layout", () => svc("midiDefault", []),
-      "20-27 press, 30-37 undo, 40-47 stop, 50-57 clear, 60 tap"));
+    d.append(rowButton("preset map", "load default", () => svc("midiDefault", []),
+      "CC 20–27 press · 30–37 undo · 40–47 stop · 50–57 clear · 60 tap"));
 
-    const c = card(body, "learn");
-    const targets = [];
-    for (let i = 0; i < (S ? S.tracks.length : CFG.tracks); i++) {
-      ["press", "stop", "undo", "clear", "merge", "auto"].forEach((v) => targets.push(`t${i}.${v}`));
+    const m = card(left, `active mappings (${MIDIMAP.length})`);
+    m.append(rowButton("learned map", "clear all", () => svc("midiClear", [])));
+    if (!MIDIMAP.length) {
+      m.append(el("div", "note", "no mappings yet — tap Learn on the right, then press a pedal or key"));
+    } else {
+      MIDIMAP.forEach((mapping) => {
+        const [type, num, tgt, gest] = mapping.split("|");
+        const suffix = gest && gest !== "-" ? ` · ${gest}` : "";
+        m.append(settingsRow(tgt, el("span", "num", `${type} ${num}${suffix}`)));
+      });
     }
-    ["tap", "stopAll", "metro"].forEach((v) => targets.push(`g.${v}`));
-    targets.forEach((tgt) => {
-      const known = MIDIMAP.find((m) => m.endsWith(`|${tgt}`));
-      const b = Button({ label: known ? known.split("|").slice(0, 2).join(" ") : "learn", cls: "tiny" });
+
+    const c = card(right, "midi learn");
+    const nTracks = S ? S.tracks.length : (CFG.tracks || 5);
+    const scopeTabs = el("div", "midi-tabs");
+    const scopes = [];
+    for (let k = 0; k < nTracks; k++) scopes.push({ id: `t${k}`, label: `T${k + 1}` });
+    scopes.push({ id: "g", label: "global" });
+    if (!scopes.some((sc) => sc.id === midiLearnScope)) midiLearnScope = "t0";
+    scopes.forEach((sc) => {
+      const b = Button({ label: sc.label, cls: `tiny${sc.id === midiLearnScope ? " on" : ""}` });
+      b.addEventListener("pointerup", () => {
+        midiLearnScope = sc.id;
+        renderSettings();
+      });
+      scopeTabs.append(b);
+    });
+    c.append(scopeTabs);
+    c.append(el("div", "note",
+      "notes capture press, hold (>300 ms) or double-tap automatically while learning"));
+
+    const verbs = midiLearnScope === "g"
+      ? ["tap", "stopAll", "metro"]
+      : ["press", "stop", "undo", "clear", "merge", "auto"];
+    verbs.forEach((v) => {
+      const tgt = `${midiLearnScope}.${v}`;
+      const known = MIDIMAP.find((entry) => entry.split("|")[2] === tgt);
+      const label = known ? known.split("|").slice(0, 2).join(" ") : "learn";
+      const b = Button({ label, cls: `tiny${known ? " on" : ""}` });
       b.addEventListener("pointerup", () => {
         svc("midiLearn", [tgt]);
-        toast(`move a control for ${tgt}`);
+        toast(`move a MIDI control for ${tgt}`);
       });
-      c.append(settingsRow(tgt, b));
-    });
-    const m = card(body, "map");
-    m.append(
-      rowButton("learned", "clear all", () => svc("midiClear", []), `${MIDIMAP.length} mapped`),
-    );
-    MIDIMAP.forEach((mapping) => {
-      const [type, num, tgt] = mapping.split("|");
-      m.append(settingsRow(tgt, el("span", "num", `${type} ${num}`)));
+      c.append(settingsRow(MIDI_ACTION_LABELS[v] || tgt, b, tgt));
     });
   }
 
   if (settingsTab === "505") {
-    // Muscle-memory map: Looper OSS is deliberately shaped like an RC-505 so the
-    // gestures transfer. Everything here is already implemented; this is the index.
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
+
     const MAP = [
-      ["TRACK 1-5 button", "the big pad on each column"],
+      ["TRACK 1–5 pad", "the big pad on each column"],
       ["REC (start recording)", "tap the pad when empty"],
-      ["REC again (close loop)", "tap the pad while recording"],
-      ["DUB (overdub)", "tap the pad while playing"],
-      ["PLAY", "tap the pad while stopped"],
-      ["STOP", "STOP under the pad"],
-      ["CLEAR", "tap CLEAR twice"],
-      ["UNDO / REDO", "UNDO / REDO (last layer only, depth = layers)"],
-      ["MEASURE (loop length)", "BARS / LOOP in the top bar: 1 2 4 8"],
-      ["TEMPO", "the tempo bar, or TAP"],
-      ["RHYTHM level", "setup → clock → click level"],
-      ["INPUT FX", "fx → input FX, gate, filter"],
-      ["TRACK FX", "fx → delay, reverb send"],
-      ["MASTER FX", "setup → loop → master chain"],
-      ["SPEED CHANGE", "change BPM: layers re-pitch (varispeed)"],
+      ["REC again (close loop)", "tap the pad while recording / overdubbing"],
+      ["OVERDUB", "press DUB under the pad (or roll over via auto-dub)"],
+      ["PLAY / STOP", "tap the pad while stopped / playing, or press STOP"],
+      ["CLEAR", "tap CLEAR twice within 2.5 s"],
+      ["UNDO / REDO", "UNDO / REDO (up to 4 layers)"],
+      ["MEASURE (loop length)", "BARS / LOOP in the top bar: 1 · 2 · 4 · 8"],
+      ["TEMPO", "tap the BPM number, drag the fader, or press TAP"],
+      ["RHYTHM", "DRUMS + kit (1–16) & pattern (1–200) in the top bar"],
+      ["INPUT FX", "fx → input & out (source, gain, comp, gate, auto-rec)"],
+      ["TRACK FX", "fx → filter & fx (HP/LP, step seq, delay, reverb)"],
+      ["MASTER FX", "DJ filter in top bar; master FX slots in setup → loop"],
+      ["SPEED CHANGE", "change BPM or fx → loop → speed (varispeed)"],
       ["MEMORY (phrase save)", "setup → session → save / load slot"],
-      ["LOOP SYNC off (per-track length)", "fx → loop → 1 / 1/2 / 1/4"],
+      ["LOOP SYNC subdivision", "fx → loop & layers → 1 · 1/2 · 1/4"],
     ];
-    const c = card(body, "RC-505 → Looper OSS");
-    // a reference table, not a settings row: two fixed columns so every
-    // description starts at the same x, instead of a ragged right-aligned blob
+    const c = card(left, "RC-505 → Looper OSS");
     MAP.forEach(([a, b]) => {
       const row = el("div", "cfgrow map");
       row.append(el("span", "lbl", a), el("span", "desc", b));
       c.append(row);
     });
-    const d = card(body, "deliberate differences");
+
+    const d = card(right, "design notes");
     [
-      "loop length comes from BARS + BPM, not from the first take (AUTO)",
-      "up to 4 layers per track instead of one loop + undo",
-      "no built-in drum rhythm patterns yet (metronome only)",
-      "effects are stock UGens or your own VST3s, not the 49/53 Boss algorithms",
-    ].forEach((t) => d.append(el("div", "caption", t)));
+      "Loop length comes from BARS + BPM rather than auto-detecting from the first take.",
+      "Each track holds up to 4 independent layers for instant non-destructive undo/redo and per-layer mute.",
+      "Overdubbing adds onto existing audio across loop wraps so punching out late never erases your downbeat.",
+      "Built-in rhythm engine synthesises 16 kits × 200 patterns with stock UGens (no external samples required).",
+      "Track effects combine stock SuperCollider UGens with up to 4 VST3/VST2 plugin insert slots per track.",
+    ].forEach((text) => d.append(el("div", "note", text)));
   }
 
   if (settingsTab === "session") {
-    const c = card(body, "phrase memory");
+    const left = el("div", "drawer-col");
+    const right = el("div", "drawer-col");
+    body.append(left, right);
+
+    const c = card(left, "phrase memory & export");
     const slotStepper = Stepper({
       min: 1, max: 99, step: 1, value: Number(CFG.session?.slot ?? 1),
       onInput: (v) => {
@@ -1413,37 +1548,45 @@ function renderSettings() {
         cfgSet("session.slot", v);
       },
     });
-    c.append(settingsRow("slot", slotStepper));
-    // phrase browser: every slot on disk, one tap to load (#3)
+    c.append(settingsRow("active slot", slotStepper));
     const browsed = el("div", "slotlist");
     browsed.id = "slotlist";
-    c.append(settingsRow("memories", browsed, "tap a slot to load it"));
+    c.append(settingsRow("saved memories", browsed, "tap a slot number to load it"));
     send({ op: "sessions" });
     c.append(
       rowButton("save", "save slot", () => svc("save", [Number(CFG.session?.slot ?? 1)])),
       rowButton("load", "load slot", () => svc("load", [Number(CFG.session?.slot ?? 1)])),
-      rowButton("export", "bounce 30 s", () => svc("export", [30])),
-      rowButton("backup", "zip sessions", () => send({ op: "backup" }),
-        "one file carries every slot"),
-      rowButton("restore", "restore newest", () => send({ op: "restore" }),
-        "overwrites sessions/ from the newest zip"),
-      rowButton("bounce", "sum into track 1", () => {
+      rowButton("export mixdown", "bounce 30 s", () => svc("export", [30]),
+        "saves stereo WAV to sessions/exports/"),
+      rowButton("bounce all", "sum into track 1", () => {
         act("bounce", 0);
         toast("bouncing every track into track 1…");
-      }, "one loop pass; the sources are cleared"),
+      }, "one loop pass; source tracks are cleared"),
     );
-    const auto = card(body, "autosave");
+    c.append(el("div", "note", "slots save to sessions/slotN/ (WAV per layer + session.json + VST state)"));
+
+    const auto = card(right, "autosave & backups");
     auto.append(
-      rowToggle("autosave", "loop.autosave", { hint: "recovers the last session on start" }),
-      rowButton("now", "clear autosave", () => {
+      rowToggle("autosave", "loop.autosave", { hint: "recovers the last session stopped on start" }),
+      rowButton("autosave data", "clear autosave", () => {
         svc("clearAutosave", []);
         toast("autosave cleared");
-      }, "after clearing tracks this is automatic"),
+      }, "automatic when all tracks are cleared"),
+      rowButton("backup", "zip sessions", () => send({ op: "backup" }),
+        "packs all slots into one zip archive"),
+      rowButton("restore", "restore newest", () => send({ op: "restore" }),
+        "overwrites sessions/ from the newest zip"),
     );
 
-    // WAV import: the browser cannot pick a server path, so files are dropped
-    // into sessions/import/ and listed here.
-    const imp = card(body, "import a wav");
+    const imp = card(right, "import wav to track");
+    const nTracks = S ? S.tracks.length : (CFG.tracks || 5);
+    if (importTrack >= nTracks) importTrack = selected < nTracks ? selected : 0;
+    const trkOpts = Array.from({ length: nTracks }, (_, k) => ({ label: `track ${k + 1}`, value: k }));
+    const trkSel = Select({
+      options: trkOpts,
+      value: importTrack,
+      onPick: (v) => { importTrack = Number(v); },
+    });
     const impSel = Select({
       options: (IMPORTS.length ? IMPORTS : ["(none)"]).map((n) => ({ label: n, value: n })),
       value: IMPORTS[0] ?? "(none)",
@@ -1453,17 +1596,17 @@ function renderSettings() {
     impBtn.addEventListener("pointerup", () => {
       const name = impSel.value;
       if (name && name !== "(none)") {
-        svc("import", [selected, name]);
-        toast(`importing ${name} into track ${selected + 1}`);
+        svc("import", [importTrack, name]);
+        toast(`importing ${name} into track ${importTrack + 1}`);
       }
     });
-    const impRow = el("div", "row2");
-    impRow.append(impSel, impBtn);
-    imp.append(impRow, el("div", "caption", "drop files in sessions/import/"));
+    imp.append(
+      settingsRow("target track", trkSel),
+      settingsRow("wav file", impSel),
+      settingsRow("load into layer 1", impBtn),
+      el("div", "note", "drop WAV files into sessions/import/ and reopen this tab to refresh"),
+    );
     send({ op: "importList" });
-
-    const info = card(body, "files");
-    info.append(el("div", "caption", "saves to sessions/slotN (WAV per layer + session.json)"));
   }
 }
 
@@ -1540,13 +1683,18 @@ function onState(s) {
   s.tracks.forEach((t, i) => {
     const u = ui.tracks[i];
     if (!u) return;
-    if (u.stateKey !== t.state) {
-      u.stateKey = t.state;
-      const [label, sub] = STATE_TEXT[t.state] || STATE_TEXT[0];
+    const isOdub = t.state === 1 && t.layers > 0;
+    const stateKey = isOdub ? "odub" : t.state;
+    if (u.stateKey !== stateKey) {
+      u.stateKey = stateKey;
+      const [label, sub] = isOdub
+        ? ["OVERDUB", "tap to finish"]
+        : (STATE_TEXT[t.state] || STATE_TEXT[0]);
       u.pad.setLabel(label, sub);
       // classList, not className: the pad carries a stable "main" class too
       u.pad.classList.remove("rec", "play", "odub", "stopped");
-      if (STATE_CLASS[t.state]) u.pad.classList.add(STATE_CLASS[t.state]);
+      const cls = isOdub ? "odub" : STATE_CLASS[t.state];
+      if (cls) u.pad.classList.add(cls);
     }
     const marks = t.undoDepth > t.layers ? ` · ${t.undoDepth - t.layers} undo` : "";
     // layer peak: tells you a HOT layer even while the track is stopped

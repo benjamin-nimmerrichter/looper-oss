@@ -4,6 +4,117 @@ All notable changes to Looper OSS. Format: [Keep a Changelog](https://keepachang
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The single
 source of truth is the [`VERSION`](VERSION) file; `scripts/release.py` reads it.
 
+## [0.4.2] — 2026-11-21
+
+### Fixed
+
+- **Metallic buzzing when recording with many tracks is gone.** Eliminated four
+  compounding causes in the audio engine:
+  - Moved buffer writing out of `\ld_track` into a dedicated **`\ld_rec`** synth
+    spawned atomically via `Buffer:zero`'s completion message — idle tracks no
+    longer run 4 unconditional `BufWr` + 4 write-back `BufRd` UGens every sample,
+    cutting CPU and memory bandwidth under multi-track load.
+  - Replaced the `commitGlow` / `w0` read-write race at the loop boundary with a
+    sample-accurate wrap stop (`FreeSelf.kr`) in `\ld_rec` paired with a matching
+    audio-rate unmute in `\ld_track` — zero simultaneous read/write overlap and
+    zero overwritten downbeat.
+  - Added 2–4 sample gap interpolation in `\ld_rec` so recording while BPM rises,
+    track varispeed is `> 1`, or Ableton Link nudges the rate no longer skips
+    buffer frames and leaves metallic zero-holes.
+  - Fixed stereo VST multichannel expansion in `engine/vst.scd` and `\ld_track`
+    that previously emitted two `Out.ar` UGens per track (+3 dB gain error and
+    broken panning), fixed stereo reverb send and `\ld_rhythm` stereo output,
+    cached `\ld_master`'s chain once on 2-channel devices, fixed negative modulo
+    wrapping for positive `recordOffset`, fixed `~swapTracks` layer copying, and
+    persisted all 4 VST insert slots in `~vstSaveState`.
+- **Overdubbing and late punch-outs no longer erase the first kick or create a
+  ghost extra layer.**
+  - `\ld_rec` now writes **additively** (`(existing + sigR).clip2(0.999)`) with a
+    duplicate-index guard, so wrapping past beat 1 and stopping recording late
+    preserves what was already recorded instead of overwriting it with silence.
+  - Added a pre-roll guard (`needPasses = 2`) when starting a first take in the
+    final quarter of the loop so anticipating beat 1 no longer splits a take into
+    a tiny stub layer plus a second buffer.
+  - Pre-armed the `autoDub` handoff on the exact wrap sample (zero gap at the
+    start of layer 2) and automatically drop silent automatic `autoDub` tails so
+    punching out slightly late does not consume an extra empty layer slot.
+  - The track pad now switches to **amber `OVERDUB`** when recording layers 2–4
+    instead of staying red `RECORDING`.
+
+### Changed
+
+- **Redesigned the Track FX and Setup drawers** while keeping the main screen and
+  track pads unchanged:
+  - The **Track FX** drawer now has color-coded `T1`–`T5` track switcher pills in
+    the header and **4 signal-flow tabs** (`Input & Out`, `Loop & Layers`,
+    `Filter & FX`, `Plugins`) in a balanced 2-column layout with live toggle
+    labels and zero clipped controls.
+  - The **Setup** drawer now uses a structured 2-column card layout with distinct
+    card headers, dropdown chevrons, wrapping descriptions, live `masterHp` /
+    `masterLp` state readouts, side-by-side Master FX slot knobs that refresh
+    their labels on type change, a per-track `MIDI Learn` scope switcher, an
+    explicit target-track selector for WAV import, and an updated `505 Guide`.
+
+## [0.4.1] — 2026-11-14
+
+### Changed
+
+- **Merge joins two tracks by moving layers, not by summing them.** Tap merge on
+  the track that should go away (it lights up as *from*), then on the one it
+  lands in (*into*). The old pass summed a whole loop in real time, which pushed
+  two normal takes (0.446 + 0.736) to 1.742 — past full scale, so every pass of a
+  merged loop clipped; it also left the source playing and cost a loop of
+  latency. Different loop lengths are no longer a reason to sum either: the
+  destination slot is zeroed and the content copied into it. With no free layer
+  slot the merge refuses and says so instead of running a silent pass.
+- **The metronome/beat display follows the transport, not a counter of its own**
+  (see the clock fixes below). Count-in now defaults to off, so the transport
+  button stops lighting itself and a take starts on the press — `CONFIG_VERSION`
+  4 migrates an existing `clock.countInBars` once, keeping bpm, tracks, device
+  and MIDI map.
+- **The DJ filter's right half is a real high pass** (`BHiPass`) instead of "the
+  low pass subtracted from the input", and both sides sweep exponentially, 20 Hz
+  ↔ 20 kHz in the same number of turns.
+
+### Fixed
+
+- **The bar·beat readout no longer stalls on the last beat of the loop.** It used
+  to go `4·4`, hold there, and come back at `1·2`: the loop boundary was treated
+  as a boundary instead of as a beat, so the first beat of every pass was
+  swallowed and `1·1` was never shown — at 95 bpm the readout sat on `4·4` for
+  1.26 s, every loop, which reads as a frozen counter. The transport's own beat
+  count is now fed to the readout on the boundary like on any other beat.
+- **The loop boundary is counted by the transport, not guessed by the poll.** It
+  used to be detected as "the polled position is near zero" — one dropped reply
+  inside that window lost a wrap, and a lost wrap is a take that never closes and
+  a readout that jumps over the loop point. `\ld_transport` keeps a
+  `PulseCount.kr` of the wrap in the polled clock buffer next to the beat count,
+  so a boundary cannot be missed. The clock is polled as two buffer frames
+  (`/b_getn n 0 2`) and `/ldbeat` carries the loop-relative beat index instead of
+  the beat within the bar: both sources hand over the same number, so nothing
+  downstream keeps a counter that can drift.
+- **A take is audible on the loop point, not 50–150 ms after it.** The wrap used
+  to be detected from a 20 Hz poll, so the commit that restores the finished
+  layer's gain arrived after the audio had already wrapped — every take was
+  complete in its buffer and silently missing its first 50–150 ms on every pass.
+  The clock poll runs at 60 Hz and the boundary comes from the transport.
+- **No fade-in on a recording, and the gate opens fast enough not to shave it.**
+  A 3 ms `LagUD` ramp sat on the way into a take and rounded off the first
+  transient; the attack is 0.2 ms now, the 3 ms release is kept for the
+  punch-out where it belongs.
+- **The state renderer ran again.** `onState` was throwing on an assignment to a
+  name that no longer existed, so everything after that line died silently: the
+  tempo number, the bars, metro and count-in state, the bus knobs all froze at
+  their first values.
+- **The settings drawer no longer runs out of its card.** The filter's step
+  cells, the loop's 1x/2x/4x row and the plugin slot buttons overflowed their
+  cards (the 4x cell was clipped); they wrap now, including at 1024×600 with
+  UI scale 1.5.
+- **The AppImage picks an interpreter that can actually open the window.** AppRun
+  took the first `python3` that matched the version test; a conda python has no
+  `gi`, so the packaged app quietly fell back to a browser window that might not
+  exist. It asks for `gi` first now and only then settles for headless.
+
 ## [0.4.0] — 2026-11-10
 
 ### Added

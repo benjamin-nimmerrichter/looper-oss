@@ -35,6 +35,14 @@ pos  = tph × (contentLen - 1)          -- read position, per-sample
 Because the phase comes from one source, tracks cannot drift, and a track with
 `loopRatio = 2` stays locked to the others.
 
+The same def also keeps the **clock's own numbers** in a small buffer — frame 0
+the beat count, frame 1 a `PulseCount.kr` of the wrap — so sclang can poll where
+the transport is (`/b_getn`, 60 Hz, the same mechanism as the meters). The wrap is
+counted in the server: deriving it on the other side means deciding "is the
+position near zero right now?", and one missed poll then hides a loop boundary —
+which is a take that never closes and a readout that jumps from the last beat
+straight past the first.
+
 ## Rhythm engine
 
 ## Output buses
@@ -230,7 +238,23 @@ The settings drawer shows the computed value under ENGINE.
 A track is a stack of layers, not one overdub buffer:
 
 - press on an empty track → record layer 0 (and freeze `contentLen`)
-- first layer auto-closes on the loop boundary (`loop.autoClose`)
+- first layer auto-closes on the loop boundary (`loop.autoClose`), using a
+  sample-accurate wrap stop in `\ld_rec` paired with a matching unmute in
+  `\ld_track` so the downbeat is never overwritten and never has a read/write race
+- tapping record in the final quarter of the loop (anticipating beat 1 with
+  `quantizeStart` off) waits for the full next loop (`needPasses = 2`) instead of
+  splitting the take prematurely across two layers
+- with `loop.autoDub` on, a pre-armed `\ld_rec` seamlessly takes over layer 1 on
+  the exact wrap sample; if the player punches out without recording audio into
+  that automatic overdub (`recPeak < 0.005`), the empty layer is dropped
+- recording uses a dedicated `\ld_rec` synth spawned atomically via
+  `Buffer:zero`'s completion message and freed on commit — idle tracks run zero
+  `BufWr` UGens, cutting CPU and RAM bandwidth when many tracks are active
+- `\ld_rec` writes **additively** (`(existing + sigR).clip2(0.999)`) and fills
+  2–4 sample index jumps caused by BPM increases, varispeed `> 1`, or Link
+  nudges: punching out late after a wrap preserves the opening transient (such as
+  a first kick) instead of overwriting it with silence, and fast varispeed never
+  leaves metallic zero-sample holes
 - press again → record layer 1 while 0 keeps playing
 - undo sets the top layer's gain to 0 (data kept, so redo is instant)
 - clear drops all gains; the next recording overwrites the buffers
